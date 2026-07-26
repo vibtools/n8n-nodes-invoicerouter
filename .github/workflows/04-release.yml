@@ -22,16 +22,32 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
+        if: ${{ hashFiles('package-lock.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
           cache: npm
 
+      - name: Setup Node.js (No Cache)
+        if: ${{ hashFiles('package-lock.json') == '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+
       - name: Install Dependencies
-        run: npm install
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Validate Release Files
         shell: pwsh
@@ -47,8 +63,7 @@ jobs:
           )
 
           foreach ($file in $files) {
-
-            if (-not (Test-Path $file)) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
               Write-Error "$file not found."
               exit 1
             }
@@ -56,29 +71,75 @@ jobs:
             Write-Host "$file verified."
           }
 
+          $jsonFiles = @(
+            "package.json",
+            "manifest/architecture.json",
+            "manifest/auto-fix.json"
+          )
+
+          foreach ($jsonFile in $jsonFiles) {
+            try {
+              Get-Content -LiteralPath $jsonFile -Raw |
+                ConvertFrom-Json -ErrorAction Stop |
+                Out-Null
+            }
+            catch {
+              Write-Error "$jsonFile contains invalid JSON. $($_.Exception.Message)"
+              exit 1
+            }
+
+            Write-Host "$jsonFile JSON syntax verified."
+          }
+
+          $packageJson = Get-Content -LiteralPath "package.json" -Raw |
+            ConvertFrom-Json -ErrorAction Stop
+
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $tagVersion = $env:GITHUB_REF_NAME -replace "^v", ""
+
+            if ($packageJson.version -ne $tagVersion) {
+              Write-Error "Tag version '$tagVersion' does not match package.json version '$($packageJson.version)'."
+              exit 1
+            }
+
+            Write-Host "Release tag matches package.json version: $tagVersion"
+          }
+
       - name: Build Project
+        shell: bash
         run: |
-          if npm run | grep -q "build"; then
+          if node -e "const p = require('./package.json'); process.exit(p.scripts?.build ? 0 : 1)"; then
             npm run build
           else
             echo "No build script found."
           fi
 
       - name: Run Tests
+        shell: bash
         run: |
-          if npm run | grep -q "test"; then
+          if node -e "const p = require('./package.json'); process.exit(p.scripts?.test ? 0 : 1)"; then
             npm test
           else
             echo "No test script found."
           fi
 
       - name: Package Project
-        run: npm pack
+        shell: bash
+        run: |
+          npm pack
+
+          if ! compgen -G "*.tgz" > /dev/null; then
+            echo "No npm package was generated."
+            exit 1
+          fi
+
+          echo "npm package created successfully."
+          ls -lh ./*.tgz
 
       - name: Generate Release Report
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force logs/release | Out-Null
+          New-Item -ItemType Directory -Force -Path "logs/release" | Out-Null
 
           @"
           # Release Report
@@ -96,35 +157,52 @@ jobs:
           Release ready.
 
           Generated:
-          $(Get-Date)
+          $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
 
-          "@ | Set-Content logs/release/release-report.md
+          "@ | Set-Content `
+            -LiteralPath "logs/release/release-report.md" `
+            -Encoding utf8
 
       - name: Upload Release Report
         uses: actions/upload-artifact@v4
         with:
           name: release-report
           path: logs/release/release-report.md
+          if-no-files-found: error
 
       - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
           name: npm-package
           path: "*.tgz"
+          if-no-files-found: error
 
       - name: Create GitHub Release
+        if: ${{ github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: "*.tgz"
+          fail_on_unmatched_files: true
 
       - name: Publish to npm
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: npm publish --access public
+        if: ${{ github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
+        shell: bash
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN secret is missing."
+            exit 1
+          fi
+
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Release Complete
+        shell: bash
         run: |
-          echo "Release completed successfully."
-
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "Release completed successfully."
+          else
+            echo "Manual release validation completed successfully."
+          fi

@@ -20,22 +20,35 @@ jobs:
     name: Validate Documentation
     runs-on: ubuntu-latest
 
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node.js
+        if: ${{ hashFiles('package-lock.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Setup Node.js (No Cache)
+        if: ${{ hashFiles('package-lock.json') == '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Install Dependencies
-        run: npm install
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Verify Documentation Directories
         shell: pwsh
@@ -46,7 +59,7 @@ jobs:
           )
 
           foreach ($directory in $directories) {
-            if (-not (Test-Path $directory)) {
+            if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
               Write-Error "$directory not found."
               exit 1
             }
@@ -70,8 +83,7 @@ jobs:
           )
 
           foreach ($file in $files) {
-
-            if (-not (Test-Path $file)) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
               Write-Error "$file missing."
               exit 1
             }
@@ -82,10 +94,12 @@ jobs:
       - name: Validate Markdown Files
         shell: pwsh
         run: |
-          $markdown = Get-ChildItem -Recurse -Filter *.md
+          $markdownFiles = @(
+            Get-Item -LiteralPath "README.md", "CHANGELOG.md", "ARCHITECTURE.md"
+            Get-ChildItem -Path "docs", "user-docs" -Recurse -File -Filter "*.md"
+          )
 
-          foreach ($file in $markdown) {
-
+          foreach ($file in $markdownFiles) {
             if ($file.Length -eq 0) {
               Write-Warning "$($file.FullName) is empty."
             }
@@ -96,14 +110,28 @@ jobs:
       - name: Validate Manifest Files
         shell: pwsh
         run: |
-          if (-not (Test-Path "manifest/architecture.json")) {
-            Write-Error "architecture.json missing."
-            exit 1
-          }
+          $manifestFiles = @(
+            "manifest/architecture.json",
+            "manifest/auto-fix.json"
+          )
 
-          if (-not (Test-Path "manifest/auto-fix.json")) {
-            Write-Error "auto-fix.json missing."
-            exit 1
+          foreach ($file in $manifestFiles) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              Write-Error "$file missing."
+              exit 1
+            }
+
+            try {
+              Get-Content -LiteralPath $file -Raw |
+                ConvertFrom-Json -ErrorAction Stop |
+                Out-Null
+            }
+            catch {
+              Write-Error "$file contains invalid JSON. $($_.Exception.Message)"
+              exit 1
+            }
+
+            Write-Host "$file verified."
           }
 
           Write-Host "Manifest validation completed."
@@ -111,7 +139,7 @@ jobs:
       - name: Build Documentation Artifact
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force logs/docs | Out-Null
+          New-Item -ItemType Directory -Force -Path "logs/docs" | Out-Null
 
           @"
           # Documentation Report
@@ -129,15 +157,16 @@ jobs:
           Documentation ready for publishing.
 
           Generated:
-          $(Get-Date)
+          $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
 
-          "@ | Set-Content logs/docs/documentation-report.md
+          "@ | Set-Content -LiteralPath "logs/docs/documentation-report.md" -Encoding utf8
 
       - name: Upload Documentation Report
         uses: actions/upload-artifact@v4
         with:
           name: documentation-report
           path: logs/docs/documentation-report.md
+          if-no-files-found: error
 
       - name: Upload Documentation
         uses: actions/upload-artifact@v4
@@ -146,8 +175,9 @@ jobs:
           path: |
             docs
             user-docs
+          if-no-files-found: error
 
       - name: Documentation Complete
+        shell: bash
         run: |
           echo "Documentation validation completed successfully."
-

@@ -5,6 +5,7 @@
   "keywords": [
     "n8n",
     "n8n-community-node",
+    "n8n-community-node-package",
     "invoice",
     "payments",
     "stripe",
@@ -46,19 +47,19 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
-    "setup": "powershell -ExecutionPolicy Bypass -File scripts/install.ps1",
-    "clean": "powershell -ExecutionPolicy Bypass -File scripts/clean.ps1",
-    "format": "powershell -ExecutionPolicy Bypass -File scripts/format.ps1",
-    "lint": "powershell -ExecutionPolicy Bypass -File scripts/lint.ps1",
-    "build": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1",
-    "test": "powershell -ExecutionPolicy Bypass -File scripts/test.ps1",
-    "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1",
-    "doctor": "powershell -ExecutionPolicy Bypass -File scripts/doctor.ps1",
-    "autofix": "powershell -ExecutionPolicy Bypass -File scripts/auto-fix.ps1",
-    "validate": "powershell -ExecutionPolicy Bypass -File scripts/auto-validator.ps1",
-    "release": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1",
-    "publish": "powershell -ExecutionPolicy Bypass -File scripts/publish.ps1"
+    "bootstrap": "pwsh -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
+    "setup": "pwsh -ExecutionPolicy Bypass -File scripts/install.ps1",
+    "clean": "pwsh -ExecutionPolicy Bypass -File scripts/clean.ps1",
+    "format": "pwsh -ExecutionPolicy Bypass -File scripts/format.ps1",
+    "lint": "pwsh -ExecutionPolicy Bypass -File scripts/lint.ps1",
+    "build": "pwsh -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "test": "pwsh -ExecutionPolicy Bypass -File scripts/test.ps1",
+    "dev": "pwsh -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "doctor": "pwsh -ExecutionPolicy Bypass -File scripts/doctor.ps1",
+    "autofix": "pwsh -ExecutionPolicy Bypass -File scripts/auto-fix.ps1",
+    "validate": "pwsh -ExecutionPolicy Bypass -File scripts/auto-validator.ps1",
+    "release": "pwsh -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "publish": "pwsh -ExecutionPolicy Bypass -File scripts/publish.ps1"
   },
   "dependencies": {
     "n8n-workflow": "^1.100.0"
