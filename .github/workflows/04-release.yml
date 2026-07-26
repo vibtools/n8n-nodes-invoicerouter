@@ -2,7 +2,8 @@ name: 04 - Release
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -16,8 +17,9 @@ env:
 
 jobs:
   release:
-    name: Build & Release
+    name: Build Production Package
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -35,31 +37,38 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Validate Release Files
+      - name: Validate Tag Version
+        shell: bash
         run: |
           npm run validate
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")"
           fi
 
-      - name: Check Formatting
-        run: npm run format:check
-
-      - name: Run Lint and Type Check
+      - name: Verify Production Build
         run: |
+          npm run format:check
           npm run lint
           npm run typecheck
+          npm run build
+          npm test
+          npm pack --dry-run
 
-      - name: Build Project
-        run: npm run build
-
-      - name: Run Tests
-        run: npm test
-
-      - name: Package Project
+      - name: Create Release Bundle
+        shell: bash
         run: |
-          npm pack
-          compgen -G "*.tgz" > /dev/null
+          rm -rf release
+          mkdir -p release/workflows
+          npm pack --pack-destination release
+          cp workflows/*.json release/workflows/
+          cp workflows/README.md release/workflows/
+          (
+            cd release
+            find . -type f ! -name SHA256SUMS.txt -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS.txt
+          )
+          find release -maxdepth 2 -type f -print
 
       - name: Generate Release Report
         shell: pwsh
@@ -70,22 +79,21 @@ jobs:
 
           Status: SUCCESS
 
-          Validation, build, tests, and npm packaging completed.
+          Production validation, TypeScript build, tests, npm packaging,
+          workflow export, and checksums completed.
+
+          Package version: $(node -p "require('./package.json').version")
+          Node version: $(node --version)
           Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
           "@ | Set-Content logs/release/release-report.md -Encoding utf8
 
-      - name: Upload Release Report
+      - name: Upload Production Package
         uses: actions/upload-artifact@v4
         with:
-          name: release-report
-          path: logs/release/release-report.md
-          if-no-files-found: error
-
-      - name: Upload Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-package
-          path: "*.tgz"
+          name: InvoiceRouter-production-release
+          path: |
+            release/**
+            logs/release/release-report.md
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -93,14 +101,24 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: "*.tgz"
+          files: |
+            release/*.tgz
+            release/SHA256SUMS.txt
+            release/workflows/*.json
+            release/workflows/README.md
           fail_on_unmatched_files: true
 
-      - name: Publish to npm
+      - name: Publish to npm When Token Exists
         if: ${{ github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
-        run: npm publish --access public --provenance
+        shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -n "${NODE_AUTH_TOKEN}" ]]; then
+            npm publish --access public --provenance
+          else
+            echo "NPM_TOKEN is not configured; GitHub Release assets were created and npm publish was skipped."
+          fi
 
       - name: Release Complete
-        run: echo "Release workflow completed successfully."
+        run: echo "Production release workflow completed successfully."

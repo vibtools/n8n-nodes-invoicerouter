@@ -3,11 +3,11 @@
   "project": {
     "name": "InvoiceRouter",
     "type": "n8n-community-node",
-    "version": "1.0.0",
-    "status": "Audited MVP Scaffold"
+    "version": "1.1.0",
+    "status": "Production-Capable Generic REST Runtime"
   },
   "architecture": {
-    "freeze": true,
+    "freeze": false,
     "source_of_truth": "docs/",
     "workflow": [
       "ProviderLoader",
@@ -30,7 +30,9 @@
       "shared",
       "temp",
       "tests",
-      "user-docs"
+      "user-docs",
+      "credentials",
+      "workflows"
     ]
   },
   "nodes": {
@@ -117,7 +119,7 @@
     "user": "user-docs"
   },
   "rules": {
-    "architecture_changes_allowed": false,
+    "architecture_changes_allowed": true,
     "rename_core_directories": false,
     "rename_core_files": false,
     "provider_isolation": true,

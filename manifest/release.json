@@ -1,23 +1,24 @@
 {
-    "releaseFolder": "release",
-
-    "include": [
-        "dist",
-        "README.md",
-        "LICENSE",
-        "CHANGELOG.md",
-        "package.json",
-        "manifest",
-        "docs"
-    ],
-
-    "exclude": [
-        ".git",
-        ".github",
-        "node_modules",
-        "tests",
-        "scripts",
-        "examples",
-        "assets"
-    ]
+  "releaseFolder": "release",
+  "include": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "package.json",
+    "manifest",
+    "docs",
+    "ARCHITECTURE.md",
+    "PRODUCTION_GUIDE.md",
+    "workflows"
+  ],
+  "exclude": [
+    ".git",
+    ".github",
+    "node_modules",
+    "tests",
+    "scripts",
+    "examples",
+    "assets"
+  ]
 }

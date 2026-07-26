@@ -2,9 +2,9 @@
   "project": {
     "name": "InvoiceRouter",
     "display_name": "InvoiceRouter",
-    "version": "1.0.0",
-    "status": "Audited MVP Scaffold",
-    "stage": "MVP",
+    "version": "1.1.0",
+    "status": "Production-Capable Generic REST Runtime",
+    "stage": "Production Candidate",
     "license": "MIT",
     "repository": "https://github.com/vibtools/n8n-nodes-invoicerouter",
     "website": "",
@@ -59,7 +59,7 @@
     {
       "step": 4,
       "name": "Invoice Sender",
-      "description": "Prepare a safe dry-run result; live provider transport is planned."
+      "description": "Execute credential-backed create, send, or custom provider REST API requests."
     },
     {
       "step": 5,
@@ -71,7 +71,7 @@
     {
       "id": "provider_loader",
       "folder": "nodes/01_ProviderLoader",
-      "status": "Scaffold",
+      "status": "Implemented",
       "priority": 1,
       "responsibility": [
         "Connect Google Sheets",
@@ -84,7 +84,7 @@
     {
       "id": "provider_selector",
       "folder": "nodes/02_ProviderSelector",
-      "status": "Scaffold",
+      "status": "Implemented",
       "priority": 2,
       "responsibility": [
         "Receive Provider Pool",
@@ -96,7 +96,7 @@
     {
       "id": "request_builder",
       "folder": "nodes/03_RequestBuilder",
-      "status": "Scaffold",
+      "status": "Implemented",
       "priority": 3,
       "responsibility": [
         "Create Universal Invoice Object",
@@ -107,24 +107,25 @@
     {
       "id": "invoice_sender",
       "folder": "nodes/04_InvoiceSender",
-      "status": "Scaffold",
+      "status": "Implemented",
       "priority": 4,
       "responsibility": [
-        "Load Provider Adapter",
-        "Prepare Standardized Result",
-        "Support Safe Dry-Run Mode",
-        "Reserve Live Transport for Provider-Specific Implementation"
+        "Load secure n8n credential",
+        "Execute real provider REST requests",
+        "Support create/send/custom operations",
+        "Return normalized response",
+        "Support safe dry-run plans"
       ]
     },
     {
       "id": "status_checker",
       "folder": "nodes/05_StatusChecker",
-      "status": "Scaffold",
+      "status": "Implemented",
       "priority": 5,
       "responsibility": [
-        "Check Invoice Status",
-        "Check Payment Status",
-        "Return Final State"
+        "Call provider status endpoint",
+        "Normalize provider status",
+        "Return invoice URLs and status metadata"
       ]
     }
   ],
@@ -152,21 +153,14 @@
     "required_columns": [
       "enabled",
       "provider_name",
-      "provider_type",
-      "api_url",
-      "api_key"
+      "provider_type"
     ],
     "optional_columns": [
-      "secret",
-      "organization_id",
-      "username",
-      "password",
-      "oauth_token",
-      "refresh_token",
+      "create_endpoint",
+      "send_endpoint",
+      "status_endpoint",
       "priority",
       "weight",
-      "rate_limit",
-      "daily_limit",
       "notes"
     ]
   },
@@ -243,7 +237,7 @@
   ],
   "notes": {
     "purpose": "This file is for AI and developer planning only.",
-    "runtime": "Not used by n8n.",
+    "runtime": "Planning manifest; API secrets must remain in n8n credentials.",
     "editable": true
   }
 }

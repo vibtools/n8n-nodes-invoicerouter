@@ -1,0 +1,261 @@
+{
+  "name": "Google Sheets - Real Invoice Router",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-1080, 80]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1080, -100]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Select your invoice spreadsheet"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Select your invoice sheet"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "PENDING"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-pending-invoices",
+      "name": "Get Pending Invoice Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-820, -10]
+    },
+    {
+      "parameters": {
+        "requestIdField": "request_id",
+        "providerField": "provider",
+        "customerNameField": "customer_name",
+        "customerEmailField": "customer_email",
+        "amountField": "amount",
+        "currencyField": "currency",
+        "defaultCurrency": "USD",
+        "dueDateField": "due_date",
+        "descriptionField": "description",
+        "lineItemsField": "line_items_json",
+        "metadataField": "metadata_json",
+        "sendEmailField": "send_email",
+        "strictValidation": true
+      },
+      "id": "build-invoice",
+      "name": "Build Invoice Request",
+      "type": "n8n-nodes-invoicerouter.requestBuilder",
+      "typeVersion": 2,
+      "position": [-560, -10]
+    },
+    {
+      "parameters": {
+        "operation": "createAndSend",
+        "providerSource": "input",
+        "dryRun": false,
+        "createEndpoint": "/invoices",
+        "createMethod": "POST",
+        "createBodyMode": "invoice",
+        "sendEndpoint": "/invoices/{invoiceId}/send",
+        "sendMethod": "POST",
+        "sendBodyJson": "{}",
+        "extraHeadersJson": "{}",
+        "queryJson": "{}",
+        "idempotencyHeader": "Idempotency-Key",
+        "invoiceIdPath": "id",
+        "statusPath": "status",
+        "invoiceUrlPath": "hosted_invoice_url",
+        "pdfUrlPath": "invoice_pdf",
+        "messagePath": "message",
+        "includeRawResponse": false
+      },
+      "id": "send-invoice",
+      "name": "Create and Send Invoice",
+      "type": "n8n-nodes-invoicerouter.invoiceSender",
+      "typeVersion": 2,
+      "position": [-300, -10],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "invoice-success-condition",
+              "leftValue": "={{ $json.invoiceResponse.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "invoice-success",
+      "name": "Invoice Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-40, -10]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Select your invoice spreadsheet"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Select your invoice sheet"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $json.invoice.requestId }}",
+            "status": "={{ $json.invoiceResponse.status || 'SENT' }}",
+            "invoice_id": "={{ $json.invoiceResponse.invoiceId }}",
+            "invoice_url": "={{ $json.invoiceResponse.invoiceUrl }}",
+            "pdf_url": "={{ $json.invoiceResponse.pdfUrl }}",
+            "sent_at": "={{ $json.invoiceResponse.completedAt }}",
+            "last_error": ""
+          },
+          "matchingColumns": ["request_id"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "update-success",
+      "name": "Update Sheet - Success",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [240, -110]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Select your invoice spreadsheet"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Select your invoice sheet"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "request_id": "={{ $json.invoice.requestId }}",
+            "status": "FAILED",
+            "last_error": "={{ $json.invoiceResponse.message }}",
+            "retry_count": "={{ Number($json.retry_count || 0) + 1 }}"
+          },
+          "matchingColumns": ["request_id"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "update-failure",
+      "name": "Update Sheet - Failure",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [240, 90]
+    },
+    {
+      "parameters": {
+        "content": "## Required Google Sheet columns\nrequest_id, provider, customer_name, customer_email, amount, currency, due_date, description, line_items_json, metadata_json, send_email, status, invoice_id, invoice_url, pdf_url, sent_at, retry_count, last_error\n\nAfter import: select Google Sheets credentials/document/sheet, select InvoiceRouter API credential, and adapt provider endpoint/response paths.",
+        "height": 360,
+        "width": 520
+      },
+      "id": "setup-note",
+      "name": "Setup Instructions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-850, 250]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Get Pending Invoice Rows", "type": "main", "index": 0}]]
+    },
+    "Every 5 Minutes": {
+      "main": [[{"node": "Get Pending Invoice Rows", "type": "main", "index": 0}]]
+    },
+    "Get Pending Invoice Rows": {
+      "main": [[{"node": "Build Invoice Request", "type": "main", "index": 0}]]
+    },
+    "Build Invoice Request": {
+      "main": [[{"node": "Create and Send Invoice", "type": "main", "index": 0}]]
+    },
+    "Create and Send Invoice": {
+      "main": [[{"node": "Invoice Sent?", "type": "main", "index": 0}]]
+    },
+    "Invoice Sent?": {
+      "main": [
+        [{"node": "Update Sheet - Success", "type": "main", "index": 0}],
+        [{"node": "Update Sheet - Failure", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true
+  },
+  "versionId": "11111111-1111-4111-8111-111111111111",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

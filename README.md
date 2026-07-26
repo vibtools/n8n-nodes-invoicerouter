@@ -1,480 +1,182 @@
-# InvoiceRouter
+# InvoiceRouter for n8n
 
-<p align="center">
+InvoiceRouter is an n8n community-node package for converting Google Sheets rows or other n8n input items into normalized invoice requests and executing real credential-backed REST API calls.
 
-**Build once. Send invoices anywhere.**
+## Included nodes
 
-*A modern, open-source n8n Community Node for unified invoice delivery across multiple payment providers.*
+1. **Provider Loader** — loads built-in provider identifiers and optional endpoint profiles.
+2. **Provider Selector** — selects a provider from an input field, manual choice, or provider pool.
+3. **Request Builder** — converts Google Sheets columns into a normalized invoice object.
+4. **Invoice Sender** — executes real create, create-and-send, send-existing, or custom REST API requests.
+5. **Status Checker** — retrieves and normalizes invoice status through the provider API.
 
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)]()
-[![License](https://img.shields.io/badge/license-MIT-green.svg)]()
-[![n8n Community Node](https://img.shields.io/badge/n8n-community%20node-ff6d5a.svg)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6.svg)]()
+## Security model
 
-</p>
+Provider secrets are stored only in the **InvoiceRouter API** n8n credential. API keys must not be stored in Google Sheets, workflow JSON, provider JSON, or the Git repository.
 
----
+The credential supports:
 
-## Overview
+- Bearer token
+- API key header
+- Basic authentication
+- API key query parameter
+- No authentication
+- Default non-secret headers
+- HTTPS enforcement
+- Configurable request timeout
 
-InvoiceRouter is an open-source **n8n Community Node** that provides a single, consistent interface for sending invoices through multiple payment providers.
+HTTP is rejected by default except localhost. Enable **Allow HTTP** only for a trusted private development service.
 
-Instead of building different workflows for every provider, InvoiceRouter normalizes invoice creation, request building, response parsing, and status checking into one unified architecture.
+## Real API operations
 
-The project is designed for scalability, maintainability, and long-term extensibility.
+The Invoice Sender supports:
 
-## Current Implementation Status
+- Create invoice
+- Create and send invoice as a two-step sequence
+- Send an existing invoice
+- Custom REST request
+- Idempotency header using the invoice `requestId`
+- Configurable endpoint, method, body, query parameters, headers, and response paths
+- Dry-run request plans without network transmission
+- Normalized success and failure output
 
-This repository is an **audited MVP scaffold**. The five n8n node entry points compile, load, and pass smoke tests. Provider adapters expose normalized validation, payload, and response structures.
+The Status Checker supports real provider status requests and maps provider states to normalized states such as `draft`, `sent`, `viewed`, `paid`, `overdue`, `void`, and `failed`.
 
-**Live invoice delivery is not enabled in this package yet.** `Invoice Sender` defaults to safe dry-run behavior and does not transmit credentials or call external provider APIs. Provider-specific authentication, HTTP transport, retries, webhooks, and integration tests must be implemented before production use.
+## Provider compatibility
 
----
+InvoiceRouter provides a production-capable generic REST transport. Each invoice provider has its own endpoints, authentication rules, payload format, and response structure. Configure the node fields using the provider's official API documentation.
 
-# Why InvoiceRouter?
+The provider folders in this repository preserve adapter boundaries for future provider-specific implementations. They do not claim that one generic payload is valid for every listed provider.
 
-Managing multiple payment providers usually requires:
+## Google Sheets workflow
 
-* Different APIs
-* Different payload formats
-* Different authentication methods
-* Different response structures
-* Different webhook behaviors
-
-InvoiceRouter abstracts these differences behind a consistent workflow, allowing your n8n automation to remain simple while supporting multiple providers.
-
----
-
-# Workflow Canvas
-
-The following diagram represents the logical n8n execution pipeline used by **InvoiceRouter**.
-
-```text
-                                    InvoiceRouter
-
- ┌──────────────┐
- │    INPUT     │
- └──────┬───────┘
-        │
-        ▼
-┌───────────────────────┐
-│    Provider Loader    │
-│───────────────────────│
-│ • Discover Providers  │
-│ • Register Providers  │
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────┐
-│   Provider Selector   │
-│───────────────────────│
-│ • Validate Provider   │
-│ • Load Implementation │
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────┐
-│    Request Builder    │
-│───────────────────────│
-│ • Normalize Input     │
-│ • Build Payload       │
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────┐
-│    Invoice Sender     │
-│───────────────────────│
-│ • Safe Dry-Run Result │
-│ • Live API: Planned   │
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────┐
-│    Status Checker     │
-│───────────────────────│
-│ • Parse Response      │
-│ • Normalize Result    │
-└──────────┬────────────┘
-           │
-           ▼
-┌───────────────────────┐
-│  Normalized Output    │
-└───────────────────────┘
-```
-
-
-# MVP Features
-
-## Core Nodes
-
-The first public release includes the following nodes:
+Import:
 
 ```text
-Provider Loader
-
-↓
-
-Provider Selector
-
-↓
-
-Request Builder
-
-↓
-
-Invoice Sender
-
-↓
-
-Status Checker
+workflows/google-sheets-real-invoice-router.json
 ```
 
----
-
-## Provider Adapter Scaffolds (MVP)
-
-* Stripe
-* LemonSqueezy
-* Paddle
-* Polar
-
-Additional providers will be introduced in future releases.
-
----
-
-# Architecture
-
-## Workflow
+The template performs:
 
 ```text
-Input
-
-↓
-
-Provider Loader
-
-↓
-
-Provider Selector
-
-↓
-
-Request Builder
-
-↓
-
-Invoice Sender
-
-↓
-
-Status Checker
-
-↓
-
-Normalized Output
+Schedule or Manual Trigger
+→ Get PENDING Google Sheets rows
+→ Build normalized invoice
+→ Create and send through provider API
+→ IF success
+→ Update the source row with success or failure
 ```
 
-Every provider follows the same execution pipeline.
-
----
-
-## Node Architecture
-
-Each node is completely self-contained.
+Required sheet columns:
 
 ```text
-ProviderLoader/
-
-index.ts
-
-ProviderLoader.node.ts
-
-ProviderLoader.description.ts
-
-ProviderLoader.execute.ts
-
-ProviderLoader.types.ts
-
-ProviderLoader.constants.ts
-
-ProviderLoader.helpers.ts
-
-README.md
+request_id
+provider
+customer_name
+customer_email
+amount
+currency
+due_date
+description
+line_items_json
+metadata_json
+send_email
+status
+invoice_id
+invoice_url
+pdf_url
+sent_at
+retry_count
+last_error
 ```
 
-The same structure is used for every node.
+Example `line_items_json`:
 
----
+```json
+[
+  {
+    "description": "Consulting service",
+    "quantity": 1,
+    "unitPrice": 100,
+    "amount": 100
+  }
+]
+```
 
-## Provider Architecture
+## Build and validation
 
-Each payment provider follows an identical architecture.
+Use Node.js 24 in CI.
+
+```bash
+npm ci
+npm run validate
+npm run format:check
+npm run lint
+npm run typecheck
+npm run build
+npm test
+npm pack --dry-run
+```
+
+Run the complete verification pipeline:
+
+```bash
+npm run verify
+```
+
+## GitHub Release
+
+Create a tag matching `package.json`, for example:
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+The release workflow produces:
 
 ```text
-providers/
-
-stripe/
-
-index.ts
-
-StripeProvider.ts
-
-StripePayload.ts
-
-StripeParser.ts
-
-StripeValidator.ts
-
-StripeTypes.ts
-
-StripeConstants.ts
-
-StripeHelpers.ts
-
-README.md
+n8n-nodes-invoicerouter-1.1.0.tgz
+SHA256SUMS.txt
+google-sheets-real-invoice-router.json
+workflow setup README
 ```
 
-This keeps every provider isolated, modular, and easy to maintain.
+If `NPM_TOKEN` exists, the workflow also publishes to npm. Without the token, the GitHub Release still succeeds and provides manual installation assets.
 
----
+## Manual self-hosted installation
 
-# Project Structure
+Download the `.tgz` file from GitHub Releases. On the n8n host, install it in the n8n nodes directory and restart n8n:
 
-```text
-InvoiceRouter/
-
-assets/
-docs/
-examples/
-manifest/
-nodes/
-providers/
-shared/
-tests/
-scripts/
-
-package.json
-README.md
-LICENSE
+```bash
+mkdir -p ~/.n8n/nodes
+cd ~/.n8n/nodes
+npm install /absolute/path/n8n-nodes-invoicerouter-1.1.0.tgz
 ```
 
----
-
-# Development Scripts
-
-The project includes a complete PowerShell development toolkit.
-
-| Script                  | Purpose                                    |
-| ----------------------- | ------------------------------------------ |
-| bootstrap.ps1           | Initialize project workflow                |
-| create-architecture.ps1 | Generate project architecture              |
-| auto-validator.ps1      | Validate project architecture              |
-| auto-fix.ps1            | Detect and repair supported project issues |
-| doctor.ps1              | Project diagnostics                        |
-| install.ps1             | Install dependencies                       |
-| clean.ps1               | Clean build artifacts                      |
-| format.ps1              | Normalize source formatting safely        |
-| lint.ps1                | Run structural lint and type checks        |
-| build.ps1               | Build project                              |
-| test.ps1                | Execute tests                              |
-| dev.ps1                 | Development mode                           |
-| release.ps1             | Prepare release package                    |
-| publish.ps1             | Publish release                            |
-
----
-
-# Development Workflow
-
-```text
-bootstrap
-
-↓
-
-create-architecture
-
-↓
-
-auto-validator
-
-↓
-
-install
-
-↓
-
-format
-
-↓
-
-lint
-
-↓
-
-build
-
-↓
-
-test
-
-↓
-
-dev
-```
-
----
-
-# Release Workflow
-
-```text
-build
-
-↓
-
-test
-
-↓
-
-release
-
-↓
-
-publish
-```
-
----
-
-# Project Goals
-
-* Unified invoice workflow
-* Modular provider system
-* Consistent node architecture
-* Configuration-driven development
-* Maintainable codebase
-* Open-source friendly design
-* Audited release workflow scaffold
-
----
-
-# Technology Stack
-
-* TypeScript
-* n8n Community Nodes
-* Node.js
-* PowerShell Automation
-* JSON Manifest Configuration
-
----
-
-# Open Source
-
-InvoiceRouter is developed as an open-source project.
-
-Contributions, bug reports, feature suggestions, and pull requests are welcome.
-
-Please follow the project's coding conventions and architecture before contributing.
-
----
-
-# Ecosystem
-
-Built by **Vib Tools**
-
-Website
-
-https://vib.tools/
-
-Open Source Platform
-
-https://ygit.net/
-
-The goal is to build reliable, developer-friendly open-source software and automation tools.
-
----
-
-# Roadmap
-
-## Version 1.x
-
-* Core workflow
-* Multi-provider architecture
-* Unified invoice pipeline
-* PowerShell automation toolkit
-* Release workflow
-
----
-
-## Future
-
-* Additional payment providers
-* More invoice operations
-* Extended workflow nodes
-* Improved testing
-* Expanded documentation
-
----
-
-
-# Provider Execution Canvas
-
-Every provider follows exactly the same execution pipeline.
-
-```text
-                                   InvoiceRouter
-
-                                          │
-                                          ▼
-
-                         ┌─────────────────────────────────┐
-                         │      Selected Provider          │
-                         │  Stripe / Paddle / Polar / LS   │
-                         └──────────────┬──────────────────┘
-                                        │
-                                        ▼
-                          ┌─────────────────────────────┐
-                          │      ProviderValidator      │
-                          └──────────────┬──────────────┘
-                                         │
-                                         ▼
-                          ┌─────────────────────────────┐
-                          │       Payload Builder       │
-                          └──────────────┬──────────────┘
-                                         │
-                                         ▼
-                          ┌─────────────────────────────┐
-                          │  Provider Transport (Plan)  │
-                          └──────────────┬──────────────┘
-                                         │
-                                         ▼
-                              ┌──────────────────────┐
-                              │  Provider REST API   │
-                              └──────────┬───────────┘
-                                         │
-                                         ▼
-                          ┌─────────────────────────────┐
-                          │      Response Parser        │
-                          └──────────────┬──────────────┘
-                                         │
-                                         ▼
-                          ┌─────────────────────────────┐
-                          │     Normalized Output       │
-                          └─────────────────────────────┘
-```
-
-
-# Version
-
-Current Version
-
-```text
-v1.0.0
-```
-
-This section is intended to be updated with each project release to reflect the latest stable version and major milestones.
-
----
-
-# License
-
-MIT License
-
-See the LICENSE file for details.
+Then import the workflow JSON in n8n and configure:
+
+1. Google Sheets credentials and document/sheet selection.
+2. InvoiceRouter API credential.
+3. Real create/send endpoints.
+4. Provider request payload.
+5. Response paths for invoice ID, status, invoice URL, and PDF URL.
+6. Dry-run verification against a sandbox provider account.
+
+## Production checklist
+
+- Use HTTPS.
+- Use sandbox credentials before production credentials.
+- Keep Dry Run enabled during mapping tests.
+- Use unique `request_id` values.
+- Confirm the provider supports idempotency and use its required header name.
+- Enable `continueOnFail` when individual row failures should not stop the batch.
+- Verify response paths against real sandbox responses.
+- Restrict n8n credential access.
+- Monitor failed executions and Google Sheet `last_error` values.
+
+See [PRODUCTION_GUIDE.md](PRODUCTION_GUIDE.md) for configuration details.
+
+## License
+
+MIT

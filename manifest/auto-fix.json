@@ -1,10 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "InvoiceRouter Auto Fix Configuration",
-  "version": "1.0.0",
-  "status": "Architecture Locked (MVP)",
+  "version": "1.1.0",
+  "status": "Production Runtime Validation",
   "enabled": true,
-
   "autoFix": {
     "enabled": true,
     "dryRun": false,
@@ -15,7 +14,6 @@
     "reportDirectory": "logs/automation",
     "reportFormat": "markdown"
   },
-
   "fixers": [
     {
       "name": "DependencyFixer",
@@ -78,7 +76,6 @@
       "priority": 100
     }
   ],
-
   "validation": {
     "requiredDirectories": [
       "assets",
@@ -92,9 +89,10 @@
       "shared",
       "temp",
       "tests",
-      "user-docs"
+      "user-docs",
+      "credentials",
+      "workflows"
     ],
-
     "requiredFiles": [
       "README.md",
       "LICENSE",
@@ -103,7 +101,6 @@
       ".gitignore"
     ]
   },
-
   "protection": {
     "allowArchitectureChanges": false,
     "allowFolderRename": false,
@@ -114,18 +111,15 @@
     "allowManifestReplacement": false,
     "allowAutomaticDeletion": false
   },
-
   "logging": {
     "enabled": true,
     "directory": "logs/automation",
     "file": "auto-fix-report.md"
   },
-
   "backup": {
     "enabled": true,
     "directory": "temp/backups"
   },
-
   "exitCodes": {
     "success": 0,
     "warning": 1,
@@ -133,4 +127,3 @@
     "critical": 99
   }
 }
-

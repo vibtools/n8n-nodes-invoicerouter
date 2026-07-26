@@ -3,7 +3,10 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "Node",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "rootDir": ".",
     "outDir": "dist",
     "declaration": true,
@@ -20,6 +23,7 @@
   },
   "include": [
     "index.ts",
+    "credentials/**/*.ts",
     "nodes/**/*.ts",
     "providers/**/*.ts",
     "shared/**/*.ts"

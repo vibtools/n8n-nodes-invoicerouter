@@ -1,15 +1,41 @@
 # InvoiceRouter Architecture
 
-The canonical architecture is defined in `manifest/architecture.json` and expanded in
-`manifest/ARCHITECTURE.md` and the freeze documents under `docs/`.
+## Runtime flow
 
-This audited build keeps the five-stage workflow:
+```text
+Google Sheets or n8n input
+→ Request Builder
+→ Provider selection
+→ Invoice Sender
+→ Provider REST API
+→ Normalized response
+→ Google Sheets success/failure update
+```
 
-1. Provider Loader
-2. Provider Selector
-3. Request Builder
-4. Invoice Sender
-5. Status Checker
+## Credential boundary
 
-The current TypeScript implementation is an MVP-safe scaffold. Provider-specific API transport and
-credential implementations must be completed and integration-tested before production use.
+Provider secrets remain in the n8n credential store. Workflow data contains invoice fields and non-secret routing metadata only.
+
+## Transport layer
+
+`shared/http/InvoiceApi.ts` performs:
+
+- credential normalization
+- HTTPS enforcement
+- authentication header/query construction
+- URL joining and endpoint placeholder interpolation
+- request body interpolation
+- execution through n8n's HTTP helper
+- safe response normalization
+
+## Nodes
+
+- Provider Loader: provider registry and profiles
+- Provider Selector: input/manual/pool routing
+- Request Builder: Google Sheets-to-universal invoice normalization
+- Invoice Sender: create/send/custom real API execution
+- Status Checker: real API status retrieval and normalization
+
+## Release architecture
+
+A `v*` Git tag triggers validation, TypeScript compilation, tests, npm packaging, workflow export, checksum generation, GitHub Release creation, and optional npm publishing.

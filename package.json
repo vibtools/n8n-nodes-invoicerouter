@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-invoicerouter",
-  "version": "1.0.0",
-  "description": "A modular and provider-independent n8n Community Node MVP scaffold for normalizing invoice requests, routing providers, and preparing safe dry-run results.",
+  "version": "1.1.0",
+  "description": "A credential-secured n8n Community Node for normalizing invoice data and executing real provider REST API create, send, custom, and status operations.",
   "keywords": [
     "n8n",
     "n8n-community-node",
@@ -13,7 +13,10 @@
     "paddle",
     "polar",
     "automation",
-    "typescript"
+    "typescript",
+    "google-sheets",
+    "rest-api",
+    "community-node"
   ],
   "homepage": "https://github.com/vibtools/n8n-nodes-invoicerouter",
   "repository": {
@@ -39,8 +42,11 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "workflows",
     "manifest",
     "README.md",
+    "ARCHITECTURE.md",
+    "PRODUCTION_GUIDE.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
@@ -64,7 +70,9 @@
     "lint:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/lint.ps1",
     "build:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
     "test:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",
-    "dev:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1"
+    "dev:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "verify": "npm run validate && npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm pack --dry-run",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -76,7 +84,9 @@
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": [],
+    "credentials": [
+      "dist/credentials/InvoiceRouterApi.credentials.js"
+    ],
     "nodes": [
       "dist/nodes/01_ProviderLoader/Node.node.js",
       "dist/nodes/02_ProviderSelector/Node.node.js",

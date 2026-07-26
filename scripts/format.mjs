@@ -6,7 +6,7 @@ const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const mode = process.argv.includes('--write') ? 'write' : 'check';
 const allowed = new Set(['.ts', '.js', '.mjs', '.cjs', '.json', '.yml', '.yaml', '.ps1']);
 const excluded = new Set(['.git', 'node_modules', 'dist', 'release', 'temp']);
-const roots = ['nodes', 'providers', 'shared', 'tests', 'scripts', '.github/workflows'];
+const roots = ['credentials', 'nodes', 'providers', 'shared', 'tests', 'scripts', 'workflows', '.github/workflows'];
 const topFiles = ['package.json', 'package-lock.json', 'tsconfig.json', '.prettierrc', '.eslintrc.json'];
 
 async function walk(directory, output = []) {
