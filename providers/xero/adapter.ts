@@ -1,1 +1,1 @@
-﻿
+export { XeroProvider } from './Provider';

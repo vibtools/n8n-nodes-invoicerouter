@@ -1,1 +1,1 @@
-﻿
+export { CustomProvider } from './Provider';

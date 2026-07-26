@@ -1,4 +1,4 @@
-﻿# Installation
+# Installation
 
 **Project:** InvoiceRouter
 **Version:** v1.0.0

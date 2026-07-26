@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-invoicerouter",
   "version": "1.0.0",
-  "description": "A modular and provider-independent n8n Community Node for creating, sending, and managing invoices across multiple payment providers.",
+  "description": "A modular and provider-independent n8n Community Node MVP scaffold for normalizing invoice requests, routing providers, and preparing safe dry-run results.",
   "keywords": [
     "n8n",
     "n8n-community-node",
@@ -32,41 +32,44 @@
     "url": "https://github.com/sponsors/vibtools"
   },
   "engines": {
-    "node": ">=24.0.0",
+    "node": ">=22.0.0 <25",
     "npm": ">=10.0.0"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "nodes",
-    "providers",
     "manifest",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
   "scripts": {
-    "bootstrap": "pwsh -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
-    "setup": "pwsh -ExecutionPolicy Bypass -File scripts/install.ps1",
-    "clean": "pwsh -ExecutionPolicy Bypass -File scripts/clean.ps1",
-    "format": "pwsh -ExecutionPolicy Bypass -File scripts/format.ps1",
-    "lint": "pwsh -ExecutionPolicy Bypass -File scripts/lint.ps1",
-    "build": "pwsh -ExecutionPolicy Bypass -File scripts/build.ps1",
-    "test": "pwsh -ExecutionPolicy Bypass -File scripts/test.ps1",
-    "dev": "pwsh -ExecutionPolicy Bypass -File scripts/dev.ps1",
-    "doctor": "pwsh -ExecutionPolicy Bypass -File scripts/doctor.ps1",
-    "autofix": "pwsh -ExecutionPolicy Bypass -File scripts/auto-fix.ps1",
-    "validate": "pwsh -ExecutionPolicy Bypass -File scripts/auto-validator.ps1",
-    "release": "pwsh -ExecutionPolicy Bypass -File scripts/release.ps1",
-    "publish": "pwsh -ExecutionPolicy Bypass -File scripts/publish.ps1"
-  },
-  "dependencies": {
-    "n8n-workflow": "^1.100.0"
+    "bootstrap": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
+    "setup": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1",
+    "clean": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/clean.ps1",
+    "format": "node scripts/format.mjs --write",
+    "format:check": "node scripts/format.mjs --check",
+    "lint": "node scripts/lint.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test tests/smoke.test.cjs",
+    "dev": "tsc -p tsconfig.json --watch",
+    "doctor": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/doctor.ps1",
+    "autofix": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/auto-fix.ps1",
+    "validate": "node scripts/validate-project.mjs",
+    "release": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "publish": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/publish.ps1",
+    "format:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/format.ps1",
+    "lint:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/lint.ps1",
+    "build:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "test:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test.ps1",
+    "dev:ps1": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "n8n-workflow": "^1.100.0"
   },
   "peerDependencies": {
     "n8n-workflow": ">=1.100.0"
@@ -80,9 +83,11 @@
       "dist/nodes/03_RequestBuilder/Node.node.js",
       "dist/nodes/04_InvoiceSender/Node.node.js",
       "dist/nodes/05_StatusChecker/Node.node.js"
-    ]
+    ],
+    "strict": true
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "sideEffects": false
 }

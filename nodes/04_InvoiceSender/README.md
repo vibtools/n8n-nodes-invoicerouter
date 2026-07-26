@@ -1,5 +1,6 @@
-﻿
 # Invoice Sender
+
+> **Audited MVP behavior:** This node currently produces a normalized dry-run result. It does not call external provider APIs. Live transport remains a provider-specific implementation task.
 
 Welcome to the **Invoice Sender** node.
 

@@ -1,92 +1,49 @@
-# ============================================
-# InvoiceRouter
-# Package.json Auto Updater
-# Version: 1.0
-# ============================================
+# Safely synchronize package-lock.json root metadata with package.json.
+# This script intentionally preserves package identity, version, repository,
+# scripts, dependencies, and n8n registration instead of overwriting them.
+if (-not $env:CI) { Clear-Host }
 
-$PackageFile = Join-Path $PSScriptRoot "..\package.json"
+$ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+Set-Location $ProjectRoot
+$PackagePath = "package.json"
+$LockPath = "package-lock.json"
 
-if (!(Test-Path $PackageFile)) {
-    Write-Host ""
-    Write-Host "package.json not found."
-    exit 1
+if (-not (Test-Path -LiteralPath $PackagePath -PathType Leaf)) {
+  Write-Error "package.json not found."
+  exit 1
+}
+if (-not (Test-Path -LiteralPath $LockPath -PathType Leaf)) {
+  Write-Error "package-lock.json not found. Run npm install to generate it."
+  exit 1
 }
 
-$package = Get-Content $PackageFile -Raw | ConvertFrom-Json
-
-# -------------------------------------------------
-# Project Information
-# -------------------------------------------------
-
-$package.name = "n8n-nodes-invoice-router"
-$package.version = "0.1.0"
-
-$package.description = "Universal Invoice Provider Router for n8n."
-
-$package.license = "MIT"
-
-$package.author = ""
-
-$package.homepage = ""
-
-$package.repository = @{
-    type = "git"
-    url = ""
+try {
+  $Package = Get-Content -LiteralPath $PackagePath -Raw | ConvertFrom-Json -ErrorAction Stop
+  $Lock = Get-Content -LiteralPath $LockPath -Raw | ConvertFrom-Json -ErrorAction Stop
+}
+catch {
+  Write-Error "package.json or package-lock.json contains invalid JSON."
+  exit 1
 }
 
-$package.bugs = @{
-    url = ""
+if (-not $Lock.packages.PSObject.Properties['']) {
+  Write-Error "package-lock.json does not contain the root package entry."
+  exit 1
 }
 
-# -------------------------------------------------
-# Node Engine
-# -------------------------------------------------
-
-$package.engines = @{
-    node = ">=20.15"
+$Root = $Lock.packages.''
+foreach ($Property in @('name', 'version', 'license', 'dependencies', 'devDependencies', 'peerDependencies', 'engines', 'funding')) {
+  $Root.PSObject.Properties.Remove($Property)
+  if ($Package.PSObject.Properties[$Property]) {
+    $Root | Add-Member -NotePropertyName $Property -NotePropertyValue $Package.$Property
+  }
 }
 
-# -------------------------------------------------
-# Keywords
-# -------------------------------------------------
+$Lock.name = $Package.name
+$Lock.version = $Package.version
+$Lock | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $LockPath -Encoding utf8
 
-$package.keywords = @(
-    "n8n",
-    "n8n-community-node",
-    "invoice",
-    "router",
-    "automation",
-    "billing",
-    "stripe",
-    "zoho",
-    "invoice-ninja",
-    "erpnext",
-    "xero",
-    "quickbooks",
-    "odoo"
-)
-
-# -------------------------------------------------
-# Files
-# -------------------------------------------------
-
-$package.files = @(
-    "dist",
-    "README.md",
-    "LICENSE"
-)
-
-# -------------------------------------------------
-# Save
-# -------------------------------------------------
-
-$package | ConvertTo-Json -Depth 100 | Set-Content $PackageFile -Encoding UTF8
-
-Write-Host ""
-Write-Host "========================================="
-Write-Host " package.json Updated Successfully"
-Write-Host "========================================="
-Write-Host ""
-Write-Host "Project : $($package.name)"
-Write-Host "Version : $($package.version)"
-Write-Host ""
+Write-Host "package-lock.json root metadata synchronized safely." -ForegroundColor Green
+Write-Host "Project : $($Package.name)"
+Write-Host "Version : $($Package.version)"
+exit 0

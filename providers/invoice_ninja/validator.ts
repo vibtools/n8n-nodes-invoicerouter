@@ -1,1 +1,1 @@
-﻿
+export { validateProviderConfig } from './ProviderValidator';

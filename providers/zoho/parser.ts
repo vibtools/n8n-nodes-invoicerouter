@@ -1,1 +1,1 @@
-﻿
+export { parseProviderResponse } from './ProviderParser';

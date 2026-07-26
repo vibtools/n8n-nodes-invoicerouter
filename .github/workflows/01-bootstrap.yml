@@ -2,228 +2,82 @@ name: 01 - Bootstrap
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - develop
-
+    branches: [main, master, develop]
   pull_request:
-    branches:
-      - main
-      - master
-      - develop
-
+    branches: [main, master, develop]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   NODE_VERSION: "24"
+  TERM: "xterm"
 
 jobs:
   bootstrap:
     name: Bootstrap Project
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
-        if: ${{ hashFiles('package-lock.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
-      - name: Setup Node.js (No Cache)
-        if: ${{ hashFiles('package-lock.json') == '' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+          cache-dependency-path: package-lock.json
 
       - name: Display Environment
         run: |
-          echo "Node Version:"
           node --version
-
-          echo "NPM Version:"
           npm --version
 
       - name: Install Dependencies
-        run: npm install
-
-      - name: Check package-lock.json
-        id: lockfile
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit package-lock.json
-        if: ${{ steps.lockfile.outputs.exists == 'true' && github.event_name != 'pull_request' }}
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore(ci): add package-lock.json"
-          file_pattern: package-lock.json
+        run: npm ci
 
       - name: Validate package.json
-        run: |
-          test -f package.json
+        run: node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
 
       - name: Validate Architecture Manifest
-        run: |
-          test -f manifest/architecture.json
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest/architecture.json', 'utf8'))"
 
       - name: Validate Auto-Fix Manifest
-        run: |
-          test -f manifest/auto-fix.json
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest/auto-fix.json', 'utf8'))"
 
       - name: Validate Project Structure
-        shell: pwsh
-        run: |
-          $folders = @(
-            "assets",
-            "docs",
-            "examples",
-            "logs",
-            "manifest",
-            "nodes",
-            "providers",
-            "scripts",
-            "shared",
-            "temp",
-            "tests",
-            "user-docs"
-          )
-
-          foreach ($folder in $folders) {
-            if (-not (Test-Path $folder)) {
-              New-Item -ItemType Directory -Path $folder | Out-Null
-              Write-Host "Created: $folder"
-            }
-            else {
-              Write-Host "Exists: $folder"
-            }
-          }
+        run: npm run validate
 
       - name: Generate Node Skeletons
-        shell: pwsh
-        run: |
-          $nodes = @(
-            "01_ProviderLoader",
-            "02_ProviderSelector",
-            "03_RequestBuilder",
-            "04_InvoiceSender",
-            "05_StatusChecker"
-          )
-
-          foreach ($node in $nodes) {
-            $base = "nodes/$node"
-
-            if (-not (Test-Path $base)) {
-              New-Item -ItemType Directory -Path $base | Out-Null
-            }
-
-            $files = @(
-              "README.md",
-              "index.ts",
-              "Node.node.ts",
-              "Node.description.ts",
-              "Node.execute.ts",
-              "Node.types.ts",
-              "Node.constants.ts",
-              "Node.helpers.ts"
-            )
-
-            foreach ($file in $files) {
-              $path = Join-Path $base $file
-
-              if (-not (Test-Path $path)) {
-                New-Item -ItemType File -Path $path | Out-Null
-              }
-            }
-          }
+        run: npm run validate
 
       - name: Generate Provider Skeletons
-        shell: pwsh
-        run: |
-          $providers = @(
-            "stripe",
-            "lemonsqueezy",
-            "paddle",
-            "polar"
-          )
-
-          foreach ($provider in $providers) {
-            $base = "providers/$provider"
-
-            if (-not (Test-Path $base)) {
-              New-Item -ItemType Directory -Path $base | Out-Null
-            }
-
-            $files = @(
-              "README.md",
-              "index.ts",
-              "Provider.ts",
-              "ProviderPayload.ts",
-              "ProviderParser.ts",
-              "ProviderValidator.ts",
-              "ProviderTypes.ts",
-              "ProviderConstants.ts",
-              "ProviderHelpers.ts"
-            )
-
-            foreach ($file in $files) {
-              $path = Join-Path $base $file
-
-              if (-not (Test-Path $path)) {
-                New-Item -ItemType File -Path $path | Out-Null
-              }
-            }
-          }
+        run: npm run validate
 
       - name: Validate TypeScript Configuration
-        run: |
-          test -f tsconfig.json
+        run: node -e "JSON.parse(require('fs').readFileSync('tsconfig.json', 'utf8'))"
 
       - name: Generate Bootstrap Report
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force logs/automation | Out-Null
-
           @"
           # Bootstrap Report
 
           Status: SUCCESS
 
-          Repository checked.
-
-          Dependencies installed.
-
-          Architecture manifest validated.
-
-          Auto-fix manifest validated.
-
-          Folder structure validated.
-
-          Node skeletons validated.
-
-          Provider skeletons validated.
-
-          Bootstrap completed successfully.
-          "@ | Set-Content logs/automation/bootstrap-report.md
+          Dependencies installed with npm ci.
+          Project structure and manifests validated.
+          Node and provider scaffolds validated.
+          "@ | Set-Content logs/automation/bootstrap-report.md -Encoding utf8
 
       - name: Upload Bootstrap Report
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap-report
           path: logs/automation/bootstrap-report.md
+          if-no-files-found: error
 
       - name: Bootstrap Complete
-        run: |
-          echo "Bootstrap completed successfully."
+        run: echo "Bootstrap completed successfully."

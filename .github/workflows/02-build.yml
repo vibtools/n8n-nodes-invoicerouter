@@ -2,11 +2,8 @@ name: 02 - Build
 
 on:
   workflow_run:
-    workflows:
-      - "01 - Bootstrap"
-    types:
-      - completed
-
+    workflows: ["01 - Bootstrap"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -14,14 +11,13 @@ permissions:
 
 env:
   NODE_VERSION: "24"
+  TERM: "xterm"
 
 jobs:
   build:
     name: Build Project
     runs-on: ubuntu-latest
-
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -29,125 +25,63 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node.js
-        if: ${{ hashFiles('package-lock.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Setup Node.js (No Cache)
-        if: ${{ hashFiles('package-lock.json') == '' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
       - name: Display Environment
-        shell: bash
         run: |
-          echo "Node.js version:"
           node --version
-
-          echo "npm version:"
           npm --version
 
       - name: Install Dependencies
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm ci
 
       - name: Validate Project Files
-        shell: bash
-        run: |
-          test -f package.json
-          test -f tsconfig.json
+        run: npm run validate
 
       - name: Run Formatter
-        shell: bash
-        run: |
-          if node -e "const p = require('./package.json'); process.exit(p.scripts?.format ? 0 : 1)"; then
-            npm run format
-          else
-            echo "No format script found."
-          fi
+        run: npm run format:check
 
-      - name: Run ESLint
-        shell: bash
-        run: |
-          if node -e "const p = require('./package.json'); process.exit(p.scripts?.lint ? 0 : 1)"; then
-            npm run lint
-          else
-            echo "No lint script found."
-          fi
+      - name: Run Project Lint
+        run: npm run lint
 
       - name: TypeScript Type Check
-        shell: bash
-        run: |
-          if [ -x node_modules/.bin/tsc ]; then
-            npx --no-install tsc --noEmit
-          else
-            echo "TypeScript not installed."
-          fi
+        run: npm run typecheck
 
       - name: Build Project
-        shell: bash
-        run: |
-          if node -e "const p = require('./package.json'); process.exit(p.scripts?.build ? 0 : 1)"; then
-            npm run build
-          else
-            echo "No build script found."
-          fi
+        run: npm run build
 
       - name: Run Tests
-        shell: bash
+        run: npm test
+
+      - name: Validate Build Entries
         run: |
-          if node -e "const p = require('./package.json'); process.exit(p.scripts?.test ? 0 : 1)"; then
-            npm test
-          else
-            echo "No test script found."
-          fi
+          node - <<'NODE'
+          const fs = require('fs');
+          const packageJson = require('./package.json');
+          const outputs = [packageJson.main, packageJson.types, ...packageJson.n8n.nodes];
+          for (const file of outputs) {
+            if (!fs.existsSync(file)) throw new Error(`Missing build artifact: ${file}`);
+          }
+          NODE
 
       - name: Generate Build Report
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "logs/build" | Out-Null
-
+          New-Item -ItemType Directory -Force logs/build | Out-Null
           @"
           # Build Report
 
           Status: SUCCESS
 
-          Build completed successfully.
-
-          Checks Performed
-
-          - Dependencies Installed
-          - Project Validation
-          - Formatter
-          - ESLint
-          - TypeScript
-          - Build
-          - Tests
-
-          Node Version
-
-          $(node --version)
-
-          NPM Version
-
-          $(npm --version)
-
-          Build Time
-
-          $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
-
-          "@ | Set-Content `
-            -LiteralPath "logs/build/build-report.md" `
-            -Encoding utf8
+          Formatting, lint, type check, build, tests, and package entries passed.
+          Node: $(node --version)
+          npm: $(npm --version)
+          Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
+          "@ | Set-Content logs/build/build-report.md -Encoding utf8
 
       - name: Upload Build Report
         uses: actions/upload-artifact@v4
@@ -157,7 +91,6 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Build Artifacts
-        if: ${{ hashFiles('dist/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
@@ -165,6 +98,4 @@ jobs:
           if-no-files-found: error
 
       - name: Build Complete
-        shell: bash
-        run: |
-          echo "Build completed successfully."
+        run: echo "Build completed successfully."

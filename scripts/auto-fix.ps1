@@ -1,221 +1,75 @@
-# ============================================
-# InvoiceRouter
-# Auto Fix Engine
-# Version: 1.0.0
-# ============================================
-
-Clear-Host
-
-$StartTime = Get-Date
-
-Write-Host ""
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host " InvoiceRouter Auto Fix Engine"
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host ""
-
-# ------------------------------------------------------------
-# Project Root
-# ------------------------------------------------------------
-
+if (-not $env:CI) { Clear-Host }
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $ProjectRoot
 
-# ------------------------------------------------------------
-# Config
-# ------------------------------------------------------------
-
-$ConfigFile = Join-Path $ProjectRoot "manifest\auto-fix.json"
-
-if (!(Test-Path $ConfigFile)) {
-
-    Write-Host "[ERROR] manifest\auto-fix.json not found." -ForegroundColor Red
-    exit 1
-
-}
-
 try {
-
-    $Config = Get-Content $ConfigFile -Raw | ConvertFrom-Json
-
+  $Config = Get-Content "manifest/auto-fix.json" -Raw | ConvertFrom-Json -ErrorAction Stop
 }
 catch {
-
-    Write-Host "[ERROR] Invalid auto-fix.json" -ForegroundColor Red
-    exit 1
-
+  Write-Error "manifest/auto-fix.json is invalid."
+  exit 2
 }
 
-# ------------------------------------------------------------
-# Log Folder
-# ------------------------------------------------------------
-
-$LogFolder = Join-Path $ProjectRoot $Config.report.logFolder
-
-if (!(Test-Path $LogFolder)) {
-
-    New-Item `
-        -ItemType Directory `
-        -Path $LogFolder | Out-Null
-
+if (-not $Config.enabled -or -not $Config.autoFix.enabled) {
+  Write-Host "Auto-fix is disabled."
+  exit 0
 }
 
-$LogFile = Join-Path `
-    $LogFolder `
-    ("AutoFix_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+$LogFolder = Join-Path $ProjectRoot $Config.autoFix.reportDirectory
+New-Item -ItemType Directory -Force -Path $LogFolder | Out-Null
+$ReportPath = Join-Path $LogFolder "auto-fix-report.md"
+$Started = Get-Date
+$Results = [System.Collections.Generic.List[string]]::new()
 
-Start-Transcript `
-    -Path $LogFile `
-    -Force | Out-Null
+if ($Config.autoFix.backupBeforeFix -and $Config.backup.enabled) {
+  $BackupRoot = Join-Path $ProjectRoot $Config.backup.directory
+  $BackupPath = Join-Path $BackupRoot (Get-Date -Format "yyyyMMdd-HHmmss")
+  New-Item -ItemType Directory -Force -Path $BackupPath | Out-Null
+  foreach ($Item in @("package.json", "package-lock.json", "tsconfig.json", ".github", "manifest", "scripts")) {
+    if (Test-Path -LiteralPath $Item) {
+      Copy-Item -LiteralPath $Item -Destination $BackupPath -Recurse -Force
+    }
+  }
+  $Results.Add("- Backup: $BackupPath")
+}
 
-# ------------------------------------------------------------
-# Statistics
-# ------------------------------------------------------------
-
-$Total = 0
-$Passed = 0
+$HostExecutable = (Get-Process -Id $PID).Path
 $Failed = 0
-$Skipped = 0
+foreach ($Fixer in ($Config.fixers | Sort-Object priority)) {
+  if (-not $Fixer.enabled) { continue }
+  if (-not (Test-Path -LiteralPath $Fixer.script -PathType Leaf)) {
+    $Results.Add("- FAIL: $($Fixer.name) (missing script)")
+    $Failed++
+    if (-not $Config.autoFix.continueOnError) { break }
+    continue
+  }
 
-# ------------------------------------------------------------
-# Load Modules
-# ------------------------------------------------------------
+  if ($Config.autoFix.dryRun) {
+    $Results.Add("- DRY RUN: $($Fixer.name)")
+    continue
+  }
 
-$Modules = $Config.modules |
-Sort-Object priority
-
-foreach($Module in $Modules){
-
-    $Total++
-
-    if(!$Module.enabled){
-
-        $Skipped++
-
-        Write-Host ""
-        Write-Host "[SKIP] $($Module.name)" -ForegroundColor Yellow
-
-        continue
-
-    }
-
-    $Script = Join-Path `
-        $ProjectRoot `
-        $Module.script
-
-    if(!(Test-Path $Script)){
-
-        $Failed++
-
-        Write-Host ""
-        Write-Host "[MISSING] $($Module.script)" `
-            -ForegroundColor Red
-
-        continue
-
-    }
-
-    Write-Host ""
-    Write-Host "-----------------------------------------------"
-    Write-Host $Module.name `
-        -ForegroundColor Cyan
-    Write-Host "-----------------------------------------------"
-
-    try{
-
-        & powershell.exe `
-            -ExecutionPolicy Bypass `
-            -File $Script
-
-        if($LASTEXITCODE -eq 0){
-
-            $Passed++
-
-            Write-Host "[PASS]" `
-                -ForegroundColor Green
-
-        }
-        else{
-
-            $Failed++
-
-            Write-Host "[FAILED]" `
-                -ForegroundColor Red
-
-            if($Config.settings.stopOnCriticalError){
-
-                break
-
-            }
-
-        }
-
-    }
-    catch{
-
-        $Failed++
-
-        Write-Host $_.Exception.Message `
-            -ForegroundColor Red
-
-        if($Config.settings.stopOnCriticalError){
-
-            break
-
-        }
-
-    }
-
+  & $HostExecutable -NoProfile -ExecutionPolicy Bypass -File $Fixer.script
+  if ($LASTEXITCODE -eq 0) {
+    $Results.Add("- PASS: $($Fixer.name)")
+  }
+  else {
+    $Results.Add("- FAIL: $($Fixer.name) (exit $LASTEXITCODE)")
+    $Failed++
+    if (-not $Config.autoFix.continueOnError) { break }
+  }
 }
 
-# ------------------------------------------------------------
-# Summary
-# ------------------------------------------------------------
+@"
+# Auto-Fix Report
 
-$EndTime = Get-Date
-$Duration = $EndTime - $StartTime
+Started: $($Started.ToString('yyyy-MM-dd HH:mm:ss K'))
+Completed: $((Get-Date).ToString('yyyy-MM-dd HH:mm:ss K'))
+Failures: $Failed
 
-Write-Host ""
-Write-Host "===============================================" `
-    -ForegroundColor Green
+$($Results -join "`n")
+"@ | Set-Content -LiteralPath $ReportPath -Encoding utf8
 
-Write-Host " Auto Fix Summary" `
-    -ForegroundColor Green
-
-Write-Host "===============================================" `
-    -ForegroundColor Green
-
-Write-Host ("Modules   : {0}" -f $Total)
-Write-Host ("Passed    : {0}" -f $Passed)
-Write-Host ("Failed    : {0}" -f $Failed)
-Write-Host ("Skipped   : {0}" -f $Skipped)
-
-Write-Host ""
-
-Write-Host ("Duration  : {0:N2} Seconds" `
-    -f $Duration.TotalSeconds)
-
-Write-Host ""
-
-Write-Host ("Log File  : {0}" -f $LogFile)
-
-Write-Host ""
-
-if($Failed -eq 0){
-
-    Write-Host "Status : SUCCESS" `
-        -ForegroundColor Green
-
-}
-else{
-
-    Write-Host "Status : COMPLETED WITH ERRORS" `
-        -ForegroundColor Yellow
-
-}
-
-Write-Host ""
-
-Stop-Transcript | Out-Null
-
-exit $Failed
+if ($Failed -gt 0) { exit 2 }
+Write-Host "Auto-fix completed successfully." -ForegroundColor Green
+exit 0

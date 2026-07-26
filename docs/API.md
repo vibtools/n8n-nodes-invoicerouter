@@ -1,5 +1,6 @@
-﻿
 # API
+
+> **Implementation status:** This document includes target architecture. The audited package currently runs in safe dry-run mode; live provider authentication and API transport are not yet implemented.
 
 **Project:** InvoiceRouter
 **Status:** MVP

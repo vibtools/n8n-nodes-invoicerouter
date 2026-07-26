@@ -2,23 +2,22 @@ name: 04 - Release
 
 on:
   push:
-    tags:
-      - "v*"
-
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
   contents: write
   packages: write
+  id-token: write
 
 env:
   NODE_VERSION: "24"
+  TERM: "xterm"
 
 jobs:
   release:
     name: Build & Release
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -26,142 +25,54 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js
-        if: ${{ hashFiles('package-lock.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
           cache: npm
-
-      - name: Setup Node.js (No Cache)
-        if: ${{ hashFiles('package-lock.json') == '' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: https://registry.npmjs.org
+          cache-dependency-path: package-lock.json
 
       - name: Install Dependencies
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm ci
 
       - name: Validate Release Files
-        shell: pwsh
         run: |
-          $files = @(
-            "package.json",
-            "README.md",
-            "LICENSE",
-            "CHANGELOG.md",
-            "ARCHITECTURE.md",
-            "manifest/architecture.json",
-            "manifest/auto-fix.json"
-          )
+          npm run validate
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")"
+          fi
 
-          foreach ($file in $files) {
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-              Write-Error "$file not found."
-              exit 1
-            }
+      - name: Check Formatting
+        run: npm run format:check
 
-            Write-Host "$file verified."
-          }
-
-          $jsonFiles = @(
-            "package.json",
-            "manifest/architecture.json",
-            "manifest/auto-fix.json"
-          )
-
-          foreach ($jsonFile in $jsonFiles) {
-            try {
-              Get-Content -LiteralPath $jsonFile -Raw |
-                ConvertFrom-Json -ErrorAction Stop |
-                Out-Null
-            }
-            catch {
-              Write-Error "$jsonFile contains invalid JSON. $($_.Exception.Message)"
-              exit 1
-            }
-
-            Write-Host "$jsonFile JSON syntax verified."
-          }
-
-          $packageJson = Get-Content -LiteralPath "package.json" -Raw |
-            ConvertFrom-Json -ErrorAction Stop
-
-          if ($env:GITHUB_REF -like "refs/tags/v*") {
-            $tagVersion = $env:GITHUB_REF_NAME -replace "^v", ""
-
-            if ($packageJson.version -ne $tagVersion) {
-              Write-Error "Tag version '$tagVersion' does not match package.json version '$($packageJson.version)'."
-              exit 1
-            }
-
-            Write-Host "Release tag matches package.json version: $tagVersion"
-          }
+      - name: Run Lint and Type Check
+        run: |
+          npm run lint
+          npm run typecheck
 
       - name: Build Project
-        shell: bash
-        run: |
-          if node -e "const p = require('./package.json'); process.exit(p.scripts?.build ? 0 : 1)"; then
-            npm run build
-          else
-            echo "No build script found."
-          fi
+        run: npm run build
 
       - name: Run Tests
-        shell: bash
-        run: |
-          if node -e "const p = require('./package.json'); process.exit(p.scripts?.test ? 0 : 1)"; then
-            npm test
-          else
-            echo "No test script found."
-          fi
+        run: npm test
 
       - name: Package Project
-        shell: bash
         run: |
           npm pack
-
-          if ! compgen -G "*.tgz" > /dev/null; then
-            echo "No npm package was generated."
-            exit 1
-          fi
-
-          echo "npm package created successfully."
-          ls -lh ./*.tgz
+          compgen -G "*.tgz" > /dev/null
 
       - name: Generate Release Report
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "logs/release" | Out-Null
-
+          New-Item -ItemType Directory -Force logs/release | Out-Null
           @"
           # Release Report
 
           Status: SUCCESS
 
-          Repository validated.
-
-          Build completed.
-
-          Tests completed.
-
-          Package created.
-
-          Release ready.
-
-          Generated:
-          $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
-
-          "@ | Set-Content `
-            -LiteralPath "logs/release/release-report.md" `
-            -Encoding utf8
+          Validation, build, tests, and npm packaging completed.
+          Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
+          "@ | Set-Content logs/release/release-report.md -Encoding utf8
 
       - name: Upload Release Report
         uses: actions/upload-artifact@v4
@@ -187,22 +98,9 @@ jobs:
 
       - name: Publish to npm
         if: ${{ github.ref_type == 'tag' && startsWith(github.ref_name, 'v') }}
-        shell: bash
-        run: |
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NPM_TOKEN secret is missing."
-            exit 1
-          fi
-
-          npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Release Complete
-        shell: bash
-        run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            echo "Release completed successfully."
-          else
-            echo "Manual release validation completed successfully."
-          fi
+        run: echo "Release workflow completed successfully."

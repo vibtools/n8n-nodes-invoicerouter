@@ -1,105 +1,19 @@
-﻿
-# ============================================
-# InvoiceRouter
-# Bootstrap
-# Version: 1.0.0
-# ============================================
-
-Clear-Host
-
-$BootstrapStart = Get-Date
-
-Write-Host ""
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host " InvoiceRouter Bootstrap"
-Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host ""
-
-# ------------------------------------------------------------
-# Project Root
-# ------------------------------------------------------------
-
+if (-not $env:CI) { Clear-Host }
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $ProjectRoot
-
-# ------------------------------------------------------------
-# Helper
-# ------------------------------------------------------------
-
-function Invoke-Step {
-
-    param(
-        [string]$Title,
-        [string]$Script
-    )
-
-    Write-Host ""
-    Write-Host "-----------------------------------------------"
-    Write-Host $Title -ForegroundColor Yellow
-    Write-Host "-----------------------------------------------"
-
-    $Path = Join-Path $ProjectRoot "scripts\$Script"
-
-    if (!(Test-Path $Path)) {
-
-        Write-Host "[ERROR] Missing: $Script" -ForegroundColor Red
-        exit 1
-
-    }
-
-    & powershell.exe -ExecutionPolicy Bypass -File $Path
-
-    if ($LASTEXITCODE -ne 0) {
-
-        Write-Host ""
-        Write-Host "[FAILED] $Script" -ForegroundColor Red
-        exit $LASTEXITCODE
-
-    }
-
+$steps = @(
+  @{ Name = "Validate"; Command = @("node", "scripts/validate-project.mjs") },
+  @{ Name = "Install"; Command = @("npm", "ci") },
+  @{ Name = "Format Check"; Command = @("node", "scripts/format.mjs", "--check") },
+  @{ Name = "Lint"; Command = @("node", "scripts/lint.mjs") },
+  @{ Name = "Type Check"; Command = @("tsc", "--noEmit") },
+  @{ Name = "Build"; Command = @("tsc", "-p", "tsconfig.json") },
+  @{ Name = "Test"; Command = @("node", "--test", "tests/smoke.test.cjs") }
+)
+foreach ($step in $steps) {
+  Write-Host "[$($step.Name)]" -ForegroundColor Cyan
+  & $step.Command[0] $step.Command[1..($step.Command.Count - 1)]
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-
-# ------------------------------------------------------------
-# Bootstrap Pipeline
-# ------------------------------------------------------------
-
-Invoke-Step "Creating Project Architecture" "create-architecture.ps1"
-
-Invoke-Step "Validating Architecture" "auto-validator.ps1"
-
-Invoke-Step "Installing Dependencies" "install.ps1"
-
-Invoke-Step "Formatting Source Code" "format.ps1"
-
-Invoke-Step "Running ESLint" "lint.ps1"
-
-Invoke-Step "Building Project" "build.ps1"
-
-Invoke-Step "Running Tests" "test.ps1"
-
-Invoke-Step "Project Health Report" "doctor.ps1"
-
-# ------------------------------------------------------------
-# Summary
-# ------------------------------------------------------------
-
-$BootstrapEnd = Get-Date
-$Duration = $BootstrapEnd - $BootstrapStart
-
-Write-Host ""
-Write-Host "===============================================" -ForegroundColor Green
-Write-Host " Bootstrap Completed Successfully" -ForegroundColor Green
-Write-Host "===============================================" -ForegroundColor Green
-
-Write-Host ("Started  : {0}" -f $BootstrapStart)
-Write-Host ("Finished : {0}" -f $BootstrapEnd)
-Write-Host ("Duration : {0:N2} Seconds" -f $Duration.TotalSeconds)
-
-Write-Host ""
-Write-Host "Project is ready for development." -ForegroundColor Green
-Write-Host ""
-Write-Host "Next Command:"
-Write-Host "    .\scripts\dev.ps1" -ForegroundColor Cyan
-Write-Host ""
-
+Write-Host "Bootstrap completed successfully." -ForegroundColor Green
 exit 0

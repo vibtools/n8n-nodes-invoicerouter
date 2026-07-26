@@ -1,4 +1,4 @@
-﻿# Status Checker
+# Status Checker
 
 Welcome to the **Status Checker** node.
 

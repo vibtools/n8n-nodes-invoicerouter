@@ -1,1 +1,1 @@
-﻿
+export { QuickbooksProvider } from './Provider';

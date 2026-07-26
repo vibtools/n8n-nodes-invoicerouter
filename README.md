@@ -23,6 +23,12 @@ Instead of building different workflows for every provider, InvoiceRouter normal
 
 The project is designed for scalability, maintainability, and long-term extensibility.
 
+## Current Implementation Status
+
+This repository is an **audited MVP scaffold**. The five n8n node entry points compile, load, and pass smoke tests. Provider adapters expose normalized validation, payload, and response structures.
+
+**Live invoice delivery is not enabled in this package yet.** `Invoice Sender` defaults to safe dry-run behavior and does not transmit credentials or call external provider APIs. Provider-specific authentication, HTTP transport, retries, webhooks, and integration tests must be implemented before production use.
+
 ---
 
 # Why InvoiceRouter?
@@ -78,8 +84,8 @@ The following diagram represents the logical n8n execution pipeline used by **In
 ┌───────────────────────┐
 │    Invoice Sender     │
 │───────────────────────│
-│ • HTTP Request        │
-│ • Provider API        │
+│ • Safe Dry-Run Result │
+│ • Live API: Planned   │
 └──────────┬────────────┘
            │
            ▼
@@ -125,7 +131,7 @@ Status Checker
 
 ---
 
-## Supported Providers (MVP)
+## Provider Adapter Scaffolds (MVP)
 
 * Stripe
 * LemonSqueezy
@@ -267,8 +273,8 @@ The project includes a complete PowerShell development toolkit.
 | doctor.ps1              | Project diagnostics                        |
 | install.ps1             | Install dependencies                       |
 | clean.ps1               | Clean build artifacts                      |
-| format.ps1              | Format source code                         |
-| lint.ps1                | Run ESLint                                 |
+| format.ps1              | Normalize source formatting safely        |
+| lint.ps1                | Run structural lint and type checks        |
 | build.ps1               | Build project                              |
 | test.ps1                | Execute tests                              |
 | dev.ps1                 | Development mode                           |
@@ -345,7 +351,7 @@ publish
 * Configuration-driven development
 * Maintainable codebase
 * Open-source friendly design
-* Production-ready release workflow
+* Audited release workflow scaffold
 
 ---
 
@@ -435,7 +441,7 @@ Every provider follows exactly the same execution pipeline.
                                          │
                                          ▼
                           ┌─────────────────────────────┐
-                          │       HTTP Request          │
+                          │  Provider Transport (Plan)  │
                           └──────────────┬──────────────┘
                                          │
                                          ▼

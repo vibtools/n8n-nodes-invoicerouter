@@ -1,5 +1,7 @@
 # InvoiceRouter Documentation
 
+> **Implementation status:** This document includes target architecture. The audited package currently runs in safe dry-run mode; live provider authentication and API transport are not yet implemented.
+
 Welcome to the official documentation for **InvoiceRouter**.
 
 InvoiceRouter is an **n8n Community Node** that provides a unified interface for multiple payment providers. Instead of learning different APIs for each provider, you build your workflow once and let InvoiceRouter handle the provider-specific implementation.

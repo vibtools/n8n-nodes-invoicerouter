@@ -1,11 +1,9 @@
-﻿# ============================================
+# ============================================
 # InvoiceRouter
 # Release Builder
 # Version: 2.0.0
 # ============================================
-
-Clear-Host
-
+if (-not $env:CI) { Clear-Host }
 $ReleaseStart = Get-Date
 
 Write-Host ""

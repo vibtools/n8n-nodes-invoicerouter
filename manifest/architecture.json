@@ -4,7 +4,7 @@
     "name": "InvoiceRouter",
     "type": "n8n-community-node",
     "version": "1.0.0",
-    "status": "Architecture Locked (MVP)"
+    "status": "Audited MVP Scaffold"
   },
   "architecture": {
     "freeze": true,
@@ -69,6 +69,19 @@
       "ProviderTypes.ts",
       "ProviderConstants.ts",
       "ProviderHelpers.ts"
+    ],
+    "supported": [
+      "stripe",
+      "lemonsqueezy",
+      "paddle",
+      "polar",
+      "zoho",
+      "invoice_ninja",
+      "xero",
+      "quickbooks",
+      "erpnext",
+      "odoo",
+      "custom"
     ]
   },
   "shared": {
@@ -113,4 +126,3 @@
     "hardcoded_project_structure": false
   }
 }
-

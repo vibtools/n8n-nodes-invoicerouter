@@ -1,4 +1,4 @@
-﻿
+
 # Examples
 
 Welcome to the **InvoiceRouter** examples directory.

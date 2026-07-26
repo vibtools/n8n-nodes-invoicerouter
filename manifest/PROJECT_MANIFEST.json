@@ -2,15 +2,14 @@
   "project": {
     "name": "InvoiceRouter",
     "display_name": "InvoiceRouter",
-    "version": "0.1.0",
-    "status": "Planning",
+    "version": "1.0.0",
+    "status": "Audited MVP Scaffold",
     "stage": "MVP",
     "license": "MIT",
-    "repository": "",
+    "repository": "https://github.com/vibtools/n8n-nodes-invoicerouter",
     "website": "",
     "description": "Universal Invoice Provider Router & Sender for n8n. Supports multiple invoice providers using a unified workflow and adapter architecture."
   },
-
   "vision": {
     "goal": "Build one universal invoice automation platform that can connect to multiple invoice providers and send invoices through a common interface.",
     "design_principles": [
@@ -23,7 +22,6 @@
       "Future Proof"
     ]
   },
-
   "current_phase": {
     "provider_storage": "Google Sheets",
     "customer_storage": "Google Sheets",
@@ -32,7 +30,6 @@
     "web_panel": false,
     "cache": "Memory Only"
   },
-
   "future_plan": {
     "provider_storage": "SQLite",
     "customer_storage": "SQLite / PostgreSQL",
@@ -43,7 +40,6 @@
     "api_server": "FastAPI",
     "docker_support": true
   },
-
   "workflow": [
     {
       "step": 1,
@@ -57,13 +53,13 @@
     },
     {
       "step": 3,
-      "name": "Invoice Builder",
-      "description": "Build universal invoice object."
+      "name": "Request Builder",
+      "description": "Build a normalized provider-independent invoice request."
     },
     {
       "step": 4,
       "name": "Invoice Sender",
-      "description": "Send invoice using selected provider."
+      "description": "Prepare a safe dry-run result; live provider transport is planned."
     },
     {
       "step": 5,
@@ -71,12 +67,11 @@
       "description": "Check invoice delivery or payment status."
     }
   ],
-
   "nodes": [
     {
       "id": "provider_loader",
       "folder": "nodes/01_ProviderLoader",
-      "status": "Planning",
+      "status": "Scaffold",
       "priority": 1,
       "responsibility": [
         "Connect Google Sheets",
@@ -89,7 +84,7 @@
     {
       "id": "provider_selector",
       "folder": "nodes/02_ProviderSelector",
-      "status": "Planning",
+      "status": "Scaffold",
       "priority": 2,
       "responsibility": [
         "Receive Provider Pool",
@@ -99,9 +94,9 @@
       ]
     },
     {
-      "id": "invoice_builder",
-      "folder": "nodes/03_InvoiceBuilder",
-      "status": "Planning",
+      "id": "request_builder",
+      "folder": "nodes/03_RequestBuilder",
+      "status": "Scaffold",
       "priority": 3,
       "responsibility": [
         "Create Universal Invoice Object",
@@ -112,20 +107,19 @@
     {
       "id": "invoice_sender",
       "folder": "nodes/04_InvoiceSender",
-      "status": "Planning",
+      "status": "Scaffold",
       "priority": 4,
       "responsibility": [
         "Load Provider Adapter",
-        "Convert Payload",
-        "Call Provider API",
-        "Retry Failed Requests",
-        "Return Standard Response"
+        "Prepare Standardized Result",
+        "Support Safe Dry-Run Mode",
+        "Reserve Live Transport for Provider-Specific Implementation"
       ]
     },
     {
       "id": "status_checker",
       "folder": "nodes/05_StatusChecker",
-      "status": "Planning",
+      "status": "Scaffold",
       "priority": 5,
       "responsibility": [
         "Check Invoice Status",
@@ -134,7 +128,6 @@
       ]
     }
   ],
-
   "provider_adapters": {
     "supported": [
       "Stripe",
@@ -154,7 +147,6 @@
       "Chargebee"
     ]
   },
-
   "provider_sheet": {
     "sheet_name": "Providers",
     "required_columns": [
@@ -178,7 +170,6 @@
       "notes"
     ]
   },
-
   "customer_sheet": {
     "sheet_name": "Customers",
     "required_columns": [
@@ -194,7 +185,6 @@
       "custom_fields"
     ]
   },
-
   "shared_modules": [
     "HTTP Client",
     "Response Parser",
@@ -205,7 +195,6 @@
     "Logger",
     "Utilities"
   ],
-
   "routing_algorithms": [
     "Round Robin",
     "Priority",
@@ -214,7 +203,6 @@
     "Least Used",
     "Manual"
   ],
-
   "common_response": {
     "success": "boolean",
     "provider": "string",
@@ -226,7 +214,6 @@
     "message": "string",
     "raw_response": "object"
   },
-
   "development_rules": [
     "Keep every node independent.",
     "Never duplicate HTTP logic.",
@@ -237,7 +224,6 @@
     "Optimize for bulk sending.",
     "Design for future database migration."
   ],
-
   "mvp_scope": [
     "Google Sheets Provider Storage",
     "Google Sheets Customer List",
@@ -246,7 +232,6 @@
     "Invoice Sending",
     "Standard Response"
   ],
-
   "excluded_from_mvp": [
     "SQLite",
     "Web Dashboard",
@@ -256,7 +241,6 @@
     "Analytics",
     "User Management"
   ],
-
   "notes": {
     "purpose": "This file is for AI and developer planning only.",
     "runtime": "Not used by n8n.",

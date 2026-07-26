@@ -1,1 +1,11 @@
-﻿
+{
+  "provider": "stripe",
+  "enabled": true,
+  "mode": "test",
+  "credentials": {
+    "apiKeyEnvironmentVariable": "STRIPE_API_KEY"
+  },
+  "defaults": {
+    "currency": "USD"
+  }
+}

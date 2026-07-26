@@ -1,1 +1,12 @@
-﻿
+{
+  "provider": "zoho",
+  "enabled": true,
+  "mode": "test",
+  "credentials": {
+    "accessTokenEnvironmentVariable": "ZOHO_ACCESS_TOKEN",
+    "organizationIdEnvironmentVariable": "ZOHO_ORGANIZATION_ID"
+  },
+  "defaults": {
+    "currency": "USD"
+  }
+}

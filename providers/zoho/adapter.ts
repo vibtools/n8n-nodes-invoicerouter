@@ -1,1 +1,1 @@
-﻿
+export { ZohoProvider } from './Provider';

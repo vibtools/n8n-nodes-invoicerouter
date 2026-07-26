@@ -2,11 +2,8 @@ name: 03 - Documentation
 
 on:
   workflow_run:
-    workflows:
-      - "02 - Build"
-    types:
-      - completed
-
+    workflows: ["02 - Build"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -14,14 +11,13 @@ permissions:
 
 env:
   NODE_VERSION: "24"
+  TERM: "xterm"
 
 jobs:
   documentation:
     name: Validate Documentation
     runs-on: ubuntu-latest
-
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -29,137 +25,68 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node.js
-        if: ${{ hashFiles('package-lock.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
-      - name: Setup Node.js (No Cache)
-        if: ${{ hashFiles('package-lock.json') == '' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+          cache-dependency-path: package-lock.json
 
       - name: Install Dependencies
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm ci
 
       - name: Verify Documentation Directories
-        shell: pwsh
-        run: |
-          $directories = @(
-            "docs",
-            "user-docs"
-          )
-
-          foreach ($directory in $directories) {
-            if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
-              Write-Error "$directory not found."
-              exit 1
-            }
-
-            Write-Host "$directory verified."
-          }
+        run: test -d docs && test -d user-docs
 
       - name: Verify Required Documentation Files
-        shell: pwsh
         run: |
-          $files = @(
-            "README.md",
-            "CHANGELOG.md",
-            "ARCHITECTURE.md",
-            "docs/README.md",
-            "docs/API.md",
-            "docs/INSTALL.md",
-            "docs/DEVELOPER_GUIDE.md",
-            "user-docs/README.md",
-            "user-docs/index.md"
-          )
-
-          foreach ($file in $files) {
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-              Write-Error "$file missing."
-              exit 1
-            }
-
-            Write-Host "$file verified."
-          }
+          test -s README.md
+          test -s CHANGELOG.md
+          test -s ARCHITECTURE.md
+          test -s docs/README.md
+          test -s docs/API.md
+          test -s docs/INSTALL.md
+          test -s docs/DEVELOPER_GUIDE.md
+          test -s user-docs/README.md
+          test -s user-docs/index.md
 
       - name: Validate Markdown Files
-        shell: pwsh
         run: |
-          $markdownFiles = @(
-            Get-Item -LiteralPath "README.md", "CHANGELOG.md", "ARCHITECTURE.md"
-            Get-ChildItem -Path "docs", "user-docs" -Recurse -File -Filter "*.md"
-          )
-
-          foreach ($file in $markdownFiles) {
-            if ($file.Length -eq 0) {
-              Write-Warning "$($file.FullName) is empty."
-            }
-
-            Write-Host "Checked: $($file.FullName)"
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const walk = (directory) =>
+            fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
+              entry.isDirectory()
+                ? walk(path.join(directory, entry.name))
+                : [path.join(directory, entry.name)],
+            );
+          const markdownFiles = [
+            'README.md',
+            'CHANGELOG.md',
+            'ARCHITECTURE.md',
+            ...walk('docs'),
+            ...walk('user-docs'),
+          ].filter((file) => file.endsWith('.md'));
+          for (const file of markdownFiles) {
+            if (!fs.statSync(file).size) throw new Error(`Empty Markdown: ${file}`);
           }
+          NODE
 
       - name: Validate Manifest Files
-        shell: pwsh
-        run: |
-          $manifestFiles = @(
-            "manifest/architecture.json",
-            "manifest/auto-fix.json"
-          )
-
-          foreach ($file in $manifestFiles) {
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
-              Write-Error "$file missing."
-              exit 1
-            }
-
-            try {
-              Get-Content -LiteralPath $file -Raw |
-                ConvertFrom-Json -ErrorAction Stop |
-                Out-Null
-            }
-            catch {
-              Write-Error "$file contains invalid JSON. $($_.Exception.Message)"
-              exit 1
-            }
-
-            Write-Host "$file verified."
-          }
-
-          Write-Host "Manifest validation completed."
+        run: npm run validate
 
       - name: Build Documentation Artifact
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "logs/docs" | Out-Null
-
+          New-Item -ItemType Directory -Force logs/docs | Out-Null
           @"
           # Documentation Report
 
           Status: SUCCESS
 
-          Documentation directories verified.
-
-          Required documentation verified.
-
-          Markdown validation completed.
-
-          Manifest validation completed.
-
-          Documentation ready for publishing.
-
-          Generated:
-          $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
-
-          "@ | Set-Content -LiteralPath "logs/docs/documentation-report.md" -Encoding utf8
+          Required documentation and manifests validated.
+          Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss K")
+          "@ | Set-Content logs/docs/documentation-report.md -Encoding utf8
 
       - name: Upload Documentation Report
         uses: actions/upload-artifact@v4
@@ -173,11 +100,11 @@ jobs:
         with:
           name: documentation
           path: |
+            ARCHITECTURE.md
+            CHANGELOG.md
             docs
             user-docs
           if-no-files-found: error
 
       - name: Documentation Complete
-        shell: bash
-        run: |
-          echo "Documentation validation completed successfully."
+        run: echo "Documentation validation completed successfully."

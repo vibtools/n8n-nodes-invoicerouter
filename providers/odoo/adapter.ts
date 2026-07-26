@@ -1,1 +1,1 @@
-﻿
+export { OdooProvider } from './Provider';

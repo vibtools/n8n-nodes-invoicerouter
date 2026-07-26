@@ -1,1 +1,2 @@
-﻿
+enabled,provider_name,provider_type,api_url,api_key_env,priority,weight,notes
+true,stripe,stripe,https://api.stripe.com,STRIPE_API_KEY,1,100,Example only - store secrets in credentials or environment variables

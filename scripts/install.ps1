@@ -1,115 +1,44 @@
-﻿# ============================================
-# InvoiceRouter
-# Install Dependencies
-# Version: 1.0
-# ============================================
-
-Clear-Host
-
-Write-Host ""
-Write-Host "==========================================="
-Write-Host "   InvoiceRouter Dependency Installer"
-Write-Host "==========================================="
-Write-Host ""
-
-# ------------------------------------------------------------
-# Project Root
-# ------------------------------------------------------------
+# InvoiceRouter dependency installer.
+if (-not $env:CI) { Clear-Host }
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-
 Set-Location $ProjectRoot
 
-# ------------------------------------------------------------
-# Check package.json
-# ------------------------------------------------------------
-
-if (!(Test-Path "package.json")) {
-
-    Write-Host "[ERROR] package.json not found." -ForegroundColor Red
-    exit 1
-
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  Write-Error "Node.js is not installed. Node.js 24.x is required."
+  exit 1
+}
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  Write-Error "npm is not installed."
+  exit 1
 }
 
-# ------------------------------------------------------------
-# Check Node.js
-# ------------------------------------------------------------
-
-$Node = Get-Command node -ErrorAction SilentlyContinue
-
-if ($null -eq $Node) {
-
-    Write-Host "[ERROR] Node.js is not installed." -ForegroundColor Red
-    exit 1
-
+$NodeVersion = (& node -p "process.versions.node").Trim()
+$NodeMajor = [int]($NodeVersion.Split('.')[0])
+if ($NodeMajor -ne 24) {
+  Write-Error "Unsupported Node.js version $NodeVersion. Use Node.js 24.x."
+  exit 1
 }
 
-# ------------------------------------------------------------
-# Check npm
-# ------------------------------------------------------------
+Write-Host "Node.js: $NodeVersion"
+Write-Host "npm: $(& npm --version)"
 
-$Npm = Get-Command npm -ErrorAction SilentlyContinue
-
-if ($null -eq $Npm) {
-
-    Write-Host "[ERROR] npm is not installed." -ForegroundColor Red
-    exit 1
-
-}
-
-# ------------------------------------------------------------
-# Install Dependencies
-# ------------------------------------------------------------
-
-Write-Host "Installing project dependencies..."
-Write-Host ""
-
-npm install
-
-$ExitCode = $LASTEXITCODE
-
-Write-Host ""
-
-# ------------------------------------------------------------
-# Verify Installation
-# ------------------------------------------------------------
-
-if ($ExitCode -eq 0) {
-
-    if (Test-Path "node_modules") {
-
-        Write-Host "[ OK ] node_modules created."
-
-    }
-    else {
-
-        Write-Host "[WARN] node_modules folder not found." -ForegroundColor Yellow
-
-    }
-
-}
-
-Write-Host ""
-
-# ------------------------------------------------------------
-# Summary
-# ------------------------------------------------------------
-
-if ($ExitCode -eq 0) {
-
-    Write-Host "===========================================" -ForegroundColor Green
-    Write-Host " Installation Completed Successfully" -ForegroundColor Green
-    Write-Host "===========================================" -ForegroundColor Green
-
+if (Test-Path -LiteralPath "package-lock.json" -PathType Leaf) {
+  Write-Host "Installing exact locked dependencies with npm ci..."
+  & npm ci
 }
 else {
-
-    Write-Host "===========================================" -ForegroundColor Red
-    Write-Host " Installation Failed" -ForegroundColor Red
-    Write-Host "===========================================" -ForegroundColor Red
-
+  Write-Warning "package-lock.json is missing; using npm install."
+  & npm install
 }
 
-Write-Host ""
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "Dependency installation failed."
+  exit $LASTEXITCODE
+}
 
-exit $ExitCode
+& node scripts/validate-project.mjs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "Installation completed successfully." -ForegroundColor Green
+exit 0

@@ -1,1 +1,1 @@
-﻿
+export { buildProviderPayload } from './ProviderPayload';

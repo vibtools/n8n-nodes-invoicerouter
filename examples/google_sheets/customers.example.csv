@@ -1,1 +1,2 @@
-﻿
+email,name,company,currency,amount,language,invoice_template
+customer@example.com,Example Customer,Example Company,USD,100,en,default

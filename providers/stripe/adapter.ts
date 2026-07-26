@@ -1,1 +1,1 @@
-﻿
+export { StripeProvider } from './Provider';
