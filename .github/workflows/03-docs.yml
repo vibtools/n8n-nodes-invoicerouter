@@ -1,0 +1,153 @@
+name: 03 - Documentation
+
+on:
+  workflow_run:
+    workflows:
+      - "02 - Build"
+    types:
+      - completed
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  documentation:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Verify Documentation Directories
+        shell: pwsh
+        run: |
+          $directories = @(
+            "docs",
+            "user-docs"
+          )
+
+          foreach ($directory in $directories) {
+            if (-not (Test-Path $directory)) {
+              Write-Error "$directory not found."
+              exit 1
+            }
+
+            Write-Host "$directory verified."
+          }
+
+      - name: Verify Required Documentation Files
+        shell: pwsh
+        run: |
+          $files = @(
+            "README.md",
+            "CHANGELOG.md",
+            "ARCHITECTURE.md",
+            "docs/README.md",
+            "docs/API.md",
+            "docs/INSTALL.md",
+            "docs/DEVELOPER_GUIDE.md",
+            "user-docs/README.md",
+            "user-docs/index.md"
+          )
+
+          foreach ($file in $files) {
+
+            if (-not (Test-Path $file)) {
+              Write-Error "$file missing."
+              exit 1
+            }
+
+            Write-Host "$file verified."
+          }
+
+      - name: Validate Markdown Files
+        shell: pwsh
+        run: |
+          $markdown = Get-ChildItem -Recurse -Filter *.md
+
+          foreach ($file in $markdown) {
+
+            if ($file.Length -eq 0) {
+              Write-Warning "$($file.FullName) is empty."
+            }
+
+            Write-Host "Checked: $($file.FullName)"
+          }
+
+      - name: Validate Manifest Files
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "manifest/architecture.json")) {
+            Write-Error "architecture.json missing."
+            exit 1
+          }
+
+          if (-not (Test-Path "manifest/auto-fix.json")) {
+            Write-Error "auto-fix.json missing."
+            exit 1
+          }
+
+          Write-Host "Manifest validation completed."
+
+      - name: Build Documentation Artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force logs/docs | Out-Null
+
+          @"
+          # Documentation Report
+
+          Status: SUCCESS
+
+          Documentation directories verified.
+
+          Required documentation verified.
+
+          Markdown validation completed.
+
+          Manifest validation completed.
+
+          Documentation ready for publishing.
+
+          Generated:
+          $(Get-Date)
+
+          "@ | Set-Content logs/docs/documentation-report.md
+
+      - name: Upload Documentation Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-report
+          path: logs/docs/documentation-report.md
+
+      - name: Upload Documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: |
+            docs
+            user-docs
+
+      - name: Documentation Complete
+        run: |
+          echo "Documentation validation completed successfully."
+

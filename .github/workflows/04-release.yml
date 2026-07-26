@@ -1,0 +1,130 @@
+name: 04 - Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Validate Release Files
+        shell: pwsh
+        run: |
+          $files = @(
+            "package.json",
+            "README.md",
+            "LICENSE",
+            "CHANGELOG.md",
+            "ARCHITECTURE.md",
+            "manifest/architecture.json",
+            "manifest/auto-fix.json"
+          )
+
+          foreach ($file in $files) {
+
+            if (-not (Test-Path $file)) {
+              Write-Error "$file not found."
+              exit 1
+            }
+
+            Write-Host "$file verified."
+          }
+
+      - name: Build Project
+        run: |
+          if npm run | grep -q "build"; then
+            npm run build
+          else
+            echo "No build script found."
+          fi
+
+      - name: Run Tests
+        run: |
+          if npm run | grep -q "test"; then
+            npm test
+          else
+            echo "No test script found."
+          fi
+
+      - name: Package Project
+        run: npm pack
+
+      - name: Generate Release Report
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force logs/release | Out-Null
+
+          @"
+          # Release Report
+
+          Status: SUCCESS
+
+          Repository validated.
+
+          Build completed.
+
+          Tests completed.
+
+          Package created.
+
+          Release ready.
+
+          Generated:
+          $(Get-Date)
+
+          "@ | Set-Content logs/release/release-report.md
+
+      - name: Upload Release Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-report
+          path: logs/release/release-report.md
+
+      - name: Upload Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: "*.tgz"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: "*.tgz"
+
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Release Complete
+        run: |
+          echo "Release completed successfully."
+

@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "InvoiceRouter Auto Fix Configuration",
+  "version": "1.0.0",
+  "status": "Architecture Locked (MVP)",
+  "enabled": true,
+
+  "autoFix": {
+    "enabled": true,
+    "dryRun": false,
+    "backupBeforeFix": true,
+    "continueOnError": false,
+    "stopOnCriticalError": true,
+    "generateReport": true,
+    "reportDirectory": "logs/automation",
+    "reportFormat": "markdown"
+  },
+
+  "fixers": [
+    {
+      "name": "DependencyFixer",
+      "enabled": true,
+      "script": "scripts/fixers/DependencyFixer.ps1",
+      "priority": 10
+    },
+    {
+      "name": "JsonFixer",
+      "enabled": true,
+      "script": "scripts/fixers/JsonFixer.ps1",
+      "priority": 20
+    },
+    {
+      "name": "ManifestFixer",
+      "enabled": true,
+      "script": "scripts/fixers/ManifestFixer.ps1",
+      "priority": 30
+    },
+    {
+      "name": "PackageFixer",
+      "enabled": true,
+      "script": "scripts/fixers/PackageFixer.ps1",
+      "priority": 40
+    },
+    {
+      "name": "TypeScriptFixer",
+      "enabled": true,
+      "script": "scripts/fixers/TypeScriptFixer.ps1",
+      "priority": 50
+    },
+    {
+      "name": "ESLintFixer",
+      "enabled": true,
+      "script": "scripts/fixers/ESLintFixer.ps1",
+      "priority": 60
+    },
+    {
+      "name": "PrettierFixer",
+      "enabled": true,
+      "script": "scripts/fixers/PrettierFixer.ps1",
+      "priority": 70
+    },
+    {
+      "name": "N8NFixer",
+      "enabled": true,
+      "script": "scripts/fixers/N8NFixer.ps1",
+      "priority": 80
+    },
+    {
+      "name": "BuildFixer",
+      "enabled": true,
+      "script": "scripts/fixers/BuildFixer.ps1",
+      "priority": 90
+    },
+    {
+      "name": "VerifyFixer",
+      "enabled": true,
+      "script": "scripts/fixers/VerifyFixer.ps1",
+      "priority": 100
+    }
+  ],
+
+  "validation": {
+    "requiredDirectories": [
+      "assets",
+      "docs",
+      "examples",
+      "logs",
+      "manifest",
+      "nodes",
+      "providers",
+      "scripts",
+      "shared",
+      "temp",
+      "tests",
+      "user-docs"
+    ],
+
+    "requiredFiles": [
+      "README.md",
+      "LICENSE",
+      "package.json",
+      "tsconfig.json",
+      ".gitignore"
+    ]
+  },
+
+  "protection": {
+    "allowArchitectureChanges": false,
+    "allowFolderRename": false,
+    "allowFileRename": false,
+    "allowWorkflowModification": false,
+    "allowNodeReplacement": false,
+    "allowProviderReplacement": false,
+    "allowManifestReplacement": false,
+    "allowAutomaticDeletion": false
+  },
+
+  "logging": {
+    "enabled": true,
+    "directory": "logs/automation",
+    "file": "auto-fix-report.md"
+  },
+
+  "backup": {
+    "enabled": true,
+    "directory": "temp/backups"
+  },
+
+  "exitCodes": {
+    "success": 0,
+    "warning": 1,
+    "failure": 2,
+    "critical": 99
+  }
+}
+

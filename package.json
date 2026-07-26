@@ -1,0 +1,87 @@
+{
+  "name": "n8n-nodes-invoicerouter",
+  "version": "1.0.0",
+  "description": "A modular and provider-independent n8n Community Node for creating, sending, and managing invoices across multiple payment providers.",
+  "keywords": [
+    "n8n",
+    "n8n-community-node",
+    "invoice",
+    "payments",
+    "stripe",
+    "lemonsqueezy",
+    "paddle",
+    "polar",
+    "automation",
+    "typescript"
+  ],
+  "homepage": "https://github.com/vibtools/n8n-nodes-invoicerouter",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vibtools/n8n-nodes-invoicerouter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vibtools/n8n-nodes-invoicerouter/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "InvoiceRouter Contributors"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/vibtools"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "nodes",
+    "providers",
+    "manifest",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1",
+    "setup": "powershell -ExecutionPolicy Bypass -File scripts/install.ps1",
+    "clean": "powershell -ExecutionPolicy Bypass -File scripts/clean.ps1",
+    "format": "powershell -ExecutionPolicy Bypass -File scripts/format.ps1",
+    "lint": "powershell -ExecutionPolicy Bypass -File scripts/lint.ps1",
+    "build": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "test": "powershell -ExecutionPolicy Bypass -File scripts/test.ps1",
+    "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "doctor": "powershell -ExecutionPolicy Bypass -File scripts/doctor.ps1",
+    "autofix": "powershell -ExecutionPolicy Bypass -File scripts/auto-fix.ps1",
+    "validate": "powershell -ExecutionPolicy Bypass -File scripts/auto-validator.ps1",
+    "release": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1",
+    "publish": "powershell -ExecutionPolicy Bypass -File scripts/publish.ps1"
+  },
+  "dependencies": {
+    "n8n-workflow": "^1.100.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": ">=1.100.0"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [],
+    "nodes": [
+      "dist/nodes/01_ProviderLoader/Node.node.js",
+      "dist/nodes/02_ProviderSelector/Node.node.js",
+      "dist/nodes/03_RequestBuilder/Node.node.js",
+      "dist/nodes/04_InvoiceSender/Node.node.js",
+      "dist/nodes/05_StatusChecker/Node.node.js"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

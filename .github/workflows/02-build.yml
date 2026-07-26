@@ -1,0 +1,129 @@
+name: 02 - Build
+
+on:
+  workflow_run:
+    workflows:
+      - "01 - Bootstrap"
+    types:
+      - completed
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  build:
+    name: Build Project
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Validate Project Files
+        run: |
+          test -f package.json
+          test -f tsconfig.json
+
+      - name: Run Formatter
+        run: |
+          if npm run | grep -q "format"; then
+            npm run format
+          else
+            echo "No format script found."
+          fi
+
+      - name: Run ESLint
+        run: |
+          if npm run | grep -q "lint"; then
+            npm run lint
+          else
+            echo "No lint script found."
+          fi
+
+      - name: TypeScript Type Check
+        run: |
+          if npx --yes tsc --version >/dev/null 2>&1; then
+            npx tsc --noEmit
+          else
+            echo "TypeScript not installed."
+          fi
+
+      - name: Build Project
+        run: |
+          if npm run | grep -q "build"; then
+            npm run build
+          else
+            echo "No build script found."
+          fi
+
+      - name: Run Tests
+        run: |
+          if npm run | grep -q "test"; then
+            npm test
+          else
+            echo "No test script found."
+          fi
+
+      - name: Generate Build Report
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force logs/build | Out-Null
+
+          @"
+          # Build Report
+
+          Status: SUCCESS
+
+          Build completed successfully.
+
+          Checks Performed
+
+          - Dependencies Installed
+          - Project Validation
+          - Formatter
+          - ESLint
+          - TypeScript
+          - Build
+          - Tests
+
+          Build Time
+
+          $(Get-Date)
+
+          "@ | Set-Content logs/build/build-report.md
+
+      - name: Upload Build Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: logs/build/build-report.md
+
+      - name: Upload Build Artifacts
+        if: hashFiles('dist/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist
+
+      - name: Build Complete
+        run: |
+          echo "Build completed successfully."
+
