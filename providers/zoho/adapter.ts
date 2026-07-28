@@ -1,1 +1,0 @@
-export { ZohoProvider } from './Provider';

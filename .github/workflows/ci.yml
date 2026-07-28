@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify frozen project
+        run: npm run verify
+
+      - name: Create package preview
+        run: npm pack
+
+      - name: Upload package preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoicerouter-package-preview
+          path: "n8n-nodes-invoicerouter-*.tgz"
+          if-no-files-found: error

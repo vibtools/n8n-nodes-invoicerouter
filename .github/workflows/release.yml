@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+      - name: Validate tag version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: test "${GITHUB_REF_NAME#v}" = "$(node -p "require('./package.json').version")"
+
+      - name: Build release files
+        shell: bash
+        run: |
+          rm -rf release
+          mkdir -p release
+          npm pack --pack-destination release
+          cp VERSION_1_0_FREEZE.md release/
+          cp manifest/freeze-v1.0.json release/
+          (
+            cd release
+            find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          )
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InvoiceRouter-release
+          path: release/**
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/*.tgz
+            release/SHA256SUMS.txt
+            release/VERSION_1_0_FREEZE.md
+            release/freeze-v1.0.json
+          fail_on_unmatched_files: true
+
+      - name: Publish to npm when token exists
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -n "${NODE_AUTH_TOKEN}" ]]; then
+            npm publish --access public --provenance
+          else
+            echo "NPM_TOKEN is not configured; npm publishing was skipped."
+          fi

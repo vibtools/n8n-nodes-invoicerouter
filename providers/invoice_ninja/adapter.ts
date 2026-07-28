@@ -1,1 +1,0 @@
-export { InvoiceNinjaProvider } from './Provider';

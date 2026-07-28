@@ -10,5 +10,6 @@ Read in this order:
 6. [`IMPLEMENTATION_GAP_MATRIX.md`](./IMPLEMENTATION_GAP_MATRIX.md)
 7. [`IMPLEMENTATION_ORDER.md`](./IMPLEMENTATION_ORDER.md)
 8. [`NOTION_SOURCE_MAP.md`](./NOTION_SOURCE_MAP.md)
+9. [`CLEAN_REPOSITORY_CONTRACT.md`](./CLEAN_REPOSITORY_CONTRACT.md)
 
 The architecture diagram and provider workbook are immutable Version 1 reference assets unless the freeze version is increased.

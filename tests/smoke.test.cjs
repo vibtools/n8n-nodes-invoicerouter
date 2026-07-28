@@ -56,13 +56,22 @@ function context(parameters, responses = []) {
   };
 }
 
-test('package metadata and production assets are internally consistent', () => {
+test('package metadata and frozen assets are internally consistent', () => {
   assert.equal(packageJson.name, 'n8n-nodes-invoicerouter');
   assert.equal(packageJson.version, '1.1.0');
   assert.equal(packageJson.n8n.n8nNodesApiVersion, 1);
   assert.equal(packageJson.n8n.nodes.length, 5);
   assert.equal(packageJson.n8n.credentials.length, 1);
-  assert.ok(fs.existsSync(path.join(root, 'workflows/google-sheets-real-invoice-router.json')));
+  assert.equal(packageJson.invoiceRouterFreeze.targetNodeCount, 8);
+  assert.equal(packageJson.invoiceRouterFreeze.sourceOfTruth, 'VERSION_1_0_FREEZE.md');
+  assert.ok(fs.existsSync(path.join(root, 'VERSION_1_0_FREEZE.md')));
+  assert.ok(fs.existsSync(path.join(root, 'docs/freeze/v1.0/NODE_CONTRACTS.md')));
+  assert.ok(
+    fs.existsSync(
+      path.join(root, 'examples/google_sheets/InvoiceRouter_20_Provider_Production_Presets_v1.0.xlsx'),
+    ),
+  );
+  assert.equal(fs.existsSync(path.join(root, 'workflows/google-sheets-real-invoice-router.json')), false);
 });
 
 test('all declared n8n build artifacts exist and export classes', () => {

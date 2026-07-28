@@ -1,1 +1,0 @@
-export { LemonsqueezyProvider } from './Provider';

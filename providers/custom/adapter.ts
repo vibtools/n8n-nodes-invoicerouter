@@ -1,1 +1,0 @@
-export { CustomProvider } from './Provider';

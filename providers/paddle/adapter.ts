@@ -1,1 +1,0 @@
-export { PaddleProvider } from './Provider';

@@ -1,20 +1,13 @@
 # Changelog
 
-## 1.1.0 - Real API runtime and workflow release
+## Unreleased — Version 1.0 final implementation
 
-- Added the InvoiceRouter API n8n credential.
-- Added bearer, API-key, basic, query, and no-auth modes.
-- Added HTTPS enforcement and configurable timeouts.
-- Implemented real create, create-and-send, send-existing, and custom HTTP operations.
-- Added request idempotency support.
-- Added configurable request endpoints, methods, bodies, headers, queries, and response paths.
-- Implemented real provider status retrieval and normalized status mapping.
-- Expanded Google Sheets invoice normalization and validation.
-- Added an importable Google Sheets production workflow template.
-- Added runtime create/send tests and dry-run no-network tests.
-- Updated GitHub Release to attach npm package, workflow JSON, and checksums.
-- Made npm publishing optional when `NPM_TOKEN` is absent.
+- Added the authoritative eight-node Version 1.0 freeze.
+- Added the frozen architecture diagram, node cards, and provider workbook.
+- Removed obsolete drafts, generated manifests, old workflow templates, PowerShell automation, duplicated documentation, tracked build output, and unused re-export files.
+- Consolidated CI into one verification workflow and one release workflow.
+- Retained the existing five-node runtime only as an implementation baseline pending frozen-contract migration.
 
-## 1.0.0 - Forensic audit repair
+## 1.1.0 — Previous runtime baseline
 
-- Repaired project structure, CI workflows, TypeScript configuration, scripts, manifests, and build scaffolds.
+The previous five-node generic REST implementation remains in Git history. Its documentation and workflow claims are superseded by the Version 1.0 freeze.

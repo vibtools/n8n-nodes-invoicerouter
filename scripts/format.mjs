@@ -1,15 +1,25 @@
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const mode = process.argv.includes('--write') ? 'write' : 'check';
-const allowed = new Set(['.ts', '.js', '.mjs', '.cjs', '.json', '.yml', '.yaml', '.ps1']);
-const excluded = new Set(['.git', 'node_modules', 'dist', 'release', 'temp']);
-const roots = ['credentials', 'nodes', 'providers', 'shared', 'tests', 'scripts', 'workflows', '.github/workflows'];
+const allowed = new Set(['.ts', '.js', '.mjs', '.cjs', '.json', '.yml', '.yaml']);
+const excluded = new Set(['.git', 'node_modules', 'dist', 'release', 'coverage', 'logs', 'temp']);
+const roots = ['credentials', 'nodes', 'providers', 'shared', 'tests', 'scripts', '.github/workflows'];
 const topFiles = ['package.json', 'package-lock.json', 'tsconfig.json', '.prettierrc', '.eslintrc.json'];
 
+async function exists(path) {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function walk(directory, output = []) {
+  if (!(await exists(directory))) return output;
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (excluded.has(entry.name)) continue;
     const path = join(directory, entry.name);
@@ -21,7 +31,10 @@ async function walk(directory, output = []) {
 
 const files = [];
 for (const directory of roots) files.push(...(await walk(join(root, directory))));
-for (const file of topFiles) files.push(join(root, file));
+for (const file of topFiles) {
+  const path = join(root, file);
+  if (await exists(path)) files.push(path);
+}
 
 const changed = [];
 for (const file of files) {

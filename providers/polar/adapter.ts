@@ -1,1 +1,0 @@
-export { PolarProvider } from './Provider';

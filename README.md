@@ -1,181 +1,67 @@
 # InvoiceRouter for n8n
 
-InvoiceRouter is an n8n community-node package for converting Google Sheets rows or other n8n input items into normalized invoice requests and executing real credential-backed REST API calls.
+InvoiceRouter is being implemented against the **Version 1.0 Final Freeze**.
 
-## Included nodes
+## Authoritative specification
 
-1. **Provider Loader** — loads built-in provider identifiers and optional endpoint profiles.
-2. **Provider Selector** — selects a provider from an input field, manual choice, or provider pool.
-3. **Request Builder** — converts Google Sheets columns into a normalized invoice object.
-4. **Invoice Sender** — executes real create, create-and-send, send-existing, or custom REST API requests.
-5. **Status Checker** — retrieves and normalizes invoice status through the provider API.
+Read these files in order:
 
-## Security model
+1. [`VERSION_1_0_FREEZE.md`](VERSION_1_0_FREEZE.md)
+2. [`docs/freeze/v1.0/README.md`](docs/freeze/v1.0/README.md)
+3. [`docs/freeze/v1.0/FINAL_ARCHITECTURE.md`](docs/freeze/v1.0/FINAL_ARCHITECTURE.md)
+4. [`docs/freeze/v1.0/NODE_CONTRACTS.md`](docs/freeze/v1.0/NODE_CONTRACTS.md)
+5. [`docs/freeze/v1.0/PROVIDER_SHEET_CONTRACT.md`](docs/freeze/v1.0/PROVIDER_SHEET_CONTRACT.md)
+6. [`docs/freeze/v1.0/SECURITY_DECISION.md`](docs/freeze/v1.0/SECURITY_DECISION.md)
 
-Provider secrets are stored only in the **InvoiceRouter API** n8n credential. API keys must not be stored in Google Sheets, workflow JSON, provider JSON, or the Git repository.
+Older project drafts, generated manifests, experimental workflows, and duplicated documentation have been removed. Nothing outside the freeze documents can redefine Version 1.0 responsibilities.
 
-The credential supports:
+## Frozen target
 
-- Bearer token
-- API key header
-- Basic authentication
-- API key query parameter
-- No authentication
-- Default non-secret headers
-- HTTPS enforcement
-- Configurable request timeout
+Version 1.0 contains eight InvoiceRouter custom node types:
 
-HTTP is rejected by default except localhost. Enable **Allow HTTP** only for a trusted private development service.
+1. Provider Loader
+2. Provider Selector
+3. Invoice Template
+4. Email List
+5. Request Builder
+6. Invoice Sender
+7. Status Checker
+8. Status Manager
 
-## Real API operations
+Manual Trigger and Google Sheets are built-in n8n nodes.
 
-The Invoice Sender supports:
+## Implementation status
 
-- Create invoice
-- Create and send invoice as a two-step sequence
-- Send an existing invoice
-- Custom REST request
-- Idempotency header using the invoice `requestId`
-- Configurable endpoint, method, body, query parameters, headers, and response paths
-- Dry-run request plans without network transmission
-- Normalized success and failure output
+The existing five-node runtime is retained only as a tested migration baseline while the frozen eight-node architecture is implemented. It is not a separate specification and must be refactored according to the freeze.
 
-The Status Checker supports real provider status requests and maps provider states to normalized states such as `draft`, `sent`, `viewed`, `paid`, `overdue`, `void`, and `failed`.
-
-## Provider compatibility
-
-InvoiceRouter provides a production-capable generic REST transport. Each invoice provider has its own endpoints, authentication rules, payload format, and response structure. Configure the node fields using the provider's official API documentation.
-
-The provider folders in this repository preserve adapter boundaries for future provider-specific implementations. They do not claim that one generic payload is valid for every listed provider.
-
-## Google Sheets workflow
-
-Import:
+## Repository structure
 
 ```text
-workflows/google-sheets-real-invoice-router.json
+.github/workflows/      CI and release only
+assets/                 Frozen architecture and node-card assets
+credentials/            Temporary baseline credential implementation
+nodes/                  Runtime node source
+providers/              Provider template/adaptor source
+shared/                 Shared runtime contracts and utilities
+scripts/                Cross-platform validation/build helpers
+tests/                  Automated tests
+docs/freeze/v1.0/       Version 1.0 source of truth
+examples/google_sheets/ Frozen provider workbook
+manifest/               Freeze manifest only
 ```
 
-The template performs:
+## Validation
 
-```text
-Schedule or Manual Trigger
-→ Get PENDING Google Sheets rows
-→ Build normalized invoice
-→ Create and send through provider API
-→ IF success
-→ Update the source row with success or failure
-```
-
-Required sheet columns:
-
-```text
-request_id
-provider
-customer_name
-customer_email
-amount
-currency
-due_date
-description
-line_items_json
-metadata_json
-send_email
-status
-invoice_id
-invoice_url
-pdf_url
-sent_at
-retry_count
-last_error
-```
-
-Example `line_items_json`:
-
-```json
-[
-  {
-    "description": "Consulting service",
-    "quantity": 1,
-    "unitPrice": 100,
-    "amount": 100
-  }
-]
-```
-
-## Build and validation
-
-Use Node.js 24 in CI.
+Use Node.js 24:
 
 ```bash
 npm ci
-npm run validate
-npm run format:check
-npm run lint
-npm run typecheck
-npm run build
-npm test
-npm pack --dry-run
-```
-
-Run the complete verification pipeline:
-
-```bash
 npm run verify
 ```
 
-## GitHub Release
+## Development rule
 
-Create a tag matching `package.json`, for example:
-
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
-
-The release workflow produces:
-
-```text
-n8n-nodes-invoicerouter-1.1.0.tgz
-SHA256SUMS.txt
-google-sheets-real-invoice-router.json
-workflow setup README
-```
-
-If `NPM_TOKEN` exists, the workflow also publishes to npm. Without the token, the GitHub Release still succeeds and provides manual installation assets.
-
-## Manual self-hosted installation
-
-Download the `.tgz` file from GitHub Releases. On the n8n host, install it in the n8n nodes directory and restart n8n:
-
-```bash
-mkdir -p ~/.n8n/nodes
-cd ~/.n8n/nodes
-npm install /absolute/path/n8n-nodes-invoicerouter-1.1.0.tgz
-```
-
-Then import the workflow JSON in n8n and configure:
-
-1. Google Sheets credentials and document/sheet selection.
-2. InvoiceRouter API credential.
-3. Real create/send endpoints.
-4. Provider request payload.
-5. Response paths for invoice ID, status, invoice URL, and PDF URL.
-6. Dry-run verification against a sandbox provider account.
-
-## Production checklist
-
-- Use HTTPS.
-- Use sandbox credentials before production credentials.
-- Keep Dry Run enabled during mapping tests.
-- Use unique `request_id` values.
-- Confirm the provider supports idempotency and use its required header name.
-- Enable `continueOnFail` when individual row failures should not stop the batch.
-- Verify response paths against real sandbox responses.
-- Restrict n8n credential access.
-- Monitor failed executions and Google Sheet `last_error` values.
-
-See [PRODUCTION_GUIDE.md](PRODUCTION_GUIDE.md) for configuration details.
+All implementation changes must be made on the `feature/v1-final-implementation` branch and must follow the frozen node boundaries. The final workflow JSON is intentionally absent until all eight node contracts are implemented and tested.
 
 ## License
 
