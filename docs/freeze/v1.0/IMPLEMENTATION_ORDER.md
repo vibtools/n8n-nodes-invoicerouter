@@ -1,52 +1,56 @@
-# Frozen Implementation Order
+# Frozen Implementation Order — Completion Record
 
-## Phase 0 - Preserve and branch
+## Phase 0 — Preserve and branch
 
-- Commit this freeze pack without changing runtime code.
-- Tag or record the current working baseline.
-- Create branch `feature/v1-final-freeze`.
+Status: **Complete**
 
-## Phase 1 - Contracts and shared types
+- Freeze committed and preserved.
+- Implementation isolated on the feature branch.
+- Legacy/conflicting repository content removed.
 
-- Freeze TypeScript interfaces for provider sheet row, provider runtime profile, lock, invoice template, recipient, ready request, raw response, standard status, feedback, and workflow result.
-- Add secret-redaction and deterministic ID/tag utilities.
+## Phase 1 — Contracts and shared types
 
-## Phase 2 - Data-source nodes
+Status: **Complete**
+
+- Runtime provider, lock, template, recipient, request, response, status, feedback, and workflow-result contracts implemented.
+- Secret redaction and deterministic tag utilities implemented.
+
+## Phase 2 — Data-source nodes
+
+Status: **Complete**
 
 1. Provider Loader
 2. Invoice Template
 3. Email List
 
-Tests must cover validation, normalization, dynamic tags, name generation, duplicate recipients, and secret masking.
+## Phase 3 — Selection engine
 
-## Phase 3 - Selection engine
+Status: **Complete for Version 1 process-local runtime**
 
-Implement Provider Selector incrementally:
+- first available, round robin, least recently used, least busy, highest health, and weighted strategies
+- sequential beginner mode and parallel lock mode
+- lock ownership, timeout recovery, cooldown, rate limit, circuit breaker, health score, and feedback update
 
-1. pool and first-available allocation
-2. lock ownership and release
-3. duplicate protection
-4. timeout recovery
-5. retry/cooldown
-6. rate limiting and circuit breaker
-7. health/scoring and additional strategies
+## Phase 4 — Worker pipeline
 
-## Phase 4 - Worker pipeline
+Status: **Complete**
 
-1. Request Builder merge and provider mapping
-2. Invoice Sender raw execution
+1. Request Builder three-input merge and provider mapping
+2. Invoice Sender late credential injection and raw execution
 3. Status Checker response analysis
 
-Start with sequential processing. Add controlled parallel execution only after lock and pairing tests pass.
+## Phase 5 — Management layer
 
-## Phase 5 - Management layer
+Status: **Complete**
 
-Implement Status Manager policy, retry events, feedback, audit output, metrics events, alerts, and final workflow result.
+Status Manager creates policy decisions, retry events, feedback, audit output, metrics/analytics events, alerts, notification events, and final workflow results.
 
-## Phase 6 - n8n workflow and release
+## Phase 6 — n8n workflow and release
 
-- create the final importable workflow JSON
-- add demo provider and recipient sheets
-- run sandbox provider tests
-- run package build and n8n installation test
-- release only after all node contracts pass
+Status: **Code complete; live provider onboarding remains**
+
+- final importable workflow JSON created
+- provider workbook included
+- build and automated tests pass
+- npm package dry-run required before delivery
+- each live provider must still be tested in its sandbox/account

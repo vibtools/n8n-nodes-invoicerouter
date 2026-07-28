@@ -1,41 +1,31 @@
 # InvoiceRouter Architecture
 
-## Runtime flow
+The Version 1.0 responsibilities are frozen in [`VERSION_1_0_FREEZE.md`](VERSION_1_0_FREEZE.md) and [`docs/freeze/v1.0/`](docs/freeze/v1.0/).
 
-```text
-Google Sheets or n8n input
-→ Request Builder
-→ Provider selection
-→ Invoice Sender
-→ Provider REST API
-→ Normalized response
-→ Google Sheets success/failure update
-```
+![InvoiceRouter architecture](assets/architecture/invoice-router-architecture-v1.0.png)
 
-## Credential boundary
+## Runtime layers
 
-Provider secrets remain in the n8n credential store. Workflow data contains invoice fields and non-secret routing metadata only.
+1. **Source:** built-in Manual Trigger and Google Sheets nodes.
+2. **Normalization:** Provider Loader and Email List.
+3. **Selection:** Provider Selector and its runtime account pool.
+4. **Invoice data:** Invoice Template.
+5. **Merge:** Request Builder combines account, template, and recipient through three inputs.
+6. **Execution:** Invoice Sender injects the runtime secret and executes one request.
+7. **Analysis:** Status Checker converts the raw response to a standard status.
+8. **Management:** Status Manager creates decisions/events and writes provider feedback.
 
-## Transport layer
+## Feedback model
 
-`shared/http/InvoiceApi.ts` performs:
+The workflow does not contain a physical cyclic connection. Status Manager updates the InvoiceRouter runtime pool and best-effort workflow static feedback. A later Provider Selector execution reads that state. This prevents an uncontrolled execution loop.
 
-- credential normalization
-- HTTPS enforcement
-- authentication header/query construction
-- URL joining and endpoint placeholder interpolation
-- request body interpolation
-- execution through n8n's HTTP helper
-- safe response normalization
+## State boundary
 
-## Nodes
+- Secret material is process-local and referenced by `credentialRef`.
+- Provider health/locks/cooldowns are process-local for the active runtime.
+- Status Manager stores a bounded feedback history in workflow static data when the n8n runtime exposes it.
+- Multi-process shared pools require a future external-state freeze.
 
-- Provider Loader: provider registry and profiles
-- Provider Selector: input/manual/pool routing
-- Request Builder: Google Sheets-to-universal invoice normalization
-- Invoice Sender: create/send/custom real API execution
-- Status Checker: real API status retrieval and normalization
+## Importable workflow
 
-## Release architecture
-
-A `v*` Git tag triggers validation, TypeScript compilation, tests, npm packaging, workflow export, checksum generation, GitHub Release creation, and optional npm publishing.
+`workflows/InvoiceRouter-v1-production.json` is the canonical Version 1 workflow template.

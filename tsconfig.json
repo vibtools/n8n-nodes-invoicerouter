@@ -3,10 +3,8 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "Node",
-    "lib": [
-      "ES2022",
-      "DOM"
-    ],
+    "lib": ["ES2022", "DOM"],
+    "types": [],
     "rootDir": ".",
     "outDir": "dist",
     "declaration": true,
@@ -21,18 +19,6 @@
     "skipLibCheck": true,
     "removeComments": false
   },
-  "include": [
-    "index.ts",
-    "credentials/**/*.ts",
-    "nodes/**/*.ts",
-    "providers/**/*.ts",
-    "shared/**/*.ts"
-  ],
-  "exclude": [
-    "dist",
-    "node_modules",
-    "release",
-    "temp",
-    "tests"
-  ]
+  "include": ["index.ts", "nodes/**/*.ts", "providers/**/*.ts", "shared/**/*.ts"],
+  "exclude": ["dist", "node_modules", "release", "temp", "tests"]
 }

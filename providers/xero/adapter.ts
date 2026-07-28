@@ -1,1 +1,0 @@
-export { XeroProvider } from './Provider';

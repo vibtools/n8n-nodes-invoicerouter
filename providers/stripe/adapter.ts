@@ -1,1 +1,0 @@
-export { StripeProvider } from './Provider';

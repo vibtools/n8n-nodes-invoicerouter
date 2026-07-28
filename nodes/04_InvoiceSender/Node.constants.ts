@@ -1,1 +1,0 @@
-export * from './InvoiceSender.constants';

@@ -3,6 +3,8 @@ dist/
 build/
 coverage/
 release/
+logs/
+temp/
 *.tgz
 *.log
 .env
@@ -15,8 +17,3 @@ Thumbs.db
 .cache/
 .tmp/
 .nyc_output/
-logs/automation/*.md
-logs/build/*.md
-logs/docs/*.md
-logs/release/*.md
-temp/backups/

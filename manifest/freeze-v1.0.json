@@ -1,94 +1,51 @@
 {
   "freezeVersion": "1.0",
+  "packageVersion": "1.2.0",
   "status": "FINAL_FREEZE",
   "generatedAt": "2026-07-28",
+  "sourceOfTruth": "VERSION_1_0_FREEZE.md",
   "notionParent": "https://app.notion.com/p/3a968f0bf27380fda24ae5ddd012fcc8",
-  "customNodeCount": 8,
+  "targetCustomNodeCount": 8,
+  "currentCustomNodeCount": 8,
+  "implementationStatus": "COMPLETE",
   "builtInWorkflowNodes": [
     "Manual Trigger",
     "Google Sheets"
   ],
-  "credentialPolicy": "Google Sheets for Version 1, with mandatory masking and execution-data guardrails",
-  "files": [
-    {
-      "path": "COPY_LOCAL_NODE_ASSETS.cmd",
-      "sha256": "27dc601a12678777d40f694d50f3ceea4a0b31006e9a52ef9822d46becd26950",
-      "bytes": 1229
-    },
-    {
-      "path": "INSTALL.md",
-      "sha256": "7ba621afb0d11f44e667abe644a3854cbcaf88a3a209f4a1be38684e65233f55",
-      "bytes": 381
-    },
-    {
-      "path": "VERSION_1_0_FREEZE.md",
-      "sha256": "b427322c65a2291000e43f918bb2397f60901937becf66b172a351f0aee8c527",
-      "bytes": 2827
-    },
-    {
-      "path": "examples/google_sheets/InvoiceRouter_20_Provider_Production_Presets_v1.0.xlsx",
-      "sha256": "7143ce28de5630dee10f9f5f26d3f68e203ff36731a0ee6e11b760eaeef05464",
-      "bytes": 11699
-    },
-    {
-      "path": "docs/freeze/README.md",
-      "sha256": "6f263b600ee2a478aedc963e5ac576b17f41eecd786ff60fa4f353d4a15b884c",
-      "bytes": 283
-    },
-    {
-      "path": "docs/freeze/v1.0/FINAL_ARCHITECTURE.md",
-      "sha256": "30aef147a0e240dcfa94de0ecbcceafb894bb89bdc75c63dfd280873dc8d3714",
-      "bytes": 1579
-    },
-    {
-      "path": "docs/freeze/v1.0/IMPLEMENTATION_GAP_MATRIX.md",
-      "sha256": "eb6f4a32a831638276723ce7a9544a35df536c1fc9c080684b618ba0ce46b0c8",
-      "bytes": 1801
-    },
-    {
-      "path": "docs/freeze/v1.0/IMPLEMENTATION_ORDER.md",
-      "sha256": "edf72aa7ade16b38cfcf62f60a1b358d5586daf33dc8ddf4267540658ebcbbf9",
-      "bytes": 1650
-    },
-    {
-      "path": "docs/freeze/v1.0/NODE_CONTRACTS.md",
-      "sha256": "f7a36cdeaa41d0c4977b1cedf4f545841bc381f7ac50cbb5fda55dcfabec85fd",
-      "bytes": 3972
-    },
-    {
-      "path": "docs/freeze/v1.0/NOTION_SOURCE_MAP.md",
-      "sha256": "77229a075963821154acbb71396fdcb9a7046c1d345d5875a03fbaf7a84c9d65",
-      "bytes": 1805
-    },
-    {
-      "path": "docs/freeze/v1.0/PROVIDER_SHEET_CONTRACT.md",
-      "sha256": "de7878f3388d096f2f546240522c4def2abf5f551ea80bf0770d0cf787044c4a",
-      "bytes": 1768
-    },
-    {
-      "path": "docs/freeze/v1.0/README.md",
-      "sha256": "fcd93bad4a224b743edb30c671c7910d0ef9c1c18d4cdecf940c9d5102fc9e6d",
-      "bytes": 642
-    },
-    {
-      "path": "docs/freeze/v1.0/SECURITY_DECISION.md",
-      "sha256": "5bd1f3c09ff7c56f34d9505c4c43c4afc9a6b3e76a18f4b36df75f1dc5595236",
-      "bytes": 1758
-    },
-    {
-      "path": "assets/architecture/invoice-router-architecture-v1.0.pdf",
-      "sha256": "c321d30817cf5458a0bd886b9548655fc24edb8b23aa34691049c58cde065c07",
-      "bytes": 676134
-    },
-    {
-      "path": "assets/architecture/invoice-router-architecture-v1.0.png",
-      "sha256": "6af1062af746e75196a034f3403361681b9e8ebd15b37ad27d116fadb95535ee",
-      "bytes": 586193
-    },
-    {
-      "path": "assets/node-cards/v1.0/README.md",
-      "sha256": "be802c335b9a94350f8f659ec995c4bfdfeb2a3e79c4f2bfbe68a9ddb433a40d",
-      "bytes": 660
-    }
-  ]
+  "credentialPolicy": "Google Sheets for Version 1, with runtime vault, output masking, late injection, and execution-data guardrails",
+  "productionWorkflow": "workflows/InvoiceRouter-v1-production.json",
+  "registeredNodes": [
+    "Provider Loader",
+    "Provider Selector",
+    "Invoice Template",
+    "Email List",
+    "Request Builder",
+    "Invoice Sender",
+    "Status Checker",
+    "Status Manager"
+  ],
+  "frozenAssets": [
+    "assets/architecture/invoice-router-architecture-v1.0.pdf",
+    "assets/architecture/invoice-router-architecture-v1.0.png",
+    "assets/node-cards/v1.0/",
+    "examples/google_sheets/InvoiceRouter_20_Provider_Production_Presets_v1.0.xlsx"
+  ],
+  "authoritativeDocuments": [
+    "VERSION_1_0_FREEZE.md",
+    "docs/freeze/v1.0/FINAL_ARCHITECTURE.md",
+    "docs/freeze/v1.0/NODE_CONTRACTS.md",
+    "docs/freeze/v1.0/PROVIDER_SHEET_CONTRACT.md",
+    "docs/freeze/v1.0/SECURITY_DECISION.md",
+    "docs/freeze/v1.0/IMPLEMENTATION_GAP_MATRIX.md",
+    "docs/freeze/v1.0/IMPLEMENTATION_ORDER.md",
+    "docs/freeze/v1.0/NOTION_SOURCE_MAP.md",
+    "docs/freeze/v1.0/CLEAN_REPOSITORY_CONTRACT.md",
+    "docs/freeze/v1.0/IMPLEMENTATION_AUDIT.md"
+  ],
+  "verification": {
+    "typecheck": true,
+    "build": true,
+    "tests": 13,
+    "packDryRun": true
+  }
 }

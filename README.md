@@ -1,114 +1,204 @@
 # InvoiceRouter for n8n
 
-InvoiceRouter is an n8n community-node package for converting Google Sheets rows or other n8n input items into normalized invoice requests and executing real credential-backed REST API calls.
+[![InvoiceRouter CI](https://github.com/vibtools/n8n-nodes-invoicerouter/actions/workflows/ci.yml/badge.svg)](https://github.com/vibtools/n8n-nodes-invoicerouter/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/n8n-nodes-invoicerouter.svg)](https://www.npmjs.com/package/n8n-nodes-invoicerouter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Included nodes
+InvoiceRouter is an eight-node n8n community-node package for loading many provider accounts from Google Sheets, assigning accounts safely, personalizing invoice data, executing provider requests, standardizing results, and creating retry/metrics/alert/audit events.
 
-1. **Provider Loader** — loads built-in provider identifiers and optional endpoint profiles.
-2. **Provider Selector** — selects a provider from an input field, manual choice, or provider pool.
-3. **Request Builder** — converts Google Sheets columns into a normalized invoice object.
-4. **Invoice Sender** — executes real create, create-and-send, send-existing, or custom REST API requests.
-5. **Status Checker** — retrieves and normalizes invoice status through the provider API.
+**Package version:** `1.2.0`  
+**Architecture:** Version 1.0 Final Freeze  
+**Implementation:** Complete — 8/8 custom nodes registered
 
-## Security model
+## Final workflow diagram
 
-Provider secrets are stored only in the **InvoiceRouter API** n8n credential. API keys must not be stored in Google Sheets, workflow JSON, provider JSON, or the Git repository.
-
-The credential supports:
-
-- Bearer token
-- API key header
-- Basic authentication
-- API key query parameter
-- No authentication
-- Default non-secret headers
-- HTTPS enforcement
-- Configurable request timeout
-
-HTTP is rejected by default except localhost. Enable **Allow HTTP** only for a trusted private development service.
-
-## Real API operations
-
-The Invoice Sender supports:
-
-- Create invoice
-- Create and send invoice as a two-step sequence
-- Send an existing invoice
-- Custom REST request
-- Idempotency header using the invoice `requestId`
-- Configurable endpoint, method, body, query parameters, headers, and response paths
-- Dry-run request plans without network transmission
-- Normalized success and failure output
-
-The Status Checker supports real provider status requests and maps provider states to normalized states such as `draft`, `sent`, `viewed`, `paid`, `overdue`, `void`, and `failed`.
-
-## Provider compatibility
-
-InvoiceRouter provides a production-capable generic REST transport. Each invoice provider has its own endpoints, authentication rules, payload format, and response structure. Configure the node fields using the provider's official API documentation.
-
-The provider folders in this repository preserve adapter boundaries for future provider-specific implementations. They do not claim that one generic payload is valid for every listed provider.
-
-## Google Sheets workflow
-
-Import:
+![InvoiceRouter Version 1 architecture](assets/architecture/invoice-router-architecture-v1.0.png)
 
 ```text
-workflows/google-sheets-real-invoice-router.json
+Manual Trigger
+  ├─> Google Sheets: Provider Accounts/Credentials -> Provider Loader ─┐
+  ├─> Google Sheets: Email List -> Email List -------------------------┼─> Provider Selector
+  └─> Invoice Template ------------------------------------------------┘
+
+Provider Selector allocation ----\
+Invoice Template -------------------> Request Builder
+One normalized recipient ---------/
+
+Request Builder -> Invoice Sender -> Status Checker -> Status Manager
+                                                       ├─ workflow result
+                                                       ├─ retry queue event
+                                                       ├─ metrics/analytics events
+                                                       ├─ alert/audit events
+                                                       └─ provider feedback/state update
 ```
 
-The template performs:
+The importable workflow is included at:
 
 ```text
-Schedule or Manual Trigger
-→ Get PENDING Google Sheets rows
-→ Build normalized invoice
-→ Create and send through provider API
-→ IF success
-→ Update the source row with success or failure
+workflows/InvoiceRouter-v1-production.json
 ```
 
-Required sheet columns:
+## Custom nodes
+
+| # | Node | Responsibility |
+|---|---|---|
+| 1 | **Provider Loader** | Validates Google Sheets provider rows, creates the frozen `providers[]` structure, stores runtime secrets in an in-process vault, and masks visible credentials. |
+| 2 | **Provider Selector** | Maintains provider state, selects an eligible account, applies rate limits/circuit-breaker rules, and creates lock metadata. |
+| 3 | **Invoice Template** | Builds fixed invoice fields, repeatable line items, totals, payment terms, custom fields, and dynamic tag definitions. |
+| 4 | **Email List** | Validates recipients, removes duplicate emails, generates missing names, preserves custom columns, and reserves each email once per batch. |
+| 5 | **Request Builder** | Merges exactly one account + one template + one recipient, resolves dynamic tags, applies provider presets, and creates one ready request. |
+| 6 | **Invoice Sender** | Resolves the runtime credential, executes exactly one HTTP request, measures latency/size, and returns a redacted raw result. |
+| 7 | **Status Checker** | Analyzes the raw response, classifies errors, extracts invoice metadata, and emits a standard status object. |
+| 8 | **Status Manager** | Applies retry policy, emits management events, determines the final workflow state, and updates provider feedback. |
+
+`Manual Trigger` and `Google Sheets` are built-in n8n nodes and are not part of this package.
+
+## Request Builder input order
+
+Request Builder deliberately performs the merge; no extra custom Merge node exists.
+
+| Input | Source | Data |
+|---|---|---|
+| Input 1 | Provider Selector | Allocated provider/account profile |
+| Input 2 | Invoice Template | Standard invoice template |
+| Input 3 | Email List | One normalized recipient per item |
+
+The production workflow JSON already wires these inputs correctly.
+
+## Provider workbook
+
+The Version 1 reference workbook is:
 
 ```text
-request_id
-provider
-customer_name
-customer_email
-amount
-currency
-due_date
-description
-line_items_json
-metadata_json
-send_email
-status
-invoice_id
-invoice_url
-pdf_url
-sent_at
-retry_count
-last_error
+examples/google_sheets/InvoiceRouter_20_Provider_Production_Presets_v1.0.xlsx
 ```
 
-Example `line_items_json`:
+It contains 20 action rows across 19 provider names:
 
-```json
-[
-  {
-    "description": "Consulting service",
-    "quantity": 1,
-    "unitPrice": 100,
-    "amount": 100
-  }
-]
-```
+- Stripe
+- Paddle
+- Polar
+- LemonSqueezy
+- Invoice Ninja
+- Zoho Books
+- Xero
+- ERPNext
+- Odoo
+- QuickBooks
+- FreshBooks
+- Chargebee
+- Recurly
+- Square
+- PayPal
+- Braintree
+- Razorpay
+- Bill.com
+- Custom REST
 
-## Build and validation
+The built-in provider registry normalizes these names and provides request/response mapping presets. Some providers require provider-specific IDs such as `customer_id`, `organization_id`, `realmId`, `contact_id`, or `location_id`. Put those values in recipient/template custom fields or in the Sheet's **Extra Value** field where the endpoint uses a placeholder.
 
-Use Node.js 24 in CI.
+## Dynamic invoice tags
+
+Invoice Template and Request Builder support:
+
+| Tag | Generated value |
+|---|---|
+| `#INV#` | Deterministic invoice code per provider/recipient/request |
+| `#TRX#` | Deterministic transaction code |
+| `#RANDOM#` | 13-character deterministic random-style code |
+| `#EMAIL#` | Recipient email |
+| `#NAME#` | Recipient name |
+| `#PROVIDER#` | Selected provider ID |
+| `#ACCOUNT#` | Selected account ID |
+
+The same request seed always produces the same tag values, which helps idempotency and retry safety.
+
+## Processing modes
+
+Provider Selector offers two modes:
+
+### Sequential — default
+
+Best for Version 1 and beginners. Multiple recipients may reuse the same account because Invoice Sender processes items in order. This is the default in the bundled workflow.
+
+### Parallel locks
+
+Keeps each account locked until Status Manager feedback. Use this only when running controlled parallel workers with enough provider accounts. Unavailable work items are marked `QUEUED` rather than being sent with the wrong account.
+
+## Credential model and security boundary
+
+Version 1 intentionally stores provider API keys/secrets in Google Sheets so many changing accounts can be managed without editing n8n credentials individually.
+
+Provider Loader:
+
+- reads the Sheet row received from the built-in Google Sheets node;
+- stores real credential material only in the active InvoiceRouter runtime vault;
+- outputs masked previews and a credential reference;
+- never sends credentials through Request Builder output;
+- lets Invoice Sender inject the secret only at HTTP execution time;
+- redacts secrets from normal response/error output.
+
+Important boundary: the built-in Google Sheets node receives the original row before Provider Loader runs. In production:
+
+1. Keep the spreadsheet private and use least-privilege Google access.
+2. Do not commit real credentials to GitHub.
+3. Disable or minimize successful execution-data retention in n8n.
+4. Restrict access to workflow executions and logs.
+5. Rotate credentials with awareness that Google Sheet revision history may retain previous values.
+6. Start with **Dry Run** enabled and test provider sandboxes before live use.
+
+## Install from source
+
+Use Node.js 24 for the supported build environment.
 
 ```bash
 npm ci
+npm run verify
+npm pack
+```
+
+For a typical self-hosted n8n installation:
+
+```bash
+mkdir -p ~/.n8n/nodes
+cd ~/.n8n/nodes
+npm install /absolute/path/n8n-nodes-invoicerouter-1.2.0.tgz
+```
+
+Restart n8n after installation.
+
+## Import and configure the workflow
+
+1. Import `workflows/InvoiceRouter-v1-production.json` in n8n.
+2. Open **Google Sheets - Provider Accounts** and replace the provider spreadsheet ID.
+3. Open **Google Sheets - Email List** and replace the recipient spreadsheet ID.
+4. Select your Google Sheets OAuth2 or Service Account credential.
+5. Keep **Invoice Sender → Dry Run** enabled.
+6. Execute the workflow manually and inspect Provider Loader, Request Builder, Status Checker, and Status Manager output.
+7. Configure required provider-specific IDs through custom fields.
+8. Disable Dry Run only after a successful sandbox test.
+9. Activate a scheduled/webhook copy only after the manual workflow is stable.
+
+## Standard runtime objects
+
+The main internal contracts are:
+
+```text
+Provider Loader  -> providers[]
+Provider Selector -> providerAllocation
+Invoice Template -> invoiceTemplate
+Email List       -> recipient
+Request Builder  -> readyRequest
+Invoice Sender   -> rawExecution
+Status Checker   -> standardStatus
+Status Manager   -> management
+```
+
+Normal outputs contain no plain API key or API secret.
+
+## Validation and tests
+
+```bash
 npm run validate
 npm run format:check
 npm run lint
@@ -118,64 +208,33 @@ npm test
 npm pack --dry-run
 ```
 
-Run the complete verification pipeline:
+The test suite verifies:
 
-```bash
-npm run verify
-```
+- 8/8 n8n node registration;
+- production workflow wiring;
+- Sheet credential masking;
+- recipient validation/deduplication;
+- invoice totals and dynamic tags;
+- three-input Request Builder merging;
+- secret injection only at HTTP execution;
+- status normalization;
+- success completion and retry scheduling.
 
-## GitHub Release
+## Production scope
 
-Create a tag matching `package.json`, for example:
+The package is production-oriented as a **configurable routing/runtime framework**. Provider APIs still differ in mandatory IDs, OAuth token lifecycle, multi-step invoice creation, and account-specific rules. The bundled presets provide request/response structures and clear warnings, but live provider onboarding must be verified against that provider's sandbox and account configuration.
 
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
+Version 1 runtime state is process-local, with best-effort workflow static feedback. For multi-process n8n queue deployments, use sequential mode per worker or introduce an external state backend in a later freeze version before sharing one account pool across processes.
 
-The release workflow produces:
+## Source of truth
 
-```text
-n8n-nodes-invoicerouter-1.1.0.tgz
-SHA256SUMS.txt
-google-sheets-real-invoice-router.json
-workflow setup README
-```
+Read these files in order:
 
-If `NPM_TOKEN` exists, the workflow also publishes to npm. Without the token, the GitHub Release still succeeds and provides manual installation assets.
-
-## Manual self-hosted installation
-
-Download the `.tgz` file from GitHub Releases. On the n8n host, install it in the n8n nodes directory and restart n8n:
-
-```bash
-mkdir -p ~/.n8n/nodes
-cd ~/.n8n/nodes
-npm install /absolute/path/n8n-nodes-invoicerouter-1.1.0.tgz
-```
-
-Then import the workflow JSON in n8n and configure:
-
-1. Google Sheets credentials and document/sheet selection.
-2. InvoiceRouter API credential.
-3. Real create/send endpoints.
-4. Provider request payload.
-5. Response paths for invoice ID, status, invoice URL, and PDF URL.
-6. Dry-run verification against a sandbox provider account.
-
-## Production checklist
-
-- Use HTTPS.
-- Use sandbox credentials before production credentials.
-- Keep Dry Run enabled during mapping tests.
-- Use unique `request_id` values.
-- Confirm the provider supports idempotency and use its required header name.
-- Enable `continueOnFail` when individual row failures should not stop the batch.
-- Verify response paths against real sandbox responses.
-- Restrict n8n credential access.
-- Monitor failed executions and Google Sheet `last_error` values.
-
-See [PRODUCTION_GUIDE.md](PRODUCTION_GUIDE.md) for configuration details.
+1. [`VERSION_1_0_FREEZE.md`](VERSION_1_0_FREEZE.md)
+2. [`docs/freeze/v1.0/FINAL_ARCHITECTURE.md`](docs/freeze/v1.0/FINAL_ARCHITECTURE.md)
+3. [`docs/freeze/v1.0/NODE_CONTRACTS.md`](docs/freeze/v1.0/NODE_CONTRACTS.md)
+4. [`docs/freeze/v1.0/PROVIDER_SHEET_CONTRACT.md`](docs/freeze/v1.0/PROVIDER_SHEET_CONTRACT.md)
+5. [`docs/freeze/v1.0/SECURITY_DECISION.md`](docs/freeze/v1.0/SECURITY_DECISION.md)
 
 ## License
 
