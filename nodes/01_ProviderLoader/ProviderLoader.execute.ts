@@ -1,49 +1,128 @@
 import type { IDataObject, IExecuteFunctions, INodeExecutionData } from '../../shared/types/N8n';
-import { isRecord } from '../../shared/utils/Helpers';
+import { maskSecret } from '../../shared/security/Redaction';
+import { executionIdentity, registerProviderProfiles, type SecretMaterial } from '../../shared/runtime/RuntimeStore';
+import { isRecord, normalizedKey, nowIso, slug, toBoolean, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
+import { normalizeProviderId } from '../../providers';
 
-const BUILT_INS: IDataObject[] = [
-  'custom',
-  'stripe',
-  'paddle',
-  'polar',
-  'lemonsqueezy',
-  'quickbooks',
-  'xero',
-  'zoho',
-  'erpnext',
-  'invoice_ninja',
-  'odoo',
-].map((id, priority) => ({ id, name: id, enabled: true, priority }));
+const COLUMN_ALIASES: Record<string, string[]> = {
+  enabled: ['enabled', 'active'], provider: ['provider', 'providername'], account: ['account', 'accountname'],
+  environment: ['environment', 'env'], action: ['action', 'operation'], method: ['method', 'httpmethod'],
+  baseUrl: ['baseurl', 'apiurl'], endpoint: ['endpoint', 'path'], authType: ['authtype', 'authentication'],
+  apiVersion: ['apiversion', 'version'], contentType: ['contenttype'], headerName: ['headername'],
+  headerValue: ['headervalue'], apiKey: ['apikey', 'accesstoken'], apiSecret: ['apisecret', 'secret'],
+  extraValue: ['extravalue', 'tenantid', 'realmid', 'organizationid'], timeout: ['timeout'], notes: ['notes'],
+};
+
+function normalizedRow(row: IDataObject): Record<string, unknown> {
+  const indexed = new Map<string, unknown>();
+  for (const [key, value] of Object.entries(row)) indexed.set(normalizedKey(key), value);
+  const output: Record<string, unknown> = {};
+  for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
+    for (const alias of aliases) {
+      if (indexed.has(alias)) { output[field] = indexed.get(alias); break; }
+    }
+  }
+  return output;
+}
+
+function normalizeAuth(value: unknown): string {
+  const auth = toStringValue(value).trim().toLowerCase().replace(/[\s/_-]+/g, '');
+  if (auth.includes('oauth')) return 'oauth2';
+  if (auth.includes('bearer')) return 'bearer';
+  if (auth.includes('basic')) return 'basic';
+  if (auth.includes('token')) return 'token';
+  if (auth.includes('session')) return 'session';
+  if (auth.includes('none')) return 'none';
+  return auth || 'custom';
+}
+
+function maskHeader(value: string): string {
+  return value
+    .replace(/\{\{API_KEY\}\}|\{\{ACCESS_TOKEN\}\}/g, '[REDACTED]')
+    .replace(/\{\{API_SECRET\}\}|\{\{BASE64_KEY_SECRET\}\}|\{\{SESSION_ID\}\}/g, '[REDACTED]');
+}
 
 export async function execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
   const items = this.getInputData();
+  const batchId = toStringValue(this.getNodeParameter('batchId', 0, 'default'), 'default');
+  const sourceName = toStringValue(this.getNodeParameter('sourceName', 0, 'provider'), 'provider');
+  const duplicatePolicy = toStringValue(this.getNodeParameter('duplicatePolicy', 0, 'error'), 'error');
+  const includeDisabled = Boolean(this.getNodeParameter('includeDisabled', 0, false));
+  const strictValidation = Boolean(this.getNodeParameter('strictValidation', 0, true));
+  const identity = executionIdentity(this, batchId);
+  const warnings: string[] = [];
+  const byId = new Map<string, IDataObject>();
+  const secrets = new Map<string, SecretMaterial>();
 
-  return [
-    items.map((item, itemIndex) => {
-      const includeBuiltIns = Boolean(this.getNodeParameter('includeBuiltIns', itemIndex, true));
-      const raw = String(this.getNodeParameter('providersJson', itemIndex, '[]'));
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Providers JSON is invalid: ${message}`);
-      }
-      if (!Array.isArray(parsed)) throw new Error('Providers JSON must be an array.');
+  items.forEach((item, itemIndex) => {
+    const row = normalizedRow(item.json);
+    const enabled = toBoolean(row.enabled, true);
+    if (!enabled && !includeDisabled) return;
+    const providerName = toStringValue(row.provider).trim();
+    const accountName = toStringValue(row.account).trim();
+    const environment = slug(row.environment) || 'live';
+    const actionName = toStringValue(row.action).trim();
+    const method = toStringValue(row.method).trim().toUpperCase();
+    const baseUrl = toStringValue(row.baseUrl).trim().replace(/\/+$/, '');
+    const endpoint = toStringValue(row.endpoint).trim();
+    const authType = normalizeAuth(row.authType);
+    const timeoutSeconds = toFiniteNumber(row.timeout, 60);
+    const errors: string[] = [];
+    if (!providerName) errors.push('Provider is required');
+    if (!accountName) errors.push('Account is required');
+    if (!actionName) errors.push('Action is required');
+    if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) errors.push('Method must be GET, POST, PUT, PATCH, or DELETE');
+    if (!baseUrl) errors.push('Base URL is required');
+    if (!endpoint) errors.push('Endpoint is required');
+    if (!(timeoutSeconds > 0)) errors.push('Timeout must be a positive number');
+    if (errors.length) {
+      const message = `Row ${itemIndex + 2}: ${errors.join('; ')}`;
+      if (strictValidation && enabled) throw new Error(message);
+      warnings.push(message);
+      return;
+    }
 
-      const customProviders = parsed.filter((provider) => isRecord(provider) && provider.enabled !== false);
-      const merged = [...(includeBuiltIns ? BUILT_INS : []), ...customProviders];
-      const unique = new Map<string, IDataObject>();
-      for (const provider of merged) {
-        const id = String(provider.id ?? provider.name ?? '').trim().toLowerCase();
-        if (!id) continue;
-        unique.set(id, { ...provider, id, enabled: provider.enabled !== false });
-      }
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(baseUrl); } catch { throw new Error(`Row ${itemIndex + 2}: Base URL is invalid.`); }
+    if (!['https:', 'http:'].includes(parsedUrl.protocol)) throw new Error(`Row ${itemIndex + 2}: Base URL must use HTTP or HTTPS.`);
 
-      return {
-        json: { ...item.json, providerPool: [...unique.values()] },
-        pairedItem: { item: itemIndex },
-      };
-    }),
-  ];
+    const providerId = normalizeProviderId(providerName);
+    const accountId = slug(accountName);
+    const actionId = slug(actionName);
+    const id = `${providerId}-${accountId}-${environment}-${actionId}`;
+    const apiKey = toStringValue(row.apiKey);
+    const apiSecret = toStringValue(row.apiSecret);
+    const extraValue = toStringValue(row.extraValue);
+    const headerName = toStringValue(row.headerName);
+    const headerValue = toStringValue(row.headerValue);
+    const profile: IDataObject = {
+      id, enabled, providerId, providerName, accountId, accountName, environment, actionId, actionName,
+      method, baseUrl, endpoint, url: `${baseUrl}/${endpoint.replace(/^\/+/, '')}`,
+      authType, apiVersion: toStringValue(row.apiVersion), contentType: toStringValue(row.contentType, 'application/json'),
+      timeoutMs: Math.round(timeoutSeconds * 1000),
+      headerName, headerPreview: headerValue ? maskHeader(headerValue) : '',
+      apiKeyPreview: maskSecret(apiKey), apiSecretPreview: maskSecret(apiSecret), extraValuePreview: maskSecret(extraValue),
+      notes: toStringValue(row.notes), priority: itemIndex, weight: 1,
+      metadata: { sourceType: 'google_sheet', sheetName: sourceName, sheetRow: itemIndex + 2 },
+    };
+    const secret: SecretMaterial = { apiKey, apiSecret, extraValue, headerName, headerValue, authType };
+    if (byId.has(id)) {
+      const message = `Duplicate provider action profile: ${id}`;
+      if (duplicatePolicy === 'error') throw new Error(message);
+      warnings.push(message);
+      if (duplicatePolicy === 'first') return;
+    }
+    byId.set(id, profile);
+    secrets.set(id, secret);
+  });
+
+  const providers = [...byId.values()];
+  registerProviderProfiles(identity.scopeKey, providers, secrets);
+  return [[{
+    json: {
+      success: true, total: providers.length, generated_at: nowIso(), batch_id: batchId,
+      source: { type: 'google_sheet', sheet_name: sourceName }, providers, warnings,
+      runtime: { scopeKey: identity.scopeKey, workflowId: identity.workflowId, executionId: identity.executionId },
+    },
+  }]];
 }

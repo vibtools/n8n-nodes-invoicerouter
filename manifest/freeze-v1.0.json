@@ -1,17 +1,29 @@
 {
   "freezeVersion": "1.0",
+  "packageVersion": "1.2.0",
   "status": "FINAL_FREEZE",
   "generatedAt": "2026-07-28",
   "sourceOfTruth": "VERSION_1_0_FREEZE.md",
   "notionParent": "https://app.notion.com/p/3a968f0bf27380fda24ae5ddd012fcc8",
   "targetCustomNodeCount": 8,
-  "currentBaselineNodeCount": 5,
-  "implementationStatus": "IN_PROGRESS",
+  "currentCustomNodeCount": 8,
+  "implementationStatus": "COMPLETE",
   "builtInWorkflowNodes": [
     "Manual Trigger",
     "Google Sheets"
   ],
-  "credentialPolicy": "Google Sheets for Version 1, with mandatory masking and execution-data guardrails",
+  "credentialPolicy": "Google Sheets for Version 1, with runtime vault, output masking, late injection, and execution-data guardrails",
+  "productionWorkflow": "workflows/InvoiceRouter-v1-production.json",
+  "registeredNodes": [
+    "Provider Loader",
+    "Provider Selector",
+    "Invoice Template",
+    "Email List",
+    "Request Builder",
+    "Invoice Sender",
+    "Status Checker",
+    "Status Manager"
+  ],
   "frozenAssets": [
     "assets/architecture/invoice-router-architecture-v1.0.pdf",
     "assets/architecture/invoice-router-architecture-v1.0.png",
@@ -27,6 +39,13 @@
     "docs/freeze/v1.0/IMPLEMENTATION_GAP_MATRIX.md",
     "docs/freeze/v1.0/IMPLEMENTATION_ORDER.md",
     "docs/freeze/v1.0/NOTION_SOURCE_MAP.md",
-    "docs/freeze/v1.0/CLEAN_REPOSITORY_CONTRACT.md"
-  ]
+    "docs/freeze/v1.0/CLEAN_REPOSITORY_CONTRACT.md",
+    "docs/freeze/v1.0/IMPLEMENTATION_AUDIT.md"
+  ],
+  "verification": {
+    "typecheck": true,
+    "build": true,
+    "tests": 13,
+    "packDryRun": true
+  }
 }

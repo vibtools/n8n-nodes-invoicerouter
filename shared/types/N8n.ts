@@ -7,7 +7,7 @@ export interface IDataObject {
 
 export interface INodeExecutionData {
   json: IDataObject;
-  pairedItem?: { item: number; input?: number };
+  pairedItem?: { item: number; input?: number } | Array<{ item: number; input?: number }>;
 }
 
 export interface INodePropertyOption {
@@ -34,11 +34,6 @@ export interface INodeProperty {
   typeOptions?: IDataObject;
 }
 
-export interface INodeCredentialDescription {
-  name: string;
-  required?: boolean;
-}
-
 export interface INodeTypeDescription {
   displayName: string;
   name: string;
@@ -48,12 +43,7 @@ export interface INodeTypeDescription {
   defaults: { name: string };
   inputs: string[];
   outputs: string[];
-  credentials?: INodeCredentialDescription[];
   properties: INodeProperty[];
-}
-
-export interface ICredentialDataDecryptedObject {
-  [key: string]: unknown;
 }
 
 export interface IHttpRequestOptions {
@@ -69,11 +59,13 @@ export interface IHttpRequestOptions {
 }
 
 export interface IExecuteFunctions {
-  getInputData(): INodeExecutionData[];
+  getInputData(inputIndex?: number): INodeExecutionData[];
   getNodeParameter(name: string, itemIndex: number, fallbackValue?: unknown): unknown;
-  getCredentials(name: string, itemIndex?: number): Promise<ICredentialDataDecryptedObject>;
   continueOnFail(): boolean;
   getNode(): { name: string };
+  getExecutionId?(): string;
+  getWorkflow?(): { id?: string; name?: string };
+  getWorkflowStaticData?(type: 'global' | 'node'): IDataObject;
   helpers: {
     httpRequest(options: IHttpRequestOptions): Promise<unknown>;
   };
@@ -82,11 +74,4 @@ export interface IExecuteFunctions {
 export interface INodeType {
   description: INodeTypeDescription;
   execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]>;
-}
-
-export interface ICredentialType {
-  name: string;
-  displayName: string;
-  documentationUrl?: string;
-  properties: INodeProperty[];
 }

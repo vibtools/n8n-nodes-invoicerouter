@@ -1,0 +1,378 @@
+{
+  "name": "InvoiceRouter v1 - Production Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1260,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_PROVIDER_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "provider",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "provider-sheet",
+      "name": "Google Sheets - Provider Accounts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -1040,
+        -160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchId": "={{$execution.id}}",
+        "sourceName": "provider",
+        "duplicatePolicy": "error",
+        "includeDisabled": false,
+        "strictValidation": true
+      },
+      "id": "provider-loader",
+      "name": "Provider Loader",
+      "type": "n8n-nodes-invoicerouter.providerLoader",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_EMAIL_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "email_list",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "email-sheet",
+      "name": "Google Sheets - Email List",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -1040,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchId": "={{$execution.id}}",
+        "emailField": "Email",
+        "nameField": "Name",
+        "nameGeneration": "formatted",
+        "invalidPolicy": "skip",
+        "preserveCustomColumns": true,
+        "preventReuse": true
+      },
+      "id": "email-list",
+      "name": "Email List",
+      "type": "n8n-nodes-invoicerouter.emailList",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "templateMode": "manual",
+        "invoiceId": "#INV#",
+        "invoiceNumber": "INV-#INV#",
+        "invoiceDate": "={{$now.toISODate()}}",
+        "dueDate": "={{$now.plus({days: 30}).toISODate()}}",
+        "currency": "USD",
+        "lineItemsJson": "[{\"name\":\"Service\",\"description\":\"Professional service for #NAME#\",\"quantity\":1,\"unit_price\":100}]",
+        "tax": 0,
+        "discount": 0,
+        "shipping": 0,
+        "paymentTerms": "Net 30",
+        "notes": "Thank you, #NAME#. Reference #TRX#.",
+        "customFieldsJson": "{}",
+        "strictValidation": true
+      },
+      "id": "invoice-template",
+      "name": "Invoice Template",
+      "type": "n8n-nodes-invoicerouter.invoiceTemplate",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "strategy": "firstAvailable",
+        "providerFilter": "",
+        "actionFilter": "",
+        "environmentFilter": "live",
+        "queueWhenUnavailable": true,
+        "lockTimeoutSeconds": 300,
+        "maxRequestsPerMinute": 60,
+        "circuitBreakerThreshold": 5,
+        "processingMode": "sequential"
+      },
+      "id": "provider-selector",
+      "name": "Provider Selector",
+      "type": "n8n-nodes-invoicerouter.providerSelector",
+      "typeVersion": 1,
+      "position": [
+        -520,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "strictProviderWarnings": false,
+        "customBodyJson": "{}",
+        "extraHeadersJson": "{}",
+        "extraQueryJson": "{}",
+        "idempotencyHeader": "Idempotency-Key",
+        "allowHttp": false
+      },
+      "id": "request-builder",
+      "name": "Request Builder",
+      "type": "n8n-nodes-invoicerouter.requestBuilder",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "dryRun": true,
+        "includeResponseBody": true,
+        "stopOnTransportError": false
+      },
+      "id": "invoice-sender",
+      "name": "Invoice Sender",
+      "type": "n8n-nodes-invoicerouter.invoiceSender",
+      "typeVersion": 1,
+      "position": [
+        60,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "includeParsedMetadata": true,
+        "unknownSuccessStatus": "CREATED"
+      },
+      "id": "status-checker",
+      "name": "Status Checker",
+      "type": "n8n-nodes-invoicerouter.statusChecker",
+      "typeVersion": 1,
+      "position": [
+        320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "retryLimit": 3,
+        "retryBaseDelaySeconds": 30,
+        "cooldownSeconds": 30,
+        "disableOnAuthFailure": true,
+        "alertOnFailure": true,
+        "includeEvents": true
+      },
+      "id": "status-manager",
+      "name": "Status Manager",
+      "type": "n8n-nodes-invoicerouter.statusManager",
+      "typeVersion": 1,
+      "position": [
+        580,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Before activation\n1. Replace both spreadsheet IDs.\n2. Select the Google Sheets credential.\n3. Keep Invoice Sender in Dry Run and execute once.\n4. Review Request Builder output.\n5. Disable Dry Run only after provider sandbox verification.\n\nProvider feedback is persisted by Status Manager for later allocations; no cyclic wire is required.",
+        "height": 300,
+        "width": 420
+      },
+      "id": "setup-note",
+      "name": "Production Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        800,
+        -80
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Provider Accounts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Sheets - Email List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Invoice Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Provider Accounts": {
+      "main": [
+        [
+          {
+            "node": "Provider Loader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provider Loader": {
+      "main": [
+        [
+          {
+            "node": "Provider Selector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Email List": {
+      "main": [
+        [
+          {
+            "node": "Email List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email List": {
+      "main": [
+        [
+          {
+            "node": "Provider Selector",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Provider Selector": {
+      "main": [
+        [
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Template": {
+      "main": [
+        [
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Request Builder": {
+      "main": [
+        [
+          {
+            "node": "Invoice Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Sender": {
+      "main": [
+        [
+          {
+            "node": "Status Checker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Checker": {
+      "main": [
+        [
+          {
+            "node": "Status Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": false
+  },
+  "versionId": "invoice-router-v1-production-freeze",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "invoiceRouterFreeze": "1.0"
+  },
+  "tags": []
+}

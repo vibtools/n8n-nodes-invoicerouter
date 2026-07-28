@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-invoicerouter",
-  "version": "1.1.0",
-  "description": "Implementation repository for the frozen InvoiceRouter v1.0 eight-node n8n architecture.",
+  "version": "1.2.0",
+  "description": "Production-ready eight-node n8n Invoice Router implementing the Version 1.0 Final Freeze.",
   "keywords": [
     "n8n",
     "n8n-community-node",
@@ -46,7 +46,10 @@
     "ARCHITECTURE.md",
     "VERSION_1_0_FREEZE.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "assets/architecture/invoice-router-architecture-v1.0.png",
+    "workflows/InvoiceRouter-v1-production.json",
+    "examples/google_sheets/InvoiceRouter_20_Provider_Production_Presets_v1.0.xlsx"
   ],
   "scripts": {
     "clean": "node scripts/clean.mjs",
@@ -71,15 +74,15 @@
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": [
-      "dist/credentials/InvoiceRouterApi.credentials.js"
-    ],
     "nodes": [
-      "dist/nodes/01_ProviderLoader/Node.node.js",
-      "dist/nodes/02_ProviderSelector/Node.node.js",
-      "dist/nodes/03_RequestBuilder/Node.node.js",
-      "dist/nodes/04_InvoiceSender/Node.node.js",
-      "dist/nodes/05_StatusChecker/Node.node.js"
+      "dist/nodes/01_ProviderLoader/ProviderLoader.node.js",
+      "dist/nodes/02_ProviderSelector/ProviderSelector.node.js",
+      "dist/nodes/03_InvoiceTemplate/InvoiceTemplate.node.js",
+      "dist/nodes/04_EmailList/EmailList.node.js",
+      "dist/nodes/05_RequestBuilder/RequestBuilder.node.js",
+      "dist/nodes/06_InvoiceSender/InvoiceSender.node.js",
+      "dist/nodes/07_StatusChecker/StatusChecker.node.js",
+      "dist/nodes/08_StatusManager/StatusManager.node.js"
     ],
     "strict": true
   },
@@ -90,9 +93,9 @@
   "invoiceRouterFreeze": {
     "architectureVersion": "1.0",
     "status": "FINAL_FREEZE",
-    "implementationStatus": "IN_PROGRESS",
+    "implementationStatus": "COMPLETE",
     "targetNodeCount": 8,
-    "currentBaselineNodeCount": 5,
+    "currentNodeCount": 8,
     "sourceOfTruth": "VERSION_1_0_FREEZE.md"
   }
 }

@@ -1,7 +1,7 @@
 import type { IExecuteFunctions, INodeExecutionData, INodeType } from '../../shared/types/N8n';
-import { description } from './ProviderLoader.description';
-import { execute } from './ProviderLoader.execute';
-export class ProviderLoader implements INodeType {
+import { description } from './InvoiceSender.description';
+import { execute } from './InvoiceSender.execute';
+export class InvoiceSender implements INodeType {
   description = description;
   execute = execute as (this: IExecuteFunctions) => Promise<INodeExecutionData[][]>;
 }
