@@ -75,6 +75,16 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     if (!baseUrl) errors.push('Base URL is required');
     if (!endpoint) errors.push('Endpoint is required');
     if (!(timeoutSeconds > 0)) errors.push('Timeout must be a positive number');
+    const apiKey = toStringValue(row.apiKey);
+    const apiSecret = toStringValue(row.apiSecret);
+    const extraValue = toStringValue(row.extraValue);
+    const headerName = toStringValue(row.headerName);
+    const headerValue = toStringValue(row.headerValue);
+    if (['bearer', 'oauth2'].includes(authType) && !apiKey && !headerValue) errors.push('API Key or Header Value is required for bearer/oauth2 auth');
+    if (authType === 'basic' && (!apiKey || !apiSecret)) errors.push('API Key and API Secret are required for basic auth');
+    if (authType === 'token' && (!apiKey || !apiSecret)) errors.push('API Key and API Secret are required for token auth');
+    if (authType === 'session' && !extraValue && !headerValue) errors.push('Extra Value or Header Value is required for session auth');
+    if (headerValue && !headerName && !['bearer', 'oauth2', 'basic', 'token', 'session'].includes(authType)) errors.push('Header Name is required when Header Value is set for custom auth');
     if (errors.length) {
       const message = `Row ${itemIndex + 2}: ${errors.join('; ')}`;
       if (strictValidation && enabled) throw new Error(message);
@@ -90,11 +100,6 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const accountId = slug(accountName);
     const actionId = slug(actionName);
     const id = `${providerId}-${accountId}-${environment}-${actionId}`;
-    const apiKey = toStringValue(row.apiKey);
-    const apiSecret = toStringValue(row.apiSecret);
-    const extraValue = toStringValue(row.extraValue);
-    const headerName = toStringValue(row.headerName);
-    const headerValue = toStringValue(row.headerValue);
     const profile: IDataObject = {
       id, enabled, providerId, providerName, accountId, accountName, environment, actionId, actionName,
       method, baseUrl, endpoint, url: `${baseUrl}/${endpoint.replace(/^\/+/, '')}`,

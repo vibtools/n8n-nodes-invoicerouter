@@ -20,4 +20,4 @@ and stores them here with repository-safe names:
 - `status-checker.png`
 - `status-manager.png`
 
-These are documentation assets only and must not affect package runtime or npm publishing unless explicitly added to the package files list.
+These are documentation/design assets only and must not affect package runtime or npm publishing unless explicitly added to the package files list. Step 11C uses this visual system as the reference for polished hand-authored runtime SVG icons. Runtime n8n node cards use the SVG icons declared in each custom node description and copied into `dist` by `scripts/copy-node-icons.mjs`.

@@ -139,12 +139,19 @@
         "strategy": "firstAvailable",
         "providerFilter": "",
         "actionFilter": "",
-        "environmentFilter": "live",
+        "environmentFilter": "sandbox",
         "queueWhenUnavailable": true,
         "lockTimeoutSeconds": 300,
         "maxRequestsPerMinute": 60,
         "circuitBreakerThreshold": 5,
-        "processingMode": "sequential"
+        "processingMode": "sequential",
+        "conditionalRouting": true,
+        "routingRulesJson": "[]",
+        "routeProviderPath": "recipient.customFields.Provider",
+        "routeActionPath": "recipient.customFields.Action",
+        "routeEnvironmentPath": "recipient.customFields.Environment",
+        "requireConditionalMatch": true,
+        "unmatchedRouteBehavior": "block"
       },
       "id": "provider-selector",
       "name": "Provider Selector",
@@ -162,7 +169,11 @@
         "extraHeadersJson": "{}",
         "extraQueryJson": "{}",
         "idempotencyHeader": "Idempotency-Key",
-        "allowHttp": false
+        "allowHttp": false,
+        "sendGuardMode": "strict",
+        "strictProviderValidation": true,
+        "idempotencyKeyMode": "providerInvoiceRecipient",
+        "idempotencyScope": "workflow"
       },
       "id": "request-builder",
       "name": "Request Builder",
@@ -177,7 +188,24 @@
       "parameters": {
         "dryRun": true,
         "includeResponseBody": true,
-        "stopOnTransportError": false
+        "stopOnTransportError": false,
+        "requireSendGuard": true,
+        "liveModeConfirmation": "",
+        "preventDuplicateSends": true,
+        "duplicateTtlHours": 720,
+        "reservationTtlMinutes": 15,
+        "activationSafetyMode": "dryRunValidation",
+        "expectedEnvironment": "sandbox",
+        "sandboxModeConfirmation": "",
+        "enableBulkSafety": true,
+        "maxInvoicesPerExecution": 100,
+        "requireUniformEnvironment": true,
+        "delayBetweenSendsMs": 250,
+        "maxFailedSendsBeforeAbort": 5,
+        "stopOnCriticalBulkError": true,
+        "sandboxBulkConfirmation": "",
+        "liveBulkConfirmation": "",
+        "productionPresetMode": "dryRunValidation"
       },
       "id": "invoice-sender",
       "name": "Invoice Sender",
@@ -209,7 +237,15 @@
         "cooldownSeconds": 30,
         "disableOnAuthFailure": true,
         "alertOnFailure": true,
-        "includeEvents": true
+        "includeEvents": true,
+        "includeExecutionLog": true,
+        "persistExecutionLog": false,
+        "executionLogRetention": 500,
+        "includeStatusWriteback": true,
+        "writebackTarget": "invoice_results",
+        "writebackKeyMode": "idempotencyKey",
+        "retryMaxDelaySeconds": 900,
+        "respectRetryAfterHeader": true
       },
       "id": "status-manager",
       "name": "Status Manager",
@@ -222,17 +258,521 @@
     },
     {
       "parameters": {
-        "content": "## Before activation\n1. Replace both spreadsheet IDs.\n2. Select the Google Sheets credential.\n3. Keep Invoice Sender in Dry Run and execute once.\n4. Review Request Builder output.\n5. Disable Dry Run only after provider sandbox verification.\n\nProvider feedback is persisted by Status Manager for later allocations; no cyclic wire is required.",
-        "height": 300,
-        "width": 420
+        "content": "## Production template setup\n1. This workflow is inactive and Dry Run-first.\n2. Replace provider + email + status Sheet IDs.\n3. Select the real Google Sheets credential on all Sheet nodes.\n4. Use examples/n8n_dry_run_validation/ for the first import/run test.\n5. Keep Provider Selector Environment Filter = sandbox for Dry Run validation.\n6. Add Provider, Action, and Environment routing columns to the real email list or configure Routing Rules JSON.\n7. Provider Selector blocks unrouted items by default.\n8. Invoice Sender requires an approved sendGuard.\n9. Status Manager now feeds Prepare Status Writeback Row -> Google Sheets - Status Writeback.\n10. Step activation: dry-run validation -> sandbox real send -> live real send.\n11. Sandbox real send requires SEND_SANDBOX_INVOICES.\n12. Live real send requires SEND_REAL_INVOICES.\n\nProvider feedback is persisted by Status Manager for later allocations; no cyclic wire is required.",
+        "height": 460,
+        "width": 560
       },
       "id": "setup-note",
       "name": "Production Setup",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        800,
-        -80
+        1380,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => value === undefined || value === null ? '' : String(Boolean(value));\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
+      },
+      "id": "prepare-status-writeback-row",
+      "name": "Prepare Status Writeback Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_STATUS_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "invoice_results",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "writeback_key": "={{ $json.writeback_key }}",
+            "writeback_action": "={{ $json.writeback_action }}",
+            "writeback_target": "={{ $json.writeback_target }}",
+            "key_mode": "={{ $json.key_mode }}",
+            "request_id": "={{ $json.request_id }}",
+            "transaction_id": "={{ $json.transaction_id }}",
+            "idempotency_key": "={{ $json.idempotency_key }}",
+            "provider_id": "={{ $json.provider_id }}",
+            "profile_id": "={{ $json.profile_id }}",
+            "account_id": "={{ $json.account_id }}",
+            "action_id": "={{ $json.action_id }}",
+            "worker_id": "={{ $json.worker_id }}",
+            "recipient_email": "={{ $json.recipient_email }}",
+            "workflow_state": "={{ $json.workflow_state }}",
+            "result": "={{ $json.result }}",
+            "invoice_status": "={{ $json.invoice_status }}",
+            "provider_status": "={{ $json.provider_status }}",
+            "transport_status": "={{ $json.transport_status }}",
+            "provider_invoice_id": "={{ $json.provider_invoice_id }}",
+            "invoice_number": "={{ $json.invoice_number }}",
+            "invoice_url": "={{ $json.invoice_url }}",
+            "pdf_url": "={{ $json.pdf_url }}",
+            "http_status": "={{ $json.http_status }}",
+            "error_type": "={{ $json.error_type }}",
+            "error_code": "={{ $json.error_code }}",
+            "error_message": "={{ $json.error_message }}",
+            "retry_scheduled": "={{ $json.retry_scheduled }}",
+            "retry_count": "={{ $json.retry_count }}",
+            "next_retry_at": "={{ $json.next_retry_at }}",
+            "retryable_by_policy": "={{ $json.retryable_by_policy }}",
+            "non_retryable_by_policy": "={{ $json.non_retryable_by_policy }}",
+            "duplicate_prevention": "={{ $json.duplicate_prevention }}",
+            "checked_at": "={{ $json.checked_at }}",
+            "managed_at": "={{ $json.managed_at }}",
+            "updated_at": "={{ $json.updated_at }}",
+            "activation_mode": "={{ $json.activation_mode }}",
+            "activation_approved": "={{ $json.activation_approved }}",
+            "activation_safety": "={{ $json.activation_safety }}",
+            "preset_self_check_mode": "={{ $json.preset_self_check_mode }}",
+            "preset_self_check_approved": "={{ $json.preset_self_check_approved }}",
+            "preset_self_check": "={{ $json.preset_self_check }}"
+          },
+          "matchingColumns": [
+            "writeback_key"
+          ],
+          "schema": [
+            {
+              "id": "writeback_key",
+              "displayName": "writeback_key",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "writeback_action",
+              "displayName": "writeback_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "writeback_target",
+              "displayName": "writeback_target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "key_mode",
+              "displayName": "key_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "request_id",
+              "displayName": "request_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "transaction_id",
+              "displayName": "transaction_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_id",
+              "displayName": "provider_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "profile_id",
+              "displayName": "profile_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "action_id",
+              "displayName": "action_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "worker_id",
+              "displayName": "worker_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "recipient_email",
+              "displayName": "recipient_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "workflow_state",
+              "displayName": "workflow_state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "invoice_status",
+              "displayName": "invoice_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_status",
+              "displayName": "provider_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "transport_status",
+              "displayName": "transport_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_invoice_id",
+              "displayName": "provider_invoice_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "invoice_url",
+              "displayName": "invoice_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "pdf_url",
+              "displayName": "pdf_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "http_status",
+              "displayName": "http_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_type",
+              "displayName": "error_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_code",
+              "displayName": "error_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_scheduled",
+              "displayName": "retry_scheduled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_count",
+              "displayName": "retry_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "next_retry_at",
+              "displayName": "next_retry_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retryable_by_policy",
+              "displayName": "retryable_by_policy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "non_retryable_by_policy",
+              "displayName": "non_retryable_by_policy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "duplicate_prevention",
+              "displayName": "duplicate_prevention",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "checked_at",
+              "displayName": "checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "managed_at",
+              "displayName": "managed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_mode",
+              "displayName": "activation_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_approved",
+              "displayName": "activation_approved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_safety",
+              "displayName": "activation_safety",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "status-writeback-sheet",
+      "name": "Google Sheets - Status Writeback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1120,
+        120
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const retryItems = [];\nfor (const item of items) {\n  const management = item.json.management || {};\n  if (management.retryScheduled !== true || !management.retryQueueEntry) continue;\n  const delaySeconds = Math.max(1, Number(management.retryDelaySeconds || management.retryQueueEntry.delaySeconds || 1));\n  retryItems.push({\n    json: {\n      ...item.json,\n      retryCount: Number(management.retryCount || 0),\n      retryDelaySeconds: delaySeconds,\n      retryQueueEntry: management.retryQueueEntry,\n      retryLoop: {\n        enabled: true,\n        source: 'Status Manager',\n        nextRetryCount: Number(management.retryCount || 0),\n        delaySeconds,\n        scheduledAt: management.retryQueueEntry.scheduledAt || '',\n        reason: management.retryQueueEntry.reason || '',\n      },\n    },\n    pairedItem: item.pairedItem,\n  });\n}\nreturn retryItems;"
+      },
+      "id": "prepare-retry-request",
+      "name": "Prepare Retry Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ Math.max(1, Number($json.retryDelaySeconds || 1)) }}",
+        "unit": "seconds"
+      },
+      "id": "wait-before-retry",
+      "name": "Wait Before Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        360
       ]
     }
   ],
@@ -356,6 +896,55 @@
         [
           {
             "node": "Status Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Manager": {
+      "main": [
+        [
+          {
+            "node": "Prepare Status Writeback Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Retry Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Status Writeback Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Status Writeback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Retry Request": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retry": {
+      "main": [
+        [
+          {
+            "node": "Invoice Sender",
             "type": "main",
             "index": 0
           }

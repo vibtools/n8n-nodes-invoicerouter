@@ -1,0 +1,6 @@
+Email,Name,Company,Provider,Action,Environment,External Reference,Notes
+alpha.dryrun@example.com,Alpha Dryrun,Vib Tools Demo,Custom,Custom Request,Sandbox,DRYRUN-001,Expected routed dry-run recipient.
+beta.dryrun@example.com,Beta Dryrun,Vib Tools Demo,Custom,Custom Request,Sandbox,DRYRUN-002,Expected routed dry-run recipient.
+blocked.no.route@example.com,Blocked No Route,Vib Tools Demo,,,,DRYRUN-003,Expected BLOCKED because Provider/Action/Environment are empty.
+not-an-email,Invalid Email,Vib Tools Demo,Custom,Custom Request,Sandbox,DRYRUN-004,Expected skipped by Email List invalid email policy.
+alpha.dryrun@example.com,Alpha Duplicate,Vib Tools Demo,Custom,Custom Request,Sandbox,DRYRUN-005,Expected skipped as duplicate in input.

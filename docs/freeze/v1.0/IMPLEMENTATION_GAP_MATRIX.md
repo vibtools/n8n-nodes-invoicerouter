@@ -1,6 +1,6 @@
 # Final Implementation Matrix
 
-Package version `1.2.0` implements all eight Version 1.0 frozen custom node types.
+Package version `1.5.0` implements all eight Version 1.0 frozen custom node types.
 
 | Area | Frozen target | Final implementation |
 |---|---|---|

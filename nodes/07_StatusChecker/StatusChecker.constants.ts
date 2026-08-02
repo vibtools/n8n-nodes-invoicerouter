@@ -1,2 +1,2 @@
 export const NODE_NAME = 'statusChecker';
-export const NODE_DISPLAY_NAME = 'Status Checker';
+export const NODE_DISPLAY_NAME = 'InvoiceRouter Status Checker';
