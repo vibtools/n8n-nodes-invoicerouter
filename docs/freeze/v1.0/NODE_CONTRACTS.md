@@ -32,6 +32,8 @@ Required engines:
 - health score/provider scoring
 - rate limiting and circuit breaker
 - feedback state update
+- optional per-item conditional routing by rules or preserved recipient custom fields
+- guarded `BLOCKED` output when conditional routing is required but no route matches
 
 ## 3. Invoice Template
 
@@ -73,8 +75,12 @@ Required behavior:
 - perform the only merge required by Version 1
 - select the provider preset/template
 - map internal fields to provider fields
-- construct URL, method, headers, body, query, content type, timeout, and idempotency value
+- attach request-mapping and response-policy metadata for downstream transport/status handling
+- construct URL, method, headers, body, query, content type, timeout, and structured idempotency metadata
 - validate all required provider and invoice fields
+- emit `providerValidation` errors/warnings for Request Builder and Send Guard decisions
+- attach `sendGuard` metadata for downstream send approval
+- build stable duplicate-prevention keys when configured
 - preserve item pairing
 - prevent secrets from appearing in normal output/log display
 - never execute HTTP
@@ -91,7 +97,13 @@ Required behavior:
 - apply timeout and connection handling
 - collect HTTP status, headers, body, latency, response size, and execution metadata
 - redact secrets from errors/logs
-- do not retry and do not make business decisions
+- optionally require approved `sendGuard` metadata
+- block real HTTP sends when Dry Run is off and the configured live-mode confirmation is missing
+- block live HTTP sends when final URL/header/query/body interpolation leaves unresolved template tokens
+- use response-policy success status codes when marking provider transport success
+- optionally reserve and persist live-send idempotency keys before transport
+- return `DUPLICATE` without calling the provider when an active idempotency key was already reserved or sent
+- do not retry and do not make business decisions beyond transport guard enforcement
 
 ## 7. Status Checker
 
@@ -102,16 +114,18 @@ Required behavior:
 
 - analyze HTTP status
 - select provider response adapter
-- extract invoice ID, invoice number, status, URLs, transaction/reference IDs, and errors
+- extract invoice ID, invoice number, status, URLs, transaction/reference IDs, and errors using fallback response paths
+- carry response-policy retry/non-retry hints into standard status
 - classify authentication, authorization, validation, rate-limit, network, provider, server, timeout, and unknown errors
 - normalize provider-specific statuses
+- treat Dry Run, queued, guarded blocked, and duplicate results as non-provider-transport executions
 - do not send a second API request in the default Version 1 response-analysis operation
 - do not retry or update business systems
 
 ## 8. Status Manager
 
 **Input:** standard status object.  
-**Output:** workflow result and management events.
+**Output:** workflow result, management events, execution log, and status writeback payload.
 
 Required behavior:
 
@@ -119,5 +133,8 @@ Required behavior:
 - retry queue entry and schedule (but not direct resend inside the same decision step)
 - provider feedback and health/cooldown recommendations
 - database/dashboard/metrics/analytics events
+- normalized `executionLog` audit payload
+- request/response mapping and policy visibility in execution-log/writeback payloads
+- normalized `statusWriteback` UPSERT payload for downstream writeback nodes
 - alert, notification, and audit events
-- final states: COMPLETED, PENDING_RETRY, FAILED, CANCELLED, PROCESSING
+- final states: COMPLETED, PENDING_RETRY, FAILED, CANCELLED, PROCESSING, BLOCKED, DUPLICATE

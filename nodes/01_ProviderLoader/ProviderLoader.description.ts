@@ -4,6 +4,7 @@ import { NODE_DISPLAY_NAME, NODE_NAME } from './ProviderLoader.constants';
 export const description: INodeTypeDescription = {
   displayName: NODE_DISPLAY_NAME,
   name: NODE_NAME,
+  icon: 'file:invoice-router-provider-loader.svg',
   group: ['transform'],
   version: 1,
   description: 'Validate and normalize Google Sheets provider account/action rows into a masked runtime provider library.',

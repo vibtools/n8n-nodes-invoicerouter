@@ -1,0 +1,49 @@
+{
+  "validationPackage": "InvoiceRouter Step 07 n8n dry-run validation",
+  "workflow": "workflows/InvoiceRouter-v1-production.json",
+  "requiredManualOverride": {
+    "providerSelector.environmentFilter": "sandbox",
+    "invoiceSender.dryRun": true,
+    "invoiceSender.liveModeConfirmation": ""
+  },
+  "expectedRows": {
+    "providerAccounts": {
+      "loadedEnabledProfiles": 2,
+      "disabledRowsIgnored": 1,
+      "visibleSecretsMasked": true
+    },
+    "emailList": {
+      "validUniqueRecipients": 3,
+      "expectedSkippedRows": 2,
+      "skippedReasons": [
+        "invalid email format",
+        "duplicate email in input"
+      ]
+    }
+  },
+  "expectedTransport": {
+    "routedRecipients": {
+      "count": 2,
+      "provider": "custom",
+      "action": "custom-request",
+      "environment": "sandbox",
+      "transportStatus": "DRY_RUN",
+      "sendGuardApproved": true
+    },
+    "unroutedRecipients": {
+      "count": 1,
+      "transportStatus": "BLOCKED",
+      "sendGuardApproved": false
+    }
+  },
+  "expectedStatusManager": {
+    "executionLogPresent": true,
+    "statusWritebackPresent": true,
+    "writebackAction": "UPSERT"
+  },
+  "mustRemainFalse": {
+    "providerHttpCallMade": false,
+    "realInvoiceCreated": false,
+    "dryRunDisabled": false
+  }
+}

@@ -2,6 +2,7 @@ import type { IDataObject, IExecuteFunctions } from '../types/N8n';
 import { cloneJson, isRecord, nowIso, toFiniteNumber, toStringValue } from '../utils/Helpers';
 
 export type AccountState = 'AVAILABLE' | 'LOCKED' | 'IN_USE' | 'COOLDOWN' | 'ERROR' | 'DISABLED';
+export type SendReservationStatus = 'RESERVED' | 'SENT' | 'FAILED';
 export type AllocationStrategy = 'firstAvailable' | 'roundRobin' | 'leastRecentlyUsed' | 'leastBusy' | 'highestHealth' | 'weighted';
 
 export interface SecretMaterial {
@@ -48,6 +49,7 @@ interface Pool {
 const pools = new Map<string, Pool>();
 const vault = new Map<string, SecretMaterial>();
 const usedRecipients = new Map<string, Set<string>>();
+const sendReservations = new Map<string, Map<string, IDataObject>>();
 
 export function executionIdentity(context: IExecuteFunctions, batchId = 'default'): {
   workflowId: string;
@@ -296,6 +298,54 @@ export function publicPoolSnapshot(scopeKey: string): IDataObject[] {
         }
       : null,
   }));
+}
+
+
+function purgeExpiredReservations(scope: Map<string, IDataObject>, now: number): void {
+  for (const [key, record] of scope.entries()) {
+    const expiresAt = toFiniteNumber(record.expiresAt, 0);
+    if (expiresAt > 0 && expiresAt <= now) scope.delete(key);
+  }
+}
+
+export function reserveInvoiceSend(scopeKey: string, key: string, record: IDataObject, ttlMs: number): IDataObject {
+  const safeScope = scopeKey.trim() || 'default';
+  const safeKey = key.trim();
+  if (!safeKey) return { reserved: false, duplicate: false, reason: 'EMPTY_IDEMPOTENCY_KEY' };
+  const now = Date.now();
+  const scope = sendReservations.get(safeScope) ?? new Map<string, IDataObject>();
+  purgeExpiredReservations(scope, now);
+  const existing = scope.get(safeKey);
+  if (existing && ['RESERVED', 'SENT'].includes(toStringValue(existing.status))) {
+    sendReservations.set(safeScope, scope);
+    return { reserved: false, duplicate: true, reason: `DUPLICATE_${toStringValue(existing.status)}`, existing: cloneJson(existing) };
+  }
+  const reservation: IDataObject = {
+    ...cloneJson(record), key: safeKey, scopeKey: safeScope, status: 'RESERVED', reservedAt: nowIso(), updatedAt: nowIso(),
+    expiresAt: now + Math.max(1, ttlMs),
+  };
+  scope.set(safeKey, reservation);
+  sendReservations.set(safeScope, scope);
+  return { reserved: true, duplicate: false, reservation: cloneJson(reservation) };
+}
+
+export function finalizeInvoiceSend(scopeKey: string, key: string, status: SendReservationStatus, updates: IDataObject = {}): IDataObject | undefined {
+  const safeScope = scopeKey.trim() || 'default';
+  const safeKey = key.trim();
+  if (!safeKey) return undefined;
+  const scope = sendReservations.get(safeScope);
+  if (!scope) return undefined;
+  const existing = scope.get(safeKey) ?? { key: safeKey, scopeKey: safeScope };
+  const next: IDataObject = { ...existing, ...cloneJson(updates), status, updatedAt: nowIso() };
+  scope.set(safeKey, next);
+  return cloneJson(next);
+}
+
+export function publicSendReservationSnapshot(scopeKey: string): IDataObject[] {
+  const scope = sendReservations.get(scopeKey.trim() || 'default');
+  if (!scope) return [];
+  purgeExpiredReservations(scope, Date.now());
+  return [...scope.values()].map((record) => cloneJson(record));
 }
 
 export function readPersistedFeedback(context: IExecuteFunctions): IDataObject[] {

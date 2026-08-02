@@ -37,6 +37,7 @@ export interface INodeProperty {
 export interface INodeTypeDescription {
   displayName: string;
   name: string;
+  icon?: string | { light: string; dark: string };
   group: string[];
   version: number;
   description: string;

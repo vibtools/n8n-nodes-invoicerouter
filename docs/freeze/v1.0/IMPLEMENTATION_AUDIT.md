@@ -1,4 +1,4 @@
-# InvoiceRouter 1.2.0 Forensic Implementation Audit
+# InvoiceRouter 1.5.0 Forensic Implementation Audit
 
 ## Audited input
 
@@ -43,6 +43,6 @@ The built-in Google Sheets node still sees the original row. This unavoidable Ve
 
 ## Production qualification
 
-The package passed validation, formatting, lint, TypeScript typecheck, build, 13 automated tests, and package dry-run. It is production-oriented for a single-process n8n runtime and supports controlled sequential processing by default. Multi-process queue deployments require an external shared-state backend before accounts are allocated across processes.
+The package passed validation, formatting, lint, TypeScript typecheck, build, 39 automated tests, and package dry-run. It is production-oriented for a single-process n8n runtime and supports controlled sequential processing by default. Multi-process queue deployments require an external shared-state backend before accounts are allocated across processes.
 
 Provider sandbox verification remains required because account-specific API prerequisites cannot be inferred from a generic Sheet row.

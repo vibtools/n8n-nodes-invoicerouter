@@ -1,2 +1,2 @@
 export const NODE_NAME = 'providerLoader';
-export const NODE_DISPLAY_NAME = 'Provider Loader';
+export const NODE_DISPLAY_NAME = 'InvoiceRouter Provider Loader';

@@ -1,0 +1,4 @@
+Enabled,Provider,Account,Environment,Action,Method,Base URL,Endpoint,Auth Type,API Version,Content-Type,Header Name,Header Value,API Key,API Secret,Extra Value,Timeout,Notes
+true,Custom,Dry Run Primary,Sandbox,Custom Request,POST,https://dry-run.invalid.local,/mock/invoices,Bearer,v1,application/json,Authorization,Bearer {{API_KEY}},dry-run-token-primary,,tenant-dry-run,30,Safe dry-run profile only; keep Invoice Sender Dry Run enabled.
+true,Custom,Dry Run Secondary,Sandbox,Custom Request,POST,https://dry-run.invalid.local,/mock/invoices-secondary,Bearer,v1,application/json,Authorization,Bearer {{API_KEY}},dry-run-token-secondary,,tenant-dry-run-secondary,30,Secondary profile for selection visibility in dry-run only.
+false,Custom,Disabled Demo,Sandbox,Custom Request,POST,https://dry-run.invalid.local,/disabled,Bearer,v1,application/json,Authorization,Bearer {{API_KEY}},disabled-demo-token,,tenant-disabled,30,Disabled row must not be selected.
