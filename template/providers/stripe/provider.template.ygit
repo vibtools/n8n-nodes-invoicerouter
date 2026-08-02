@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.vib.tools/invoicerouter/provider-template.schema.json",
+  "schemaVersion": "2.0",
+  "templateId": "template-002-stripe-complete-bulk-email",
+  "providerId": "stripe",
+  "displayName": "Stripe Complete Bulk Email Sending System",
+  "templateVersion": "2.0.0",
+  "invoiceRouterVersion": "2.0.0",
+  "supportTier": "tier-2-template-ready-live-proof-required",
+  "files": {
+    "workbook": "InvoiceRouter_TEMPLATE002_STRIPE_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx",
+    "n8nWorkflow": "InvoiceRouter_TEMPLATE002_STRIPE_COMPLETE_BULK_EMAIL_N8N_IMPORT.json",
+    "provider": "provider.csv",
+    "emailList": "email_list.csv",
+    "invoiceResults": "invoice_results.csv",
+    "lifecycleRecipe": "provider.lifecycle.json",
+    "declarativeRecipe": "provider.recipe.json",
+    "extraConfigExample": "extra-config.example.json",
+    "readme": "README.md",
+    "quickstart": "QUICKSTART.md"
+  },
+  "sheetContract": {
+    "providerSheet": "provider",
+    "emailListSheet": "email_list",
+    "invoiceResultsSheet": "invoice_results",
+    "emailListRequiredColumns": [
+      "Email"
+    ],
+    "emailListOptionalColumns": [
+      "Name",
+      "Address"
+    ]
+  },
+  "defaultSafetyMode": "dryRunValidation",
+  "liveBulkRequires": [
+    "SEND_REAL_INVOICES",
+    "SEND_BULK_REAL_INVOICES"
+  ],
+  "notes": "Template assets are public starter files. Stripe live sending must be proven in the user's n8n/Stripe environment before production claims."
+}

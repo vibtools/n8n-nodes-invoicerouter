@@ -17,7 +17,7 @@ for (const path of pkg.n8n?.nodes ?? []) {
 if ((pkg.n8n?.nodes ?? []).length !== 8) errors.push('Exactly eight n8n nodes must be registered.');
 if (pkg.n8n?.credentials) errors.push('Version 1 must not register the obsolete separate credential type.');
 if (pkg.invoiceRouterFreeze?.implementationStatus !== 'COMPLETE') errors.push('Implementation must be marked COMPLETE.');
-if (pkg.invoiceRouterFreeze?.sourceOfTruth !== 'VERSION_1_0_FREEZE.md') errors.push('Source of truth must be VERSION_1_0_FREEZE.md.');
+if (!['VERSION_1_0_FREEZE.md', 'docs/freeze/v1.0/V2_0_0_MASTER_UNIVERSAL_PROVIDER_LIFECYCLE.md'].includes(pkg.invoiceRouterFreeze?.sourceOfTruth)) errors.push('Source of truth must be a frozen InvoiceRouter architecture document.');
 if (errors.length) {
   console.error('Lint failed:');
   for (const error of errors) console.error(`- ${error}`);

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "2.0",
+  "providerId": "quickbooks",
+  "recipeId": "quickbooks",
+  "displayName": "QuickBooks",
+  "lifecycleModes": [
+    "createOnly",
+    "createPostAndSendEmail"
+  ],
+  "requiredAccountFields": [
+    "API Key",
+    "API Secret",
+    "Extra Value"
+  ],
+  "steps": [
+    "customer.search_by_email",
+    "customer.create_if_missing",
+    "invoice.create",
+    "invoice.send"
+  ]
+}

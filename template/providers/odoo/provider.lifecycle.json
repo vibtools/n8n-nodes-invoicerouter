@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "2.0",
+  "providerId": "odoo",
+  "recipeId": "odoo-complete-bulk-email",
+  "displayName": "Odoo Complete Bulk Email",
+  "supportTier": "tier-1-candidate-live-core-proven-email-proof-required",
+  "runtime": {
+    "type": "built_in_odoo_json_rpc",
+    "endpoint": "/jsonrpc"
+  },
+  "defaultLifecycleMode": "createPostAndSendEmail",
+  "lifecycleModes": [
+    "draftOnly",
+    "createAndPost",
+    "createPostAndSendEmail"
+  ],
+  "requiredAccountFields": [
+    "Base URL",
+    "Endpoint",
+    "Username",
+    "Password",
+    "Database"
+  ],
+  "requiredRecipientFields": [
+    "Email"
+  ],
+  "optionalRecipientFields": [
+    "Name",
+    "Address"
+  ],
+  "steps": [
+    "authenticate",
+    "customer.search_by_email",
+    "customer.create_if_missing",
+    "invoice.create",
+    "invoice.post",
+    "invoice.send_email"
+  ],
+  "extraConfig": {
+    "invoiceLifecycle": "createPostAndSendEmail",
+    "odooPostInvoice": true,
+    "odooSendInvoiceEmail": true,
+    "odooEmailForceSend": true,
+    "odooEmailBody": "Your invoice has been created and posted."
+  },
+  "writebackFields": [
+    "provider_customer_id",
+    "customer_status",
+    "post_status",
+    "email_send_requested",
+    "email_send_status",
+    "email_send_method",
+    "email_error_message"
+  ],
+  "sourceNotes": [
+    "Current InvoiceRouter v2 Odoo adapter uses Odoo JSON-RPC /jsonrpc.",
+    "Odoo 19 documentation states XML-RPC/JSON-RPC endpoints are scheduled for future removal and JSON-2 is the replacement."
+  ]
+}

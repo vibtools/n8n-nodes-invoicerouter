@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "2.0",
+  "providerId": "zoho-books",
+  "recipeId": "zoho-books",
+  "displayName": "Zoho Books",
+  "lifecycleModes": [
+    "draftOnly",
+    "createAndPost",
+    "createPostAndSendEmail"
+  ],
+  "requiredAccountFields": [
+    "API Key",
+    "Extra Value"
+  ],
+  "steps": [
+    "contact.search_by_email",
+    "contact.create_if_missing",
+    "invoice.create",
+    "invoice.mark_sent_or_send"
+  ]
+}

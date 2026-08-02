@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0 - Master Universal Provider Lifecycle
+
+### Release candidate cleanup
+
+- Removed the local-only PowerShell clean/verify helper from tracked release source so GitHub CI validation keeps the cross-platform Node.js automation contract.
+- Added ignore rules for local PowerShell helper scripts to prevent the same CI validation failure from recurring.
+
+- Added universal provider lifecycle modes for draft/create/post/send-email execution.
+- Added provider capability and lifecycle metadata.
+- Added Odoo automated post/send-email lifecycle support.
+- Added VibProject-compatible public structure: `config/`, `data/`, `src/`, `template/`, `PROJECT_STRUCTURE.md`, and `vibproject.ygit`.
+- Added `docs/docs.minifest.ygit`; `project/` is ignored for private development planning.
+
+
 ## 1.6.0 — Simple bulk email workflow and Odoo auto-customer handling
 
 - Simplifies the default workflow so `email_list` requires only `Email`; `Name` and `Address` are optional.
@@ -89,6 +103,15 @@
 - Enabled execution-log and status-writeback outputs in the bundled production workflow template.
 
 # Changelog
+
+## 2.0.0 - Master Universal Provider Lifecycle
+
+- Added universal provider lifecycle modes for draft/create/post/send-email execution.
+- Added provider capability and lifecycle metadata.
+- Added Odoo automated post/send-email lifecycle support.
+- Added VibProject-compatible public structure: `config/`, `data/`, `src/`, `template/`, `PROJECT_STRUCTURE.md`, and `vibproject.ygit`.
+- Added `docs/docs.minifest.ygit`; `project/` is ignored for private development planning.
+
 
 ## Unreleased — Step 12B n8n registry/UI install compatibility
 
@@ -193,3 +216,14 @@ The previous generic REST runtime remains in Git history and is superseded by th
 - Added workflow-level automatic retry branch: Status Manager -> Prepare Retry Request -> Wait Before Retry -> Invoice Sender.
 - Added preset self-check metadata to Status Checker, Status Manager, execution logs, and writeback rows.
 - Added documentation and validation for retry loop wiring.
+### Release-blocking hardening
+
+- Completed lifecycle writeback fields for customer/post/email-send status.
+- Added provider template manifests, canonical invoice_results headers, docs manifest repair, and template validation.
+- Added release-source audit tooling for clean publish artifacts.
+
+
+
+## Step 14D / v2.0.0 Declarative Provider Recipe Runtime
+
+Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice providers can define customer, invoice, post/finalize, and email-send steps in provider recipe JSON instead of requiring core node code changes. This is intended for compatible providers; non-standard OAuth, webhook, UI-only, or SDK-only flows may still require a dedicated adapter.

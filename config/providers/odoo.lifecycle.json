@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "2.0",
+  "providerId": "odoo",
+  "recipeId": "odoo",
+  "displayName": "Odoo",
+  "lifecycleModes": [
+    "draftOnly",
+    "createAndPost",
+    "createPostAndSendEmail"
+  ],
+  "requiredAccountFields": [
+    "Database",
+    "Username",
+    "Password"
+  ],
+  "steps": [
+    "customer.search_by_email",
+    "customer.create_if_missing",
+    "invoice.create",
+    "invoice.post",
+    "invoice.send_email"
+  ]
+}

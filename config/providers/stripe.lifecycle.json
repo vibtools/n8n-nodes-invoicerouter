@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "2.0",
+  "providerId": "stripe",
+  "recipeId": "stripe",
+  "displayName": "Stripe",
+  "lifecycleModes": [
+    "createOnly",
+    "createAndPost",
+    "createPostAndSendEmail"
+  ],
+  "requiredAccountFields": [
+    "API Key"
+  ],
+  "steps": [
+    "customer.search_by_email",
+    "customer.create_if_missing",
+    "invoice.create",
+    "invoice.finalize",
+    "invoice.send"
+  ]
+}

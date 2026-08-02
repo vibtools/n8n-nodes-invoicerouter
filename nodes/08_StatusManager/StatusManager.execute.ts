@@ -95,6 +95,9 @@ function buildExecutionLog(input: {
     workflow: workflowIdentity(input.context), requestId: input.status.requestId, transactionId: input.status.transactionId,
     idempotencyKey: idempotencyKey(input.status), providerId: input.status.providerId, profileId: input.status.profileId,
     accountId: input.status.accountId, actionId: input.status.actionId, workerId: input.status.workerId,
+      providerCustomerId: input.status.providerCustomerId, customerStatus: input.status.customerStatus, postStatus: input.status.postStatus,
+      emailSendRequested: input.status.emailSendRequested, emailSendStatus: input.status.emailSendStatus,
+      emailSendMethod: input.status.emailSendMethod, emailErrorMessage: input.status.emailErrorMessage,
     recipientEmail: input.status.recipientEmail, result: input.result, workflowState: input.workflowState,
     invoiceStatus: input.status.invoiceStatus, providerStatus: input.status.providerStatus,
     providerInvoiceId: input.status.providerInvoiceId, invoiceNumber: input.status.invoiceNumber,
@@ -113,6 +116,22 @@ function buildExecutionLog(input: {
     retryAfterSeconds: input.status.retryAfterSeconds, retryDelayHintSeconds: input.status.retryDelayHintSeconds,
     checkedAt: input.checkedAt, managedAt: input.managedAt,
   };
+}
+
+
+function requestMappingValue(status: IDataObject, key: string): unknown {
+  const mapping = isRecord(status.requestMapping) ? status.requestMapping : {};
+  return mapping[key];
+}
+
+function requestMappingLifecycle(status: IDataObject): IDataObject {
+  const mapping = isRecord(status.requestMapping) ? status.requestMapping : {};
+  return isRecord(mapping.lifecycle) ? mapping.lifecycle : {};
+}
+
+function lifecycleStepsText(status: IDataObject): string {
+  const steps = requestMappingValue(status, 'lifecycleSteps') ?? requestMappingLifecycle(status).steps;
+  return Array.isArray(steps) ? JSON.stringify(steps) : toStringValue(steps);
 }
 
 function buildStatusWriteback(input: {
@@ -137,6 +156,10 @@ function buildStatusWriteback(input: {
       actionId: input.status.actionId, workerId: input.status.workerId, recipientEmail: input.status.recipientEmail,
       workflowState: input.workflowState, result: input.result, invoiceStatus: input.status.invoiceStatus,
       providerStatus: input.status.providerStatus, transportStatus: input.status.transportStatus,
+      providerCustomerId: input.status.providerCustomerId, customerStatus: input.status.customerStatus,
+      postStatus: input.status.postStatus, emailSendRequested: input.status.emailSendRequested,
+      emailSendStatus: input.status.emailSendStatus, emailSendMethod: input.status.emailSendMethod,
+      emailErrorMessage: input.status.emailErrorMessage,
       providerInvoiceId: input.status.providerInvoiceId, invoiceNumber: input.status.invoiceNumber,
       invoiceUrl: input.status.invoiceUrl, pdfUrl: input.status.pdfUrl, httpStatus: input.status.httpStatus,
       errorType: input.status.errorType, errorCategory: input.status.errorCategory, errorSeverity: input.status.errorSeverity,
@@ -145,6 +168,9 @@ function buildStatusWriteback(input: {
       retryDecisionSource: toStringValue(input.retryDecision.source), retryDecisionReason: toStringValue(input.retryDecision.reason),
       retryAfterSeconds: input.status.retryAfterSeconds, retryDelayHintSeconds: input.status.retryDelayHintSeconds,
       nextRetryAt: isRecord(input.retryQueueEntry) ? input.retryQueueEntry.scheduledAt : undefined,
+      lifecycleMode: toStringValue(requestMappingValue(input.status, 'lifecycleMode') ?? requestMappingLifecycle(input.status).mode),
+      lifecycleSteps: lifecycleStepsText(input.status),
+      providerRecipeId: toStringValue(requestMappingLifecycle(input.status).recipeId ?? requestMappingValue(input.status, 'recipeId')),
       activationMode: input.status.activationMode, activationApproved: input.status.activationApproved,
       activationSafety: input.status.activationSafety, presetSelfCheckMode: input.status.presetSelfCheckMode,
       presetSelfCheckApproved: input.status.presetSelfCheckApproved, presetSelfCheck: input.status.presetSelfCheck, bulkRunId: input.status.bulkRunId,
@@ -271,6 +297,11 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
         requestId: status.requestId, transactionId: status.transactionId, providerId: status.providerId,
         accountId: status.accountId, recipientEmail: status.recipientEmail, invoiceStatus: status.invoiceStatus,
         result, workflowState, providerInvoiceId: status.providerInvoiceId, invoiceNumber: status.invoiceNumber,
+        providerCustomerId: status.providerCustomerId, customerStatus: status.customerStatus, postStatus: status.postStatus,
+        emailSendRequested: status.emailSendRequested, emailSendStatus: status.emailSendStatus,
+        emailSendMethod: status.emailSendMethod, emailErrorMessage: status.emailErrorMessage,
+        lifecycleMode: toStringValue(requestMappingValue(status, 'lifecycleMode') ?? requestMappingLifecycle(status).mode),
+        lifecycleSteps: lifecycleStepsText(status), providerRecipeId: toStringValue(requestMappingLifecycle(status).recipeId ?? requestMappingValue(status, 'recipeId')),
         invoiceUrl: status.invoiceUrl, pdfUrl: status.pdfUrl, writebackKey: statusWriteback.key,
         errorType, errorCategory: status.errorCategory, retryScheduled: shouldRetry, retryDelaySeconds: retryDelay,
         activationMode: status.activationMode, activationApproved: status.activationApproved,
