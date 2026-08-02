@@ -10,7 +10,9 @@
     "invoiceResults": "invoice_results.csv",
     "lifecycleRecipe": "provider.lifecycle.json",
     "readme": "README.md",
-    "declarativeRecipeExample": "generic-http.declarative-example.json"
+    "declarativeRecipeExample": "generic-http.declarative-example.json",
+    "providerSandbox": "provider.sandbox.csv",
+    "providerLive": "provider.live.csv"
   },
   "sheetContract": {
     "providerSheet": "provider",
@@ -28,5 +30,11 @@
       "Tax ID"
     ]
   },
-  "notes": "Provider template pack manifest. Templates are starter assets; live provider proof must be recorded before production claims."
+  "notes": "Provider template pack manifest. Templates are starter assets; live provider proof must be recorded before production claims.",
+  "modeSupport": {
+    "sandbox": true,
+    "live": true,
+    "dryRunDefault": true,
+    "liveSafety": "live templates keep InvoiceRouter live confirmation and bulk confirmation tokens explicit"
+  }
 }

@@ -17,7 +17,16 @@
     "declarativeRecipe": "provider.recipe.json",
     "extraConfigExample": "extra-config.example.json",
     "readme": "README.md",
-    "quickstart": "QUICKSTART.md"
+    "quickstart": "QUICKSTART.md",
+    "providerSandbox": "provider.sandbox.csv",
+    "providerLive": "provider.live.csv",
+    "workflowDryRun": "n8n-import-workflow-dry-run.json",
+    "workflowSandboxCanary": "n8n-import-workflow-sandbox-canary.json",
+    "workflowSandboxBulk": "n8n-import-workflow-sandbox-bulk.json",
+    "workflowLiveCanary": "n8n-import-workflow-live-canary.json",
+    "workflowLiveBulk": "n8n-import-workflow-live-bulk.json",
+    "workbookSandbox": "google-sheets-template-sandbox.xlsx",
+    "workbookLive": "google-sheets-template-live.xlsx"
   },
   "sheetContract": {
     "providerSheet": "provider",
@@ -36,5 +45,11 @@
     "SEND_REAL_INVOICES",
     "SEND_BULK_REAL_INVOICES"
   ],
-  "notes": "Template assets are public starter files. Stripe live sending must be proven in the user's n8n/Stripe environment before production claims."
+  "notes": "Template assets are public starter files. Stripe live sending must be proven in the user's n8n/Stripe environment before production claims.",
+  "modeSupport": {
+    "sandbox": true,
+    "live": true,
+    "dryRunDefault": true,
+    "liveSafety": "live templates keep InvoiceRouter live confirmation and bulk confirmation tokens explicit"
+  }
 }

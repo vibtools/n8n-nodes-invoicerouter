@@ -1,0 +1,1267 @@
+{
+  "name": "InvoiceRouter v2.0.0 - Zoho Books Complete Bulk Email Template - Sandbox Real Send",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1260,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ZOHO_BOOKS_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "provider",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "provider-sheet",
+      "name": "Google Sheets - Provider Accounts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -1040,
+        -160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchId": "={{$execution.id}}",
+        "sourceName": "provider",
+        "duplicatePolicy": "error",
+        "includeDisabled": false,
+        "strictValidation": true
+      },
+      "id": "provider-loader",
+      "name": "Provider Loader",
+      "type": "n8n-nodes-invoicerouter.providerLoader",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ZOHO_BOOKS_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "email_list",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "email-sheet",
+      "name": "Google Sheets - Email List",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -1040,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchId": "={{$execution.id}}",
+        "emailField": "Email",
+        "nameField": "Name",
+        "nameGeneration": "formatted",
+        "invalidPolicy": "skip",
+        "preserveCustomColumns": false,
+        "preventReuse": true,
+        "addressField": "Address"
+      },
+      "id": "email-list",
+      "name": "Email List",
+      "type": "n8n-nodes-invoicerouter.emailList",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "templateMode": "manual",
+        "invoiceId": "#INV#",
+        "invoiceNumber": "INV-#INV#",
+        "invoiceDate": "={{$now.toISODate()}}",
+        "dueDate": "={{$now.plus({days: 30}).toISODate()}}",
+        "currency": "USD",
+        "lineItemsJson": "[{\"name\":\"Service\",\"description\":\"Professional service for #NAME#\",\"quantity\":1,\"unit_price\":100}]",
+        "tax": 0,
+        "discount": 0,
+        "shipping": 0,
+        "paymentTerms": "Net 30",
+        "notes": "Thank you, #NAME#. Reference #TRX#.",
+        "customFieldsJson": "{\"customer_id\":\"declarative-auto-customer\",\"zohoRate\":100,\"zohoQuantity\":1,\"zohoItemName\":\"Professional Service\",\"zohoPaymentTerms\":30,\"zohoSendFromOrgEmail\":true,\"zohoEmailSubject\":\"Invoice from InvoiceRouter\",\"zohoEmailBody\":\"Your invoice has been created and sent from Zoho Books.\"}",
+        "strictValidation": true
+      },
+      "id": "invoice-template",
+      "name": "Invoice Template",
+      "type": "n8n-nodes-invoicerouter.invoiceTemplate",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "strategy": "firstAvailable",
+        "providerFilter": "Zoho Books",
+        "actionFilter": "Create Invoice",
+        "environmentFilter": "sandbox",
+        "queueWhenUnavailable": true,
+        "lockTimeoutSeconds": 300,
+        "maxRequestsPerMinute": 60,
+        "circuitBreakerThreshold": 5,
+        "processingMode": "sequential",
+        "conditionalRouting": false,
+        "routingRulesJson": "[]",
+        "routeProviderPath": "recipient.customFields.Provider",
+        "routeActionPath": "recipient.customFields.Action",
+        "routeEnvironmentPath": "recipient.customFields.Environment",
+        "requireConditionalMatch": false,
+        "unmatchedRouteBehavior": "block"
+      },
+      "id": "provider-selector",
+      "name": "Provider Selector",
+      "type": "n8n-nodes-invoicerouter.providerSelector",
+      "typeVersion": 1,
+      "position": [
+        -520,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "strictProviderWarnings": false,
+        "customBodyJson": "{}",
+        "extraHeadersJson": "{}",
+        "extraQueryJson": "{}",
+        "idempotencyHeader": "Idempotency-Key",
+        "allowHttp": false,
+        "sendGuardMode": "strict",
+        "strictProviderValidation": true,
+        "idempotencyKeyMode": "providerInvoiceRecipient",
+        "idempotencyScope": "workflow"
+      },
+      "id": "request-builder",
+      "name": "Request Builder",
+      "type": "n8n-nodes-invoicerouter.requestBuilder",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "dryRun": false,
+        "includeResponseBody": true,
+        "stopOnTransportError": false,
+        "requireSendGuard": true,
+        "liveModeConfirmation": "",
+        "preventDuplicateSends": true,
+        "duplicateTtlHours": 720,
+        "reservationTtlMinutes": 15,
+        "activationSafetyMode": "sandboxRealSend",
+        "expectedEnvironment": "sandbox",
+        "sandboxModeConfirmation": "SEND_SANDBOX_INVOICES",
+        "enableBulkSafety": true,
+        "maxInvoicesPerExecution": 100,
+        "requireUniformEnvironment": true,
+        "delayBetweenSendsMs": 250,
+        "maxFailedSendsBeforeAbort": 5,
+        "stopOnCriticalBulkError": true,
+        "sandboxBulkConfirmation": "SEND_BULK_SANDBOX_INVOICES",
+        "liveBulkConfirmation": "",
+        "productionPresetMode": "sandboxRealSend",
+        "enableBulkRunSafety": true,
+        "delayBetweenRealSendsMs": 250
+      },
+      "id": "invoice-sender",
+      "name": "Invoice Sender",
+      "type": "n8n-nodes-invoicerouter.invoiceSender",
+      "typeVersion": 1,
+      "position": [
+        60,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "includeParsedMetadata": true,
+        "unknownSuccessStatus": "CREATED"
+      },
+      "id": "status-checker",
+      "name": "Status Checker",
+      "type": "n8n-nodes-invoicerouter.statusChecker",
+      "typeVersion": 1,
+      "position": [
+        320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "retryLimit": 0,
+        "retryBaseDelaySeconds": 30,
+        "cooldownSeconds": 30,
+        "disableOnAuthFailure": true,
+        "alertOnFailure": true,
+        "includeEvents": true,
+        "includeExecutionLog": true,
+        "persistExecutionLog": false,
+        "executionLogRetention": 500,
+        "includeStatusWriteback": true,
+        "writebackTarget": "invoice_results",
+        "writebackKeyMode": "idempotencyKey",
+        "retryMaxDelaySeconds": 900,
+        "respectRetryAfterHeader": true
+      },
+      "id": "status-manager",
+      "name": "Status Manager",
+      "type": "n8n-nodes-invoicerouter.statusManager",
+      "typeVersion": 1,
+      "position": [
+        580,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Zoho Books Complete Bulk Email Template\\n\\nDefault import is dry-run safe. Use the Zoho Books Google Sheets template, replace spreadsheet ID/credential, run dry-run first, then test organization real send, then live canary, then live bulk.",
+        "height": 460,
+        "width": 560
+      },
+      "id": "setup-note",
+      "name": "Production Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => value === undefined || value === null ? '' : String(Boolean(value));\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_customer_id: text(values.providerCustomerId),\n      customer_status: text(values.customerStatus),\n      post_status: text(values.postStatus),\n      email_send_requested: boolText(values.emailSendRequested),\n      email_send_status: text(values.emailSendStatus),\n      email_send_method: text(values.emailSendMethod),\n      email_error_message: text(values.emailErrorMessage),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      lifecycle_mode: text(values.lifecycleMode),\n      lifecycle_steps: text(values.lifecycleSteps),\n      provider_recipe_id: text(values.providerRecipeId),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
+      },
+      "id": "prepare-status-writeback-row",
+      "name": "Prepare Status Writeback Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ZOHO_BOOKS_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "invoice_results",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "writeback_key": "={{ $json.writeback_key }}",
+            "writeback_action": "={{ $json.writeback_action }}",
+            "writeback_target": "={{ $json.writeback_target }}",
+            "key_mode": "={{ $json.key_mode }}",
+            "request_id": "={{ $json.request_id }}",
+            "transaction_id": "={{ $json.transaction_id }}",
+            "idempotency_key": "={{ $json.idempotency_key }}",
+            "provider_id": "={{ $json.provider_id }}",
+            "profile_id": "={{ $json.profile_id }}",
+            "account_id": "={{ $json.account_id }}",
+            "action_id": "={{ $json.action_id }}",
+            "worker_id": "={{ $json.worker_id }}",
+            "recipient_email": "={{ $json.recipient_email }}",
+            "workflow_state": "={{ $json.workflow_state }}",
+            "result": "={{ $json.result }}",
+            "invoice_status": "={{ $json.invoice_status }}",
+            "provider_status": "={{ $json.provider_status }}",
+            "transport_status": "={{ $json.transport_status }}",
+            "provider_customer_id": "={{ $json.provider_customer_id }}",
+            "customer_status": "={{ $json.customer_status }}",
+            "post_status": "={{ $json.post_status }}",
+            "email_send_requested": "={{ $json.email_send_requested }}",
+            "email_send_status": "={{ $json.email_send_status }}",
+            "email_send_method": "={{ $json.email_send_method }}",
+            "email_error_message": "={{ $json.email_error_message }}",
+            "provider_invoice_id": "={{ $json.provider_invoice_id }}",
+            "invoice_number": "={{ $json.invoice_number }}",
+            "invoice_url": "={{ $json.invoice_url }}",
+            "pdf_url": "={{ $json.pdf_url }}",
+            "http_status": "={{ $json.http_status }}",
+            "error_type": "={{ $json.error_type }}",
+            "error_category": "={{ $json.error_category }}",
+            "error_severity": "={{ $json.error_severity }}",
+            "error_code": "={{ $json.error_code }}",
+            "error_message": "={{ $json.error_message }}",
+            "retry_scheduled": "={{ $json.retry_scheduled }}",
+            "retry_count": "={{ $json.retry_count }}",
+            "retry_delay_seconds": "={{ $json.retry_delay_seconds }}",
+            "retry_decision_source": "={{ $json.retry_decision_source }}",
+            "retry_decision_reason": "={{ $json.retry_decision_reason }}",
+            "retry_after_seconds": "={{ $json.retry_after_seconds }}",
+            "retry_delay_hint_seconds": "={{ $json.retry_delay_hint_seconds }}",
+            "next_retry_at": "={{ $json.next_retry_at }}",
+            "lifecycle_mode": "={{ $json.lifecycle_mode }}",
+            "lifecycle_steps": "={{ $json.lifecycle_steps }}",
+            "provider_recipe_id": "={{ $json.provider_recipe_id }}",
+            "preset_self_check_mode": "={{ $json.preset_self_check_mode }}",
+            "preset_self_check_approved": "={{ $json.preset_self_check_approved }}",
+            "preset_self_check": "={{ $json.preset_self_check }}",
+            "activation_mode": "={{ $json.activation_mode }}",
+            "activation_approved": "={{ $json.activation_approved }}",
+            "activation_safety": "={{ $json.activation_safety }}",
+            "bulk_run_id": "={{ $json.bulk_run_id }}",
+            "bulk_item_number": "={{ $json.bulk_item_number }}",
+            "bulk_total_items": "={{ $json.bulk_total_items }}",
+            "bulk_decision": "={{ $json.bulk_decision }}",
+            "bulk_safety": "={{ $json.bulk_safety }}",
+            "bulk_summary": "={{ $json.bulk_summary }}",
+            "retryable_by_policy": "={{ $json.retryable_by_policy }}",
+            "non_retryable_by_policy": "={{ $json.non_retryable_by_policy }}",
+            "duplicate_prevention": "={{ $json.duplicate_prevention }}",
+            "checked_at": "={{ $json.checked_at }}",
+            "managed_at": "={{ $json.managed_at }}",
+            "updated_at": "={{ $json.updated_at }}"
+          },
+          "matchingColumns": [
+            "writeback_key"
+          ],
+          "schema": [
+            {
+              "id": "writeback_key",
+              "displayName": "writeback_key",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "writeback_action",
+              "displayName": "writeback_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "writeback_target",
+              "displayName": "writeback_target",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "key_mode",
+              "displayName": "key_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "request_id",
+              "displayName": "request_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "transaction_id",
+              "displayName": "transaction_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "idempotency_key",
+              "displayName": "idempotency_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_id",
+              "displayName": "provider_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "profile_id",
+              "displayName": "profile_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "action_id",
+              "displayName": "action_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "worker_id",
+              "displayName": "worker_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "recipient_email",
+              "displayName": "recipient_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "workflow_state",
+              "displayName": "workflow_state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "invoice_status",
+              "displayName": "invoice_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_status",
+              "displayName": "provider_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "transport_status",
+              "displayName": "transport_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_customer_id",
+              "displayName": "provider_customer_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "customer_status",
+              "displayName": "customer_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "post_status",
+              "displayName": "post_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_send_requested",
+              "displayName": "email_send_requested",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_send_status",
+              "displayName": "email_send_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_send_method",
+              "displayName": "email_send_method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_error_message",
+              "displayName": "email_error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_invoice_id",
+              "displayName": "provider_invoice_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "invoice_number",
+              "displayName": "invoice_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "invoice_url",
+              "displayName": "invoice_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "pdf_url",
+              "displayName": "pdf_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "http_status",
+              "displayName": "http_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_type",
+              "displayName": "error_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_category",
+              "displayName": "error_category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_severity",
+              "displayName": "error_severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_code",
+              "displayName": "error_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_scheduled",
+              "displayName": "retry_scheduled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_count",
+              "displayName": "retry_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_delay_seconds",
+              "displayName": "retry_delay_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_decision_source",
+              "displayName": "retry_decision_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_decision_reason",
+              "displayName": "retry_decision_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_after_seconds",
+              "displayName": "retry_after_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_delay_hint_seconds",
+              "displayName": "retry_delay_hint_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "next_retry_at",
+              "displayName": "next_retry_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "lifecycle_mode",
+              "displayName": "lifecycle_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "lifecycle_steps",
+              "displayName": "lifecycle_steps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_recipe_id",
+              "displayName": "provider_recipe_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "preset_self_check_mode",
+              "displayName": "preset_self_check_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "preset_self_check_approved",
+              "displayName": "preset_self_check_approved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "preset_self_check",
+              "displayName": "preset_self_check",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_mode",
+              "displayName": "activation_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_approved",
+              "displayName": "activation_approved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_safety",
+              "displayName": "activation_safety",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_run_id",
+              "displayName": "bulk_run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_item_number",
+              "displayName": "bulk_item_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_total_items",
+              "displayName": "bulk_total_items",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_decision",
+              "displayName": "bulk_decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_safety",
+              "displayName": "bulk_safety",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_summary",
+              "displayName": "bulk_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retryable_by_policy",
+              "displayName": "retryable_by_policy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "non_retryable_by_policy",
+              "displayName": "non_retryable_by_policy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "duplicate_prevention",
+              "displayName": "duplicate_prevention",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "checked_at",
+              "displayName": "checked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "managed_at",
+              "displayName": "managed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "status-writeback-sheet",
+      "name": "Google Sheets - Status Writeback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1120,
+        120
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const retryItems = [];\nfor (const item of items) {\n  const management = item.json.management || {};\n  if (management.retryScheduled !== true || !management.retryQueueEntry) continue;\n  const delaySeconds = Math.max(1, Number(management.retryDelaySeconds || management.retryQueueEntry.delaySeconds || 1));\n  retryItems.push({\n    json: {\n      ...item.json,\n      retryCount: Number(management.retryCount || 0),\n      retryDelaySeconds: delaySeconds,\n      retryQueueEntry: management.retryQueueEntry,\n      retryLoop: {\n        enabled: true,\n        source: 'Status Manager',\n        nextRetryCount: Number(management.retryCount || 0),\n        delaySeconds,\n        scheduledAt: management.retryQueueEntry.scheduledAt || '',\n        reason: management.retryQueueEntry.reason || '',\n      },\n    },\n    pairedItem: item.pairedItem,\n  });\n}\nreturn retryItems;"
+      },
+      "id": "prepare-retry-request",
+      "name": "Prepare Retry Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ Math.max(1, Number($json.retryDelaySeconds || 1)) }}",
+        "unit": "seconds"
+      },
+      "id": "wait-before-retry",
+      "name": "Wait Before Retry",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Provider Accounts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Sheets - Email List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Invoice Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Provider Accounts": {
+      "main": [
+        [
+          {
+            "node": "Provider Loader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provider Loader": {
+      "main": [
+        [
+          {
+            "node": "Provider Selector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Email List": {
+      "main": [
+        [
+          {
+            "node": "Email List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email List": {
+      "main": [
+        [
+          {
+            "node": "Provider Selector",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Provider Selector": {
+      "main": [
+        [
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Template": {
+      "main": [
+        [
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Request Builder": {
+      "main": [
+        [
+          {
+            "node": "Invoice Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Sender": {
+      "main": [
+        [
+          {
+            "node": "Status Checker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Checker": {
+      "main": [
+        [
+          {
+            "node": "Status Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Manager": {
+      "main": [
+        [
+          {
+            "node": "Prepare Status Writeback Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Retry Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Status Writeback Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Status Writeback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Retry Request": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Retry": {
+      "main": [
+        [
+          {
+            "node": "Invoice Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": false
+  },
+  "versionId": "invoice-router-v1-production-freeze",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "invoiceRouterFreeze": "1.0",
+    "invoiceRouterRelease": "2.0.0",
+    "template": "template-003-zoho-books-complete-bulk-email",
+    "spreadsheetPlaceholder": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
+    "invoiceRouterWorkflow": "master-universal-provider-lifecycle"
+  },
+  "tags": [
+    {
+      "name": "InvoiceRouter"
+    },
+    {
+      "name": "Zoho Books"
+    },
+    {
+      "name": "Template003"
+    }
+  ]
+}

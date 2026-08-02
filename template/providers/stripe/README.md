@@ -62,3 +62,17 @@ Stripe invoice item amounts are in the smallest currency unit. The default n8n I
 ## Production claim
 
 This is a provider template. Run Stripe test-mode proof and one live canary before using it for live bulk.
+
+## Sandbox + live mode files
+
+This template pack now includes both sandbox/test and live-ready files. The original import remains dry-run safe. Use the explicit mode files below when you want real provider API execution.
+
+| Mode | Workbook | Workflow | Provider CSV |
+|---|---|---|---|
+| Dry-run/default | `InvoiceRouter_TEMPLATE002_STRIPE_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx` | `n8n-import-workflow-dry-run.json` | `provider.csv` |
+| Sandbox canary | `google-sheets-template-sandbox.xlsx` | `n8n-import-workflow-sandbox-canary.json` | `provider.sandbox.csv` |
+| Sandbox bulk | `google-sheets-template-sandbox.xlsx` | `n8n-import-workflow-sandbox-bulk.json` | `provider.sandbox.csv` |
+| Live canary | `google-sheets-template-live.xlsx` | `n8n-import-workflow-live-canary.json` | `provider.live.csv` |
+| Live bulk | `google-sheets-template-live.xlsx` | `n8n-import-workflow-live-bulk.json` | `provider.live.csv` |
+
+Live bulk keeps InvoiceRouter safety tokens enabled: `SEND_REAL_INVOICES` and `SEND_BULK_REAL_INVOICES`.

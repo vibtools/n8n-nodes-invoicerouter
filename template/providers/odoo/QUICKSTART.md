@@ -44,3 +44,14 @@ Replace the Google Sheet ID and Google credential in all three Google Sheets nod
 5. Live bulk.
 
 Never start with live bulk.
+
+## Sandbox/live file choice
+
+For Odoo, choose the pair that matches your target mode:
+
+- Sandbox canary: `google-sheets-template-sandbox.xlsx` + `n8n-import-workflow-sandbox-canary.json`
+- Sandbox bulk: `google-sheets-template-sandbox.xlsx` + `n8n-import-workflow-sandbox-bulk.json`
+- Live canary: `google-sheets-template-live.xlsx` + `n8n-import-workflow-live-canary.json`
+- Live bulk: `google-sheets-template-live.xlsx` + `n8n-import-workflow-live-bulk.json`
+
+Start live with the canary workflow before the bulk workflow.

@@ -15,3 +15,14 @@
 7. Then run test organization/sandbox one-row real send.
 8. Then run live canary one-row.
 9. Only then run live bulk.
+
+## Sandbox/live file choice
+
+For Zoho Books, choose the pair that matches your target mode:
+
+- Sandbox canary: `google-sheets-template-sandbox.xlsx` + `n8n-import-workflow-sandbox-canary.json`
+- Sandbox bulk: `google-sheets-template-sandbox.xlsx` + `n8n-import-workflow-sandbox-bulk.json`
+- Live canary: `google-sheets-template-live.xlsx` + `n8n-import-workflow-live-canary.json`
+- Live bulk: `google-sheets-template-live.xlsx` + `n8n-import-workflow-live-bulk.json`
+
+Start live with the canary workflow before the bulk workflow.
