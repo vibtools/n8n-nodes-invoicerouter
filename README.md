@@ -1,9 +1,12 @@
-# InvoiceRouter
+# InvoiceRouter for n8n
+
+## v2.0.1 Production Email Correctness Hotfix
+
+InvoiceRouter `2.0.1` executes the standard headless Odoo invoice-send wizard, reports email state from provider-side evidence, preserves queued/failed/unverified outcomes, and resumes post/email retries against the existing provider invoice. The frozen eight-node architecture and v2 master workflow topology are unchanged.
 
 ## v2.0.0 Master Universal Provider Lifecycle
 
-InvoiceRouter v2.0.0 stabilizes the master model: one package, one master workflow, universal provider lifecycle modes, public provider templates under `template/`, public documentation under `docs/`, and private local planning under ignored `project/`.
- for n8n
+InvoiceRouter is the Vib Tools eight-node n8n community package for guarded provider invoice lifecycles. The master model keeps one package and one frozen custom-node topology while provider adapters execute customer resolution, invoice creation, posting/finalization, email sending, evidence collection, safe retry resume, and status writeback.
 
 [![InvoiceRouter CI](https://github.com/vibtools/n8n-nodes-invoicerouter/actions/workflows/ci.yml/badge.svg)](https://github.com/vibtools/n8n-nodes-invoicerouter/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-invoicerouter.svg)](https://www.npmjs.com/package/n8n-nodes-invoicerouter)
@@ -11,9 +14,9 @@ InvoiceRouter v2.0.0 stabilizes the master model: one package, one master workfl
 
 InvoiceRouter is an eight-node n8n community-node package for loading many provider accounts from Google Sheets, assigning accounts safely, personalizing invoice data, executing provider requests, standardizing results, and creating retry/metrics/alert/audit events.
 
-**Package version:** `1.6.0`  
-**Architecture:** Version 1.0 Final Freeze  
-**Implementation:** Complete — 8/8 custom nodes registered; v1.5.0 hardened release identity
+**Package version:** `2.0.1`  
+**Architecture:** Version 2.0 master lifecycle over the frozen 8-node topology  
+**Implementation:** 8/8 custom nodes registered; final publication remains blocked until the complete-project forensic audit passes
 
 
 
@@ -57,7 +60,7 @@ See [`docs/freeze/v1.0/V1_5_0_BUILD_INSTALL_LIVE_TEST_RUNBOOK.md`](docs/freeze/v
 
 ## n8n registry/UI install compatibility
 
-Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@1.5.0`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
+Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.0.1`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
 
 The n8n editor display names are now prefixed for searchability:
 
@@ -105,11 +108,13 @@ Request Builder -> Invoice Sender -> Status Checker -> Status Manager
                                                        └─ Prepare Status Writeback Row -> Google Sheets: invoice_results
 ```
 
-The importable workflow is included at:
+The canonical master workflow is included at:
 
 ```text
-workflows/InvoiceRouter-v1-production.json
+workflows/InvoiceRouter-v2-master-universal.json
 ```
+
+The v1 and v1.6 workflow files remain packaged as compatibility/reference templates and are not removed.
 
 ## Custom nodes
 
@@ -120,9 +125,9 @@ workflows/InvoiceRouter-v1-production.json
 | 3 | **InvoiceRouter Invoice Template** | Builds fixed invoice fields, repeatable line items, totals, payment terms, custom fields, and dynamic tag definitions. |
 | 4 | **InvoiceRouter Email List** | Validates recipients, removes duplicate emails, generates missing names, preserves custom columns, and reserves each email once per batch. |
 | 5 | **InvoiceRouter Request Builder** | Merges exactly one account + one template + one recipient, resolves dynamic tags, applies provider presets, validates send readiness, and creates one idempotent ready request. |
-| 6 | **InvoiceRouter Invoice Sender** | Resolves the runtime credential, enforces guard/duplicate prevention, executes exactly one HTTP request when allowed, measures latency/size, and returns a redacted raw result. |
-| 7 | **InvoiceRouter Status Checker** | Analyzes the raw response, classifies errors, extracts invoice metadata, and emits a standard status object. |
-| 8 | **InvoiceRouter Status Manager** | Applies retry policy, emits management events, determines the final workflow state, updates provider feedback, and emits normalized execution-log/writeback payloads. |
+| 6 | **InvoiceRouter Invoice Sender** | Resolves runtime credentials, enforces activation/duplicate/bulk gates, executes provider lifecycle stages, uses the Odoo send wizard for invoice email, records provider evidence, and resumes approved post/email retries against the existing invoice. |
+| 7 | **InvoiceRouter Status Checker** | Analyzes provider and lifecycle evidence, distinguishes success/partial/failure outcomes, classifies errors, and emits a standard status object. |
+| 8 | **InvoiceRouter Status Manager** | Applies retry policy, creates approved lifecycle-resume requests, emits truthful bulk counters and management events, and produces normalized execution-log/writeback payloads. |
 
 `Manual Trigger` and `Google Sheets` are built-in n8n nodes and are not part of this package.
 
@@ -496,3 +501,40 @@ InvoiceRouter v2.0.0 now includes provider lifecycle writeback, canonical provid
 ## Step 14D / v2.0.0 Declarative Provider Recipe Runtime
 
 Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice providers can define customer, invoice, post/finalize, and email-send steps in provider recipe JSON instead of requiring core node code changes. This is intended for compatible providers; non-standard OAuth, webhook, UI-only, or SDK-only flows may still require a dedicated adapter.
+
+## Real invoice email evidence and truthful status
+
+The built-in Odoo adapter no longer treats the interactive `account.move.action_send_and_print` opener as an email send. Headless execution creates `account.move.send.wizard`, executes `account.move.send.wizard.action_send_and_print`, and then inspects available Odoo message, notification, outgoing-mail, recipient, and PDF evidence.
+
+Provider evidence is attempt-bound: InvoiceRouter compares pre-send and post-send Odoo message IDs and accepts notification/mail states only for a new message created by the current wizard execution. Historical sent records are ignored, `pending` remains queued, and an unreadable baseline produces `UNVERIFIED` instead of false success.
+
+Email status meanings are strict:
+
+| Status | Meaning |
+|---|---|
+| `SENT` | Provider-side terminal sent evidence exists. |
+| `QUEUED` | The provider accepted or is processing the email. |
+| `FAILED` | The send stage or provider evidence failed. |
+| `UNVERIFIED` | The wizard completed but sufficient provider evidence could not be read. |
+| `NOT_REQUESTED` | The selected lifecycle did not request email sending. |
+
+`SENT` is not a guarantee of recipient inbox delivery. Inbox delivery is a separate live-canary acceptance item. See [`docs/developer/odoo-email-evidence-contract.md`](docs/developer/odoo-email-evidence-contract.md).
+
+## Duplicate-safe lifecycle retry
+
+When a provider invoice already exists, Status Manager can create an approved lifecycle resume request. Post failures resume `invoice.post`; email failures resume `invoice.send_email`; both reuse the existing provider invoice checkpoint. `UNVERIFIED` email outcomes require manual review and are never automatically retried. See [`docs/developer/lifecycle-retry-resume.md`](docs/developer/lifecycle-retry-resume.md).
+
+## Publication and live-test gate
+
+The required order for this release is:
+
+1. Apply all approved delta patches and run `npm run verify`.
+2. Audit the complete final project ZIP, not only the deltas.
+3. Correct every audit finding and repeat the forensic audit.
+4. Publish only after the full audit passes.
+5. Update the package through n8n Community Nodes and verify the loaded package version.
+6. Run a one-recipient live canary.
+7. Enable live bulk only after Odoo, writeback, PDF, retry-resume, and inbox evidence are accepted.
+
+The release workflow packages the v2 master workflow, compatibility workflows, Odoo mode templates, common status assets, documentation, and the npm tarball into the install bundle.
+

@@ -49,17 +49,37 @@ jobs:
           npm pack --pack-destination "$PACK_DIR"
 
           mkdir -p release/bundle/workflows
+          mkdir -p release/bundle/templates/common/google-sheets
+          mkdir -p release/bundle/templates/odoo
+          mkdir -p release/bundle/docs
           mkdir -p release/bundle/examples/google_sheets
           mkdir -p release/bundle/assets/architecture
 
-          cp "$PACK_DIR"/n8n-nodes-invoicerouter-*.tgz release/
-          cp "$PACK_DIR"/n8n-nodes-invoicerouter-*.tgz release/bundle/
-
-          cp README.md ARCHITECTURE.md VERSION_1_0_FREEZE.md release/bundle/
+          cp README.md ARCHITECTURE.md CHANGELOG.md PROJECT_STRUCTURE.md VERSION_1_0_FREEZE.md LICENSE release/bundle/
           cp manifest/freeze-v1.0.json release/bundle/
+
           cp workflows/InvoiceRouter-v1-production.json release/bundle/workflows/
+          cp workflows/InvoiceRouter-v1.6-simple-bulk-email.json release/bundle/workflows/
+          cp workflows/InvoiceRouter-v2-master-universal.json release/bundle/workflows/
+
+          cp -R template/providers/odoo/. release/bundle/templates/odoo/
+          cp template/status-writeback-columns.csv release/bundle/templates/common/
+          cp template/google-sheets/auto-fix-invoice-results-headers.gs release/bundle/templates/common/google-sheets/
+
+          cp -R docs/user release/bundle/docs/
+          cp -R docs/developer release/bundle/docs/
+          cp -R docs/troubleshooting release/bundle/docs/
+          cp docs/index.md docs/docs.minifest.ygit release/bundle/docs/
+
           cp examples/google_sheets/InvoiceRouter_20_Provider_Production_Presets_v1.0.xlsx release/bundle/examples/google_sheets/
           cp assets/architecture/invoice-router-architecture-v1.0.png release/bundle/assets/architecture/
+
+          node scripts/audit-release-source.mjs release/bundle
+
+          find release/bundle -type f -printf '%P\n' | sort > release/bundle/BUNDLE_CONTENTS.txt
+
+          cp "$PACK_DIR"/n8n-nodes-invoicerouter-*.tgz release/
+          cp "$PACK_DIR"/n8n-nodes-invoicerouter-*.tgz release/bundle/
 
           VERSION="$(node -p "require('./package.json').version")"
 

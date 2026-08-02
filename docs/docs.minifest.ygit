@@ -136,10 +136,11 @@
   },
   "versions": {
     "enabled": false,
-    "current": "2.0.0",
-    "latest": "2.0.0",
+    "current": "2.0.1",
+    "latest": "2.0.1",
     "available": [
-      "2.0.0"
+      "2.0.0",
+      "2.0.1"
     ],
     "strategy": "directory"
   },

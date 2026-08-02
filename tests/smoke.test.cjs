@@ -142,9 +142,94 @@ async function runPipeline({ dryRun = false, httpStatus = 201, providers = provi
   return { loader, emails, template, allocations, built, sent, checked, managed, senderContext, managerContext };
 }
 
+
+function odooRpcCall(options) {
+  const body = options?.body ?? {};
+  const params = body.params ?? {};
+  const args = Array.isArray(params.args) ? params.args : [];
+  return {
+    service: args[1] ?? '',
+    rpcMethod: args[2] ?? '',
+    database: args[0] ?? '',
+    uid: args[1] ?? 0,
+    model: args[3] ?? '',
+    method: args[4] ?? '',
+    args: args[5] ?? [],
+    kwargs: args[6] ?? {},
+  };
+}
+
+function odooDraftResponses() {
+  return [
+    { statusCode: 200, headers: {}, body: { result: 7 } },
+    { statusCode: 200, headers: {}, body: { result: [] } },
+    { statusCode: 200, headers: {}, body: { result: 88 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 2, name: 'USD', active: true }] } },
+    { statusCode: 200, headers: {}, body: { result: 501 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 501, name: 'INV/2026/00001', state: 'draft', ref: 'INV-TEST', partner_id: [88, 'New Customer'], currency_id: [2, 'USD'], invoice_pdf_report_id: false }] } },
+  ];
+}
+
+function odooEmailResponses({
+  notificationStatus = 'sent',
+  mailState = '',
+  wizardMethods = ['email'],
+  wizardPartnerIds = [88],
+  verificationErrors = false,
+  baselineError = false,
+  beforeMessageIds = [10, 9],
+  afterMessageIds = [11],
+  failureReason = '',
+} = {}) {
+  const errorBody = { error: { code: 403, message: 'Access denied while reading mail evidence.' } };
+  const messageResponse = verificationErrors
+    ? { statusCode: 200, headers: {}, body: errorBody }
+    : { statusCode: 200, headers: {}, body: { result: afterMessageIds.map((id) => ({ id, message_type: 'email_outgoing', subject: 'Invoice INV/2026/00001', partner_ids: [88], attachment_ids: [900] })) } };
+  const notificationResponse = verificationErrors
+    ? { statusCode: 200, headers: {}, body: errorBody }
+    : { statusCode: 200, headers: {}, body: { result: notificationStatus ? [{ id: 101, notification_type: 'email', notification_status: notificationStatus, failure_type: failureReason ? 'mail_smtp' : false, failure_reason: failureReason, res_partner_id: [88, 'New Customer'], mail_message_id: [11, 'Invoice'], mail_mail_id: mailState ? [201, 'Invoice'] : false }] : [] } };
+  const mailResponse = verificationErrors
+    ? { statusCode: 200, headers: {}, body: errorBody }
+    : { statusCode: 200, headers: {}, body: { result: mailState ? [{ id: 201, state: mailState, failure_type: failureReason ? 'mail_smtp' : false, failure_reason: failureReason, email_to: 'new.customer@example.com', recipient_ids: [88], mail_message_id: [11, 'Invoice'] }] : [] } };
+  return [
+    { statusCode: 200, headers: {}, body: { result: 7 } },
+    { statusCode: 200, headers: {}, body: { result: [] } },
+    { statusCode: 200, headers: {}, body: { result: 88 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 2, name: 'USD', active: true }] } },
+    { statusCode: 200, headers: {}, body: { result: 501 } },
+    { statusCode: 200, headers: {}, body: { result: true } },
+    baselineError ? { statusCode: 200, headers: {}, body: errorBody } : { statusCode: 200, headers: {}, body: { result: beforeMessageIds } },
+    { statusCode: 200, headers: {}, body: { result: 700 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 700, move_id: [501, 'INV/2026/00001'], sending_methods: wizardMethods, sending_method_checkboxes: { email: { checked: wizardMethods.includes('email'), label: 'Email' } }, mail_partner_ids: wizardPartnerIds, alerts: {} }] } },
+    ...(wizardMethods.includes('email') && wizardPartnerIds.length > 0
+      ? [{ statusCode: 200, headers: {}, body: { result: { type: 'ir.actions.act_window_close' } } }]
+      : []),
+    messageResponse,
+    notificationResponse,
+    mailResponse,
+    { statusCode: 200, headers: {}, body: { result: [{ id: 501, name: 'INV/2026/00001', state: 'posted', ref: 'INV-TEST', partner_id: [88, 'New Customer'], currency_id: [2, 'USD'], invoice_pdf_report_id: [900, 'INV_2026_00001.pdf'] }] } },
+  ];
+}
+
+
+function odooEmailResumeResponses({ notificationStatus = 'sent', mailState = '', failureReason = '' } = {}) {
+  return [
+    { statusCode: 200, headers: {}, body: { result: 7 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 501, name: 'INV/2026/00001', state: 'posted', partner_id: [88, 'New Customer'], invoice_pdf_report_id: [900, 'INV_2026_00001.pdf'] }] } },
+    { statusCode: 200, headers: {}, body: { result: [10, 9] } },
+    { statusCode: 200, headers: {}, body: { result: 701 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 701, move_id: [501, 'INV/2026/00001'], sending_methods: ['email'], sending_method_checkboxes: { email: { checked: true, label: 'Email' } }, mail_partner_ids: [88], alerts: {} }] } },
+    { statusCode: 200, headers: {}, body: { result: { type: 'ir.actions.act_window_close' } } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 12, message_type: 'email_outgoing', subject: 'Invoice INV/2026/00001', partner_ids: [88], attachment_ids: [900] }] } },
+    { statusCode: 200, headers: {}, body: { result: notificationStatus ? [{ id: 102, notification_type: 'email', notification_status: notificationStatus, failure_type: failureReason ? 'mail_smtp' : false, failure_reason: failureReason, res_partner_id: [88, 'New Customer'], mail_message_id: [12, 'Invoice'], mail_mail_id: mailState ? [202, 'Invoice'] : false }] : [] } },
+    { statusCode: 200, headers: {}, body: { result: mailState ? [{ id: 202, state: mailState, failure_type: failureReason ? 'mail_smtp' : false, failure_reason: failureReason, email_to: 'new.customer@example.com', recipient_ids: [88], mail_message_id: [12, 'Invoice'] }] : [] } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 501, name: 'INV/2026/00001', state: 'posted', ref: 'INV-TEST', partner_id: [88, 'New Customer'], currency_id: [2, 'USD'], invoice_pdf_report_id: [900, 'INV_2026_00001.pdf'] }] } },
+  ];
+}
+
 test('package registers exactly the frozen eight custom nodes', () => {
   assert.equal(pkg.name, 'n8n-nodes-invoicerouter');
-  assert.equal(pkg.version, '2.0.0');
+  assert.equal(pkg.version, '2.0.1');
   assert.equal(pkg.n8n.nodes.length, 8);
   assert.equal(pkg.invoiceRouterFreeze.targetNodeCount, 8);
   assert.equal(pkg.invoiceRouterFreeze.currentNodeCount, 8);
@@ -188,7 +273,7 @@ test('all frozen custom nodes use searchable InvoiceRouter display names', () =>
 test('installed package diagnostic validates the built package root', () => {
   const output = execFileSync(process.execPath, [path.join(root, 'scripts/diagnose-n8n-package.mjs'), root], { encoding: 'utf8' });
   assert.match(output, /Diagnostic result: PASS/);
-  assert.match(output, /n8n-nodes-invoicerouter@2\.0\.0/);
+  assert.match(output, /n8n-nodes-invoicerouter@2\.0\.1/);
 });
 
 test('all declared node artifacts and main declarations exist', () => {
@@ -958,6 +1043,8 @@ test('Status Manager retry output can be prepared for automatic retry execution'
   assert.equal(retryItem.json.retryCount, 1);
   assert.equal(retryItem.json.retryLoop.enabled, true);
   assert.ok(retryItem.json.readyRequest);
+  assert.ok(management.retryRequest);
+  assert.equal(management.retryResume, null);
 });
 
 
@@ -1006,26 +1093,26 @@ test('Odoo request build no longer requires partner_id in email_list', async () 
 test('Invoice Sender executes Odoo auto customer then invoice sequence', async () => {
   const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Sandbox', Environment: 'sandbox', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"draftOnly","odooPostInvoice":false}', Timeout: 60 } }];
   const recipients = [{ json: { Email: 'new.customer@example.com', Address: '42 Test Lane' } }];
-  const responses = [
-    { statusCode: 200, headers: {}, body: { result: 7 } },
-    { statusCode: 200, headers: {}, body: { result: [] } },
-    { statusCode: 200, headers: {}, body: { result: 88 } },
-    { statusCode: 200, headers: {}, body: { result: 501 } },
-  ];
   const result = await runPipeline({ dryRun: true, providers, recipients, selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'sandbox' }, requestParams: { strictProviderValidation: true } });
   const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
   const senderContext = context([result.built[0]], {
     dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'sandboxRealSend', expectedEnvironment: 'sandbox', sandboxModeConfirmation: 'SEND_SANDBOX_INVOICES', liveModeConfirmation: '', preventDuplicateSends: false, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
-  }, responses);
+  }, odooDraftResponses());
   const sent = await sendInvoice.call(senderContext);
-  assert.equal(senderContext.calls.length, 4);
+  assert.equal(senderContext.calls.length, 6);
   assert.equal(sent[0][0].json.rawExecution.httpStatus, 201);
   assert.equal(sent[0][0].json.rawExecution.responseBody.result.id, 501);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.name, 'INV/2026/00001');
   assert.equal(sent[0][0].json.rawExecution.responseBody.result.partner_id, 88);
   assert.equal(sent[0][0].json.rawExecution.responseBody.result.partner_created, true);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'NOT_REQUESTED');
+  const createCall = senderContext.calls.map(odooRpcCall).find((call) => call.model === 'account.move' && call.method === 'create');
+  assert.ok(createCall);
+  assert.equal(createCall.args[0].currency_id, 2);
+  assert.match(createCall.args[0].ref, /^INV-/);
+  assert.match(createCall.args[0].narration, /Reference/);
   assert.equal(JSON.stringify(sent).includes('odoo-secret'), false);
 });
-
 
 test('v2.0 VibProject structure and public template contract is present', () => {
   assert.ok(fs.existsSync(path.join(root, 'PROJECT_STRUCTURE.md')));
@@ -1047,28 +1134,248 @@ test('Provider Lifecycle metadata maps Odoo send-email mode', () => {
   assert.equal(meta.capability.supportsInvoiceEmailSend, true);
 });
 
-test('Invoice Sender executes Odoo create, post, and send-email lifecycle', async () => {
+test('Invoice Sender executes the Odoo send wizard and verifies sent mail evidence', async () => {
   const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
   const recipients = [{ json: { Email: 'new.customer@example.com', Address: '42 Test Lane' } }];
   const result = await runPipeline({ dryRun: true, providers, recipients, selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live' }, requestParams: { strictProviderValidation: true } });
   const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
-  const responses = [
+  const senderContext = context([result.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', sandboxModeConfirmation: '', preventDuplicateSends: false, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
+  }, odooEmailResponses());
+  const sent = await sendInvoice.call(senderContext);
+  const calls = senderContext.calls.map(odooRpcCall);
+  assert.equal(calls.some((call) => call.model === 'account.move' && call.method === 'action_send_and_print'), false);
+  assert.ok(calls.some((call) => call.model === 'account.move.send.wizard' && call.method === 'create'));
+  assert.ok(calls.some((call) => call.model === 'account.move.send.wizard' && call.method === 'action_send_and_print'));
+  assert.equal(sent[0][0].json.rawExecution.httpStatus, 201);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.name, 'INV/2026/00001');
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.pdf_attachment_id, 900);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.postStatus, 'POSTED');
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'SENT');
+  assert.deepEqual(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailEvidence.notificationStatuses, ['sent']);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.odoo.email_sent, true);
+  assert.equal(JSON.stringify(sent).includes('odoo-secret'), false);
+});
+
+test('Invoice Sender reports Odoo queued email without claiming sent', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true,"odooEmailForceSend":false}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live' }, requestParams: { strictProviderValidation: true } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const senderContext = context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ notificationStatus: 'ready', mailState: 'outgoing' }));
+  const sent = await sendInvoice.call(senderContext);
+  assert.equal(sent[0][0].json.rawExecution.httpStatus, 202);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'QUEUED');
+  assert.equal(sent[0][0].json.rawExecution.responseBody.odoo.email_sent, false);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.odoo.email_queued, true);
+});
+
+test('Invoice Sender reports Odoo mail exception as failed', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live' }, requestParams: { strictProviderValidation: true } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const senderContext = context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ notificationStatus: 'exception', mailState: 'exception', failureReason: 'SMTP connection failed.' }));
+  const sent = await sendInvoice.call(senderContext);
+  assert.equal(sent[0][0].json.rawExecution.httpStatus, 207);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'FAILED');
+  assert.match(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailErrorMessage, /SMTP connection failed/);
+});
+
+test('Invoice Sender reports Odoo email as unverified when evidence cannot be read', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live' }, requestParams: { strictProviderValidation: true } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const senderContext = context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ verificationErrors: true }));
+  const sent = await sendInvoice.call(senderContext);
+  assert.equal(sent[0][0].json.rawExecution.httpStatus, 202);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'UNVERIFIED');
+  assert.match(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailErrorMessage, /Access denied/);
+});
+
+test('Invoice Sender treats Odoo pending email notification as queued, not sent', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', environmentFilter: 'live' } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const sent = await sendInvoice.call(context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ notificationStatus: 'pending' })));
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'QUEUED');
+  assert.equal(sent[0][0].json.rawExecution.responseBody.odoo.email_sent, false);
+});
+
+test('Invoice Sender rejects stale historical Odoo sent evidence when no new mail message exists', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', environmentFilter: 'live' } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const sent = await sendInvoice.call(context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ afterMessageIds: [10], notificationStatus: 'sent', mailState: 'sent' })));
+  const lifecycle = sent[0][0].json.rawExecution.responseBody.result.lifecycle;
+  assert.equal(lifecycle.emailSendStatus, 'UNVERIFIED');
+  assert.equal(lifecycle.emailEvidence.attemptEvidenceBound, false);
+  assert.equal(lifecycle.emailEvidence.newMessageCount, 0);
+  assert.match(lifecycle.emailErrorMessage, /Historical invoice mail evidence was not accepted/);
+});
+
+test('Invoice Sender rejects Odoo sent evidence when the pre-send evidence baseline is unreadable', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', environmentFilter: 'live' } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const sent = await sendInvoice.call(context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ baselineError: true, notificationStatus: 'sent', mailState: 'sent' })));
+  const lifecycle = sent[0][0].json.rawExecution.responseBody.result.lifecycle;
+  assert.equal(lifecycle.emailSendStatus, 'UNVERIFIED');
+  assert.equal(lifecycle.emailEvidence.baselineReadable, false);
+  assert.equal(lifecycle.emailEvidence.attemptEvidenceBound, false);
+  assert.match(lifecycle.emailErrorMessage, /Access denied/);
+});
+
+test('Invoice Sender blocks Odoo wizard execution when no email recipient is resolved', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live' }, requestParams: { strictProviderValidation: true } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const senderContext = context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ wizardPartnerIds: [], notificationStatus: '', mailState: '' }));
+  const sent = await sendInvoice.call(senderContext);
+  const calls = senderContext.calls.map(odooRpcCall);
+  assert.equal(calls.some((call) => call.model === 'account.move.send.wizard' && call.method === 'action_send_and_print'), false);
+  assert.equal(sent[0][0].json.rawExecution.httpStatus, 207);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'FAILED');
+  assert.match(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailErrorMessage, /did not resolve an email recipient/);
+});
+
+
+test('Status Checker treats queued Odoo email as partial and bulk sent remains zero', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true,"odooEmailForceSend":false}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', environmentFilter: 'live' } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const sent = await sendInvoice.call(context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, odooEmailResponses({ notificationStatus: 'ready', mailState: 'outgoing' })));
+  const { execute: checkStatus } = load('nodes/07_StatusChecker/StatusChecker.execute.js');
+  const checked = await checkStatus.call(context([sent[0]], { includeParsedMetadata: true, unknownSuccessStatus: 'CREATED' }));
+  assert.equal(checked[0][0].json.standardStatus.result, 'PARTIAL_SUCCESS');
+  assert.equal(checked[0][0].json.standardStatus.emailSendStatus, 'QUEUED');
+  const { execute: manageStatus } = load('nodes/08_StatusManager/StatusManager.execute.js');
+  const managed = await manageStatus.call(context([checked[0]], { retryLimit: 3, retryBaseDelaySeconds: 30, retryMaxDelaySeconds: 900, respectRetryAfterHeader: true, cooldownSeconds: 30, disableOnAuthFailure: true, alertOnFailure: true, includeEvents: true }));
+  const summary = managed[0][0].json.management.bulkSummary;
+  assert.equal(managed[0][0].json.management.workflowState, 'PARTIAL');
+  assert.equal(managed[0][0].json.management.retryScheduled, false);
+  assert.equal(summary.sent, 0);
+  assert.equal(summary.emailSent, 0);
+  assert.equal(summary.emailQueued, 1);
+  assert.equal(summary.partial, 1);
+});
+
+test('Odoo email failure creates send-only retry and resumes the existing invoice', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createPostAndSendEmail","odooSendInvoiceEmail":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'new.customer@example.com' } }], selectorParams: { providerFilter: 'odoo', environmentFilter: 'live' } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const firstSender = context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: true, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
+  }, odooEmailResponses({ notificationStatus: 'exception', mailState: 'exception', failureReason: 'SMTP connection temporarily unavailable' }));
+  const firstSent = await sendInvoice.call(firstSender);
+  const { execute: checkStatus } = load('nodes/07_StatusChecker/StatusChecker.execute.js');
+  const checked = await checkStatus.call(context([firstSent[0]], { includeParsedMetadata: true, unknownSuccessStatus: 'CREATED' }));
+  assert.equal(checked[0][0].json.standardStatus.result, 'FAILED');
+  assert.equal(checked[0][0].json.standardStatus.retryResumeStage, 'invoice.send_email');
+  assert.equal(checked[0][0].json.standardStatus.errorType, 'EMAIL_SEND_ERROR');
+  const { execute: manageStatus } = load('nodes/08_StatusManager/StatusManager.execute.js');
+  const managed = await manageStatus.call(context([checked[0]], { retryLimit: 3, retryBaseDelaySeconds: 1, retryMaxDelaySeconds: 10, respectRetryAfterHeader: true, cooldownSeconds: 1, disableOnAuthFailure: true, alertOnFailure: true, includeEvents: true }));
+  const management = managed[0][0].json.management;
+  assert.equal(management.retryScheduled, true);
+  assert.equal(management.retryResume.stage, 'invoice.send_email');
+  assert.equal(management.retryResume.providerInvoiceId, '501');
+  assert.equal(management.retryRequest.lifecycleResume.approved, true);
+
+  const resumeSender = context([[{ json: { ...managed[0][0].json, readyRequest: management.retryRequest, retryCount: management.retryCount } }]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: true, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
+  }, odooEmailResumeResponses());
+  const resumed = await sendInvoice.call(resumeSender);
+  const calls = resumeSender.calls.map(odooRpcCall);
+  assert.equal(calls.some((call) => call.model === 'res.partner' && ['search_read', 'create'].includes(call.method)), false);
+  assert.equal(calls.some((call) => call.model === 'account.move' && call.method === 'create'), false);
+  assert.equal(calls.some((call) => call.model === 'account.move' && call.method === 'action_post'), false);
+  assert.equal(calls.some((call) => call.model === 'account.move.send.wizard' && call.method === 'action_send_and_print'), true);
+  assert.equal(resumed[0][0].json.rawExecution.responseBody.result.id, 501);
+  assert.equal(resumed[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'SENT');
+  assert.equal(resumed[0][0].json.rawExecution.duplicatePrevention.resumeBypass, true);
+});
+
+test('Odoo post failure creates post-only retry and reuses the existing invoice', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Live', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"invoiceLifecycle":"createAndPost","odooPostInvoice":true}', Timeout: 60 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'post.retry@example.com' } }], selectorParams: { providerFilter: 'odoo', environmentFilter: 'live' } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const firstSender = context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: true, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
+  }, [
     { statusCode: 200, headers: {}, body: { result: 7 } },
     { statusCode: 200, headers: {}, body: { result: [] } },
     { statusCode: 200, headers: {}, body: { result: 88 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 2, name: 'USD', active: true }] } },
     { statusCode: 200, headers: {}, body: { result: 501 } },
+    { statusCode: 200, headers: {}, body: { error: { code: 100, message: 'Database is temporarily locked; try again.' } } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 501, name: 'INV/2026/00001', state: 'draft', ref: 'INV-TEST', partner_id: [88, 'New Customer'], currency_id: [2, 'USD'], invoice_pdf_report_id: false }] } },
+  ]);
+  const firstSent = await sendInvoice.call(firstSender);
+  const { execute: checkStatus } = load('nodes/07_StatusChecker/StatusChecker.execute.js');
+  const checked = await checkStatus.call(context([firstSent[0]], { includeParsedMetadata: true, unknownSuccessStatus: 'CREATED' }));
+  assert.equal(checked[0][0].json.standardStatus.result, 'FAILED');
+  assert.equal(checked[0][0].json.standardStatus.retryResumeStage, 'invoice.post');
+  assert.equal(checked[0][0].json.standardStatus.errorType, 'INVOICE_POST_ERROR');
+  const { execute: manageStatus } = load('nodes/08_StatusManager/StatusManager.execute.js');
+  const managed = await manageStatus.call(context([checked[0]], { retryLimit: 3, retryBaseDelaySeconds: 1, retryMaxDelaySeconds: 10, respectRetryAfterHeader: true, cooldownSeconds: 1, disableOnAuthFailure: true, alertOnFailure: true, includeEvents: true }));
+  const management = managed[0][0].json.management;
+  assert.equal(management.retryScheduled, true);
+  assert.equal(management.retryResume.stage, 'invoice.post');
+  assert.equal(management.retryResume.providerInvoiceId, '501');
+
+  const resumeSender = context([[{ json: { ...managed[0][0].json, readyRequest: management.retryRequest, retryCount: management.retryCount } }]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: true, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
+  }, [
+    { statusCode: 200, headers: {}, body: { result: 7 } },
+    { statusCode: 200, headers: {}, body: { result: [{ id: 501, name: 'INV/2026/00001', state: 'draft', partner_id: [88, 'New Customer'], invoice_pdf_report_id: false }] } },
     { statusCode: 200, headers: {}, body: { result: true } },
-    { statusCode: 200, headers: {}, body: { result: true } },
-  ];
-  const senderContext = context([result.built[0]], {
-    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', sandboxModeConfirmation: '', preventDuplicateSends: false, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
-  }, responses);
-  const sent = await sendInvoice.call(senderContext);
-  assert.equal(senderContext.calls.length, 6);
-  assert.equal(sent[0][0].json.rawExecution.httpStatus, 201);
-  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.postStatus, 'POSTED');
-  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'SENT');
-  assert.equal(JSON.stringify(sent).includes('odoo-secret'), false);
+    { statusCode: 200, headers: {}, body: { result: [{ id: 501, name: 'INV/2026/00001', state: 'posted', ref: 'INV-TEST', partner_id: [88, 'New Customer'], currency_id: [2, 'USD'], invoice_pdf_report_id: false }] } },
+  ]);
+  const resumed = await sendInvoice.call(resumeSender);
+  const calls = resumeSender.calls.map(odooRpcCall);
+  assert.equal(calls.some((call) => call.model === 'res.partner' && ['search_read', 'create'].includes(call.method)), false);
+  assert.equal(calls.some((call) => call.model === 'account.move' && call.method === 'create'), false);
+  assert.equal(calls.filter((call) => call.model === 'account.move' && call.method === 'action_post').length, 1);
+  assert.equal(resumed[0][0].json.rawExecution.responseBody.result.id, 501);
+  assert.equal(resumed[0][0].json.rawExecution.responseBody.result.lifecycle.postStatus, 'POSTED');
+  assert.equal(resumed[0][0].json.rawExecution.duplicatePrevention.resumeBypass, true);
+});
+
+test('Unverified email is partial and never automatically retried', async () => {
+  const item = {
+    json: {
+      readyRequest: { requestId: 'req-unverified', providerId: 'odoo' },
+      rawExecution: {
+        success: true, transportStatus: 'COMPLETED', requestId: 'req-unverified', providerId: 'odoo', httpStatus: 202,
+        responseBody: { result: { id: 501, lifecycle: { invoiceStatus: 'CREATED', postStatus: 'POSTED', emailSendRequested: true, emailSendStatus: 'UNVERIFIED', emailErrorMessage: 'Evidence unavailable', lifecycleOutcome: 'PARTIAL', checkpoint: { providerInvoiceId: '501' } } } },
+        responseHeaders: {}, responsePolicy: { successStatusCodes: [200, 201, 202] },
+      },
+    },
+  };
+  const { execute: checkStatus } = load('nodes/07_StatusChecker/StatusChecker.execute.js');
+  const checked = await checkStatus.call(context([[item]], { includeParsedMetadata: true, unknownSuccessStatus: 'CREATED' }));
+  assert.equal(checked[0][0].json.standardStatus.result, 'PARTIAL_SUCCESS');
+  assert.equal(checked[0][0].json.standardStatus.errorType, 'EMAIL_UNVERIFIED');
+  assert.equal(checked[0][0].json.standardStatus.retryDecision.safeToRetry, false);
+  const { execute: manageStatus } = load('nodes/08_StatusManager/StatusManager.execute.js');
+  const managed = await manageStatus.call(context([checked[0]], { retryLimit: 3, retryBaseDelaySeconds: 1, cooldownSeconds: 1, alertOnFailure: true, includeEvents: true }));
+  assert.equal(managed[0][0].json.management.workflowState, 'PARTIAL');
+  assert.equal(managed[0][0].json.management.retryScheduled, false);
+  assert.equal(managed[0][0].json.management.providerFeedback.recommendation, 'REVIEW');
 });
 
 test('v2 lifecycle fields are mapped end-to-end into status writeback columns', async () => {
@@ -1076,17 +1383,9 @@ test('v2 lifecycle fields are mapped end-to-end into status writeback columns', 
   const recipients = [{ json: { Email: 'new.customer@example.com', Address: '42 Test Lane' } }];
   const prepared = await runPipeline({ dryRun: true, providers, recipients, selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live' }, requestParams: { strictProviderValidation: true } });
   const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
-  const responses = [
-    { statusCode: 200, headers: {}, body: { result: 7 } },
-    { statusCode: 200, headers: {}, body: { result: [] } },
-    { statusCode: 200, headers: {}, body: { result: 88 } },
-    { statusCode: 200, headers: {}, body: { result: 501 } },
-    { statusCode: 200, headers: {}, body: { result: true } },
-    { statusCode: 200, headers: {}, body: { result: true } },
-  ];
   const senderContext = context([prepared.built[0]], {
     dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', sandboxModeConfirmation: '', preventDuplicateSends: false, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
-  }, responses);
+  }, odooEmailResponses());
   const sent = await sendInvoice.call(senderContext);
   const { execute: checkStatus } = load('nodes/07_StatusChecker/StatusChecker.execute.js');
   const checked = await checkStatus.call(context([sent[0]], { includeParsedMetadata: true, unknownSuccessStatus: 'CREATED' }));
@@ -1096,12 +1395,17 @@ test('v2 lifecycle fields are mapped end-to-end into status writeback columns', 
   assert.equal(values.providerCustomerId, '88');
   assert.equal(values.customerStatus, 'CREATED');
   assert.equal(values.postStatus, 'POSTED');
-  assert.equal(values.emailSendRequested, 'true');
+  assert.equal(values.emailSendRequested, true);
   assert.equal(values.emailSendStatus, 'SENT');
-  assert.equal(values.emailSendMethod, 'account.move.action_send_and_print');
+  assert.equal(values.emailSendMethod, 'account.move.send.wizard.action_send_and_print');
+  assert.equal(values.invoiceNumber, 'INV/2026/00001');
   assert.equal(values.lifecycleMode, 'createPostAndSendEmail');
   assert.match(values.lifecycleSteps, /invoice.send_email/);
   assert.equal(values.providerRecipeId, 'odoo');
+  assert.equal(values.lifecycleOutcome, 'COMPLETED');
+  assert.equal(values.lifecycleFailedStep, '');
+  assert.equal(values.lifecycleCheckpoint.providerInvoiceId, '501');
+  assert.ok(values.emailEvidence.messageIds.includes(11));
 });
 
 test('v2 workflows map lifecycle writeback fields to Google Sheets schema', () => {
@@ -1110,11 +1414,30 @@ test('v2 workflows map lifecycle writeback fields to Google Sheets schema', () =
     const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
     const code = byName['Prepare Status Writeback Row'].parameters.jsCode;
     const columns = byName['Google Sheets - Status Writeback'].parameters.columns;
-    for (const field of ['provider_customer_id', 'customer_status', 'post_status', 'email_send_requested', 'email_send_status', 'email_send_method', 'email_error_message', 'lifecycle_mode', 'lifecycle_steps', 'provider_recipe_id']) {
+    for (const field of ['provider_customer_id', 'customer_status', 'post_status', 'email_send_requested', 'email_send_status', 'email_send_method', 'email_error_message', 'email_evidence', 'lifecycle_outcome', 'lifecycle_failed_step', 'lifecycle_checkpoint', 'retry_resume_stage', 'retry_resume', 'lifecycle_mode', 'lifecycle_steps', 'provider_recipe_id']) {
       assert.match(code, new RegExp(`${field}:`));
-      assert.equal(columns.value[field], `={ $json.${field} }`);
+      assert.equal(columns.value[field], `={{ $json.${field} }}`);
       assert.ok(columns.schema.some((entry) => entry.id === field), `${file} missing schema for ${field}`);
     }
+    assert.match(byName['Prepare Retry Request'].parameters.jsCode, /management\.retryRequest/);
+  }
+});
+
+test('false email request state remains false through status writeback and workflow row preparation', async () => {
+  const result = await runPipeline({ dryRun: false, recipients: [{ json: { Email: 'create.only@example.com' } }] });
+  const status = result.checked[0][0].json.standardStatus;
+  const values = result.managed[0][0].json.management.statusWriteback.values;
+  assert.equal(status.emailSendRequested, false);
+  assert.equal(values.emailSendRequested, false);
+
+  for (const file of ['InvoiceRouter-v1-production.json', 'InvoiceRouter-v1.6-simple-bulk-email.json', 'InvoiceRouter-v2-master-universal.json']) {
+    const workflow = JSON.parse(fs.readFileSync(path.join(root, 'workflows', file), 'utf8'));
+    const code = workflow.nodes.find((node) => node.name === 'Prepare Status Writeback Row').parameters.jsCode;
+    assert.doesNotMatch(code, /String\(Boolean\(value\)\)/);
+    const prepare = new Function('items', code);
+    const [row] = prepare([{ json: { management: { statusWriteback: { values: { emailSendRequested: 'false', retryScheduled: false } } } } }]);
+    assert.equal(row.json.email_send_requested, 'false');
+    assert.equal(row.json.retry_scheduled, 'false');
   }
 });
 
@@ -1183,9 +1506,142 @@ test('Invoice Sender executes a declarative HTTP provider recipe', async () => {
   assert.equal(JSON.stringify(sent).includes('token-value'), false);
 });
 
+
+test('Declarative HTTP 202 without explicit sent evidence remains queued', async () => {
+  const recipe = {
+    runtime: { type: 'declarative_http' }, recipeId: 'custom-declarative-queued-test',
+    steps: [
+      { id: 'invoice.create', lifecycleStep: 'invoice.create', request: { method: 'POST', url: '{{request.baseUrl}}/invoices' }, responseMap: { providerInvoiceId: 'id' } },
+      { id: 'invoice.send_email', lifecycleStep: 'invoice.send_email', onlyWhenLifecycleIncludes: 'invoice.send_email', request: { method: 'POST', url: '{{request.baseUrl}}/invoices/{{facts.providerInvoiceId}}/send' } },
+    ],
+  };
+  const providers = [{ json: { Enabled: true, Provider: 'Custom', Account: 'Declarative', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://api.example.test', Endpoint: '/ignored', 'Auth Type': 'Bearer', 'API Key': 'token-value', 'Content-Type': 'application/json', 'Extra Config JSON': JSON.stringify({ invoiceLifecycle: 'createPostAndSendEmail', providerRecipe: recipe }), Timeout: 30 } }];
+  const prepared = await runPipeline({ dryRun: true, providers, recipients: [{ json: { Email: 'queue@example.com' } }], selectorParams: { providerFilter: 'custom', environmentFilter: 'live' } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const sent = await sendInvoice.call(context([prepared.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'liveRealSend', expectedEnvironment: 'live', liveModeConfirmation: 'SEND_REAL_INVOICES', preventDuplicateSends: false, stopOnTransportError: false,
+  }, [
+    { statusCode: 201, headers: {}, body: { id: 'inv_queue_001' } },
+    { statusCode: 202, headers: {}, body: { accepted: true } },
+  ]));
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.lifecycle.emailSendStatus, 'QUEUED');
+  const { execute: checkStatus } = load('nodes/07_StatusChecker/StatusChecker.execute.js');
+  const checked = await checkStatus.call(context([sent[0]], { includeParsedMetadata: true, unknownSuccessStatus: 'CREATED' }));
+  assert.equal(checked[0][0].json.standardStatus.result, 'PARTIAL_SUCCESS');
+  assert.equal(checked[0][0].json.standardStatus.retryDecision.retryable, false);
+});
+
 test('generic HTTP declarative example recipe validates as executable template support', () => {
   const recipe = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/generic-http/generic-http.declarative-example.json'), 'utf8'));
   assert.equal(recipe.runtime.type, 'declarative_http');
   assert.ok(recipe.steps.some((step) => step.id === 'invoice.send_email'));
   assert.ok(recipe.steps[0].responseMap.providerInvoiceId);
+});
+
+test('Delta 03 documentation defines truthful Odoo email evidence and safe retry resume', () => {
+  const evidence = fs.readFileSync(path.join(root, 'docs/developer/odoo-email-evidence-contract.md'), 'utf8');
+  const retry = fs.readFileSync(path.join(root, 'docs/developer/lifecycle-retry-resume.md'), 'utf8');
+  for (const text of ['account.move.send.wizard', '`QUEUED`', '`SENT`', '`FAILED`', '`UNVERIFIED`']) assert.match(evidence, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(evidence, /not proof that the message reached the recipient inbox/i);
+  assert.match(retry, /invoice\.post/);
+  assert.match(retry, /invoice\.send_email/);
+  assert.match(retry, /EMAIL_UNVERIFIED/);
+});
+
+test('public templates use reserved sample email addresses', () => {
+  const consumer = /[A-Z0-9._%+-]+@(gmail|yahoo|outlook|hotmail|icloud|protonmail|proton)\.[A-Z]{2,}/gi;
+  const extensions = new Set(['.csv', '.json', '.md', '.txt', '.yml', '.yaml']);
+  const files = [];
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (extensions.has(path.extname(entry.name).toLowerCase())) files.push(full);
+    }
+  };
+  walk(path.join(root, 'template'));
+  walk(path.join(root, 'examples'));
+  for (const file of files) assert.equal(consumer.test(fs.readFileSync(file, 'utf8')), false, `${path.relative(root, file)} contains consumer-webmail sample data`);
+  assert.match(fs.readFileSync(path.join(root, 'template/providers/odoo/email_list.csv'), 'utf8'), /customer@example\.com/);
+});
+
+test('all packaged workflow JSON files avoid malformed n8n expressions', () => {
+  const files = [];
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.json') && /workflow|N8N_IMPORT/i.test(full)) files.push(full);
+    }
+  };
+  walk(path.join(root, 'workflows'));
+  walk(path.join(root, 'template/providers'));
+  assert.ok(files.length >= 20);
+  for (const file of files) {
+    const source = fs.readFileSync(file, 'utf8');
+    assert.doesNotThrow(() => JSON.parse(source), path.relative(root, file));
+    assert.doesNotMatch(source, /=\{(?!\{)\s*\$/, `${path.relative(root, file)} has malformed expression syntax`);
+  }
+});
+
+test('Odoo lifecycle template documents evidence states and additive writeback fields', () => {
+  const lifecycle = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/provider.lifecycle.json'), 'utf8'));
+  assert.equal(lifecycle.runtime.emailSendModel, 'account.move.send.wizard');
+  assert.equal(lifecycle.runtime.emailSendMethod, 'action_send_and_print');
+  for (const status of ['QUEUED', 'SENT', 'FAILED', 'UNVERIFIED']) assert.ok(lifecycle.emailStatusContract[status]);
+  for (const field of ['email_evidence', 'lifecycle_outcome', 'lifecycle_failed_step', 'lifecycle_checkpoint', 'retry_resume_stage', 'retry_resume']) assert.ok(lifecycle.writebackFields.includes(field));
+  assert.equal(JSON.stringify(lifecycle), JSON.stringify(JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/provider.recipe.json'), 'utf8'))));
+});
+
+test('release workflow bundles v2 master, Odoo modes, synchronized docs, and release-source audit', () => {
+  const release = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
+  for (const fragment of [
+    'workflows/InvoiceRouter-v2-master-universal.json',
+    'workflows/InvoiceRouter-v1-production.json',
+    'workflows/InvoiceRouter-v1.6-simple-bulk-email.json',
+    'template/providers/odoo/.',
+    'template/status-writeback-columns.csv',
+    'docs/developer',
+    'docs/troubleshooting',
+    'node scripts/audit-release-source.mjs release/bundle',
+    'BUNDLE_CONTENTS.txt',
+  ]) assert.match(release, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('release documentation enforces forensic audit before publish and community update before live canary', () => {
+  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  const checklist = fs.readFileSync(path.join(root, 'template/providers/odoo/LIVE_TEST_CHECKLIST.md'), 'utf8');
+  assert.match(readme, /Audit the complete final project ZIP/i);
+  assert.match(readme, /Update the package through n8n Community Nodes/i);
+  assert.match(checklist, /complete project ZIP has passed final forensic audit/i);
+  assert.match(checklist, /n8n Community Nodes shows the approved InvoiceRouter update/i);
+  assert.match(checklist, /one controlled recipient only/i);
+});
+
+test('v2.0.1 final release metadata and npm package contents stay synchronized', () => {
+  const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+  const vibProject = JSON.parse(fs.readFileSync(path.join(root, 'vibproject.ygit'), 'utf8'));
+  const docsManifest = JSON.parse(fs.readFileSync(path.join(root, 'docs/docs.minifest.ygit'), 'utf8'));
+  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+  const releaseWorkflow = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
+
+  assert.equal(pkg.version, '2.0.1');
+  assert.equal(lock.version, pkg.version);
+  assert.equal(lock.packages[''].version, pkg.version);
+  assert.equal(vibProject.project.version, pkg.version);
+  assert.equal(vibProject.release.latestVersion, pkg.version);
+  assert.equal(docsManifest.versions.current, pkg.version);
+  assert.equal(docsManifest.versions.latest, pkg.version);
+  assert.ok(docsManifest.versions.available.includes(pkg.version));
+  assert.match(readme, /Package version:\*\* `2\.0\.1`/);
+  assert.match(changelog, /## 2\.0\.1 - 2026-08-02/);
+  assert.ok(pkg.files.includes('docs/troubleshooting'));
+  assert.match(releaseWorkflow, /Validate tag version/);
+  assert.match(releaseWorkflow, /npm publish --access public --provenance/);
+
+  for (const provider of ['odoo', 'stripe', 'zoho-books']) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, `template/providers/${provider}/provider.template.ygit`), 'utf8'));
+    assert.equal(manifest.invoiceRouterVersion, pkg.version);
+  }
 });

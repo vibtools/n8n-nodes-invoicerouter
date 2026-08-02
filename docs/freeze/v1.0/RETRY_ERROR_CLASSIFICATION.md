@@ -72,3 +72,13 @@ These fields are operational/audit fields. They do not replace provider-side inv
 ## Production Rule
 
 Do not force retries for validation or authentication errors. Fix the underlying provider configuration, credential, or invoice payload first. Retrying malformed requests can create noisy provider logs and may trigger provider-side abuse/rate-limit protections.
+
+## v2 stage-resume rules
+
+When a provider invoice checkpoint exists, a retry must resume the failed stage instead of replaying invoice creation:
+
+- `invoice.post` resumes posting against the existing provider invoice;
+- `invoice.send_email` resumes email sending against the existing posted invoice;
+- `EMAIL_UNVERIFIED` is non-retryable and requires manual evidence review.
+
+Status Manager must provide an approved lifecycle resume object. Invoice Sender validates its source, request/provider identity, stage, and provider invoice checkpoint before allowing the duplicate-prevention resume path.

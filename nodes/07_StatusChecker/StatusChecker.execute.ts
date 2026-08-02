@@ -3,7 +3,8 @@ import { getByPath, isRecord, nowIso, toFiniteNumber, toStringValue } from '../.
 
 const STATUS_MAP: Record<string, string> = {
   draft: 'DRAFT', created: 'CREATED', open: 'SENT', sent: 'SENT', delivered: 'SENT', viewed: 'VIEWED',
-  pending: 'PENDING', processing: 'PROCESSING', paid: 'PAID', succeeded: 'PAID', completed: 'PAID', complete: 'PAID',
+  pending: 'PENDING', processing: 'PROCESSING', queued: 'QUEUED', accepted: 'QUEUED', unverified: 'UNVERIFIED',
+  paid: 'PAID', succeeded: 'PAID', completed: 'PAID', complete: 'PAID',
   overdue: 'OVERDUE', past_due: 'OVERDUE', void: 'CANCELLED', voided: 'CANCELLED', cancelled: 'CANCELLED', canceled: 'CANCELLED',
   failed: 'FAILED', error: 'FAILED', refunded: 'REFUNDED', partially_paid: 'PARTIALLY_PAID',
 };
@@ -42,6 +43,11 @@ function flattenText(value: unknown): string {
   if (value === undefined || value === null) return '';
   if (typeof value === 'string') return value;
   try { return JSON.stringify(value); } catch { return toStringValue(value); }
+}
+
+function booleanValue(value: unknown): boolean {
+  if (value === true) return true;
+  return ['true', '1', 'yes', 'on', 'requested'].includes(toStringValue(value).trim().toLowerCase());
 }
 
 function headerValue(headers: unknown, name: string): string {
@@ -83,6 +89,13 @@ function retryAfterSeconds(headers: unknown): number {
   return 0;
 }
 
+function successClassification(reason = 'Provider response matched the success policy.'): ErrorClassification {
+  return {
+    errorType: null, category: 'success', severity: 'none', alertSeverity: 'none', retryable: false,
+    safeToRetry: false, source: 'success', reason,
+  };
+}
+
 function baseClassification(input: {
   httpStatus: number;
   transport: string;
@@ -92,12 +105,7 @@ function baseClassification(input: {
   nonRetryableByPolicy: boolean;
   success: boolean;
 }): ErrorClassification {
-  if (input.success) {
-    return {
-      errorType: null, category: 'success', severity: 'none', alertSeverity: 'none', retryable: false,
-      safeToRetry: false, source: 'success', reason: 'Provider response matched the success policy.',
-    };
-  }
+  if (input.success) return successClassification();
 
   const combined = `${input.message} ${flattenText(input.body)}`.toLowerCase();
   if (input.transport === 'TIMEOUT' || /timeout|timed out|deadline exceeded/.test(combined)) {
@@ -188,6 +196,46 @@ function baseClassification(input: {
   };
 }
 
+function lifecycleRecords(body: unknown): { lifecycle: IDataObject; checkpoint: IDataObject; evidence: IDataObject } {
+  const root = isRecord(body) ? body : {};
+  const result = isRecord(root.result) ? root.result : {};
+  const lifecycle = isRecord(result.lifecycle) ? result.lifecycle : {};
+  const checkpoint = isRecord(lifecycle.checkpoint) ? lifecycle.checkpoint
+    : isRecord(lifecycle.lifecycleCheckpoint) ? lifecycle.lifecycleCheckpoint
+      : isRecord(result.lifecycleCheckpoint) ? result.lifecycleCheckpoint : {};
+  const evidence = isRecord(lifecycle.emailEvidence) ? lifecycle.emailEvidence
+    : isRecord(lifecycle.email_evidence) ? lifecycle.email_evidence
+      : isRecord(checkpoint.emailEvidence) ? checkpoint.emailEvidence : {};
+  return { lifecycle, checkpoint, evidence };
+}
+
+function lifecycleFailureClassification(stage: string, message: string, evidence: IDataObject): ErrorClassification {
+  const text = `${message} ${flattenText(evidence)}`.toLowerCase();
+  const authentication = /authentication|unauthorized|invalid api key|expired token/.test(text);
+  const authorization = /forbidden|permission|authorization|access denied/.test(text);
+  if (authentication) return {
+    errorType: 'AUTHENTICATION_ERROR', category: 'authentication', severity: 'critical', alertSeverity: 'critical',
+    retryable: false, safeToRetry: false, source: 'lifecycle_evidence', reason: 'Lifecycle operation failed authentication.',
+  };
+  if (authorization) return {
+    errorType: 'AUTHORIZATION_ERROR', category: 'authorization', severity: 'critical', alertSeverity: 'critical',
+    retryable: false, safeToRetry: false, source: 'lifecycle_evidence', reason: 'Lifecycle operation was denied by provider permissions.',
+  };
+  const transient = /timeout|timed out|temporar|try again|connection|smtp|mail_smtp|server error|service unavailable|rate.?limit|locked|concurrent/.test(text);
+  const validation = /missing recipient|invalid recipient|invalid email address|missing email address|did not resolve an email recipient|template|validation|required field|not found|does not match/.test(text);
+  const emailStage = stage === 'invoice.send_email';
+  return {
+    errorType: emailStage ? 'EMAIL_SEND_ERROR' : stage === 'invoice.post' ? 'INVOICE_POST_ERROR' : 'LIFECYCLE_ERROR',
+    category: emailStage ? 'lifecycle_email' : stage === 'invoice.post' ? 'lifecycle_post' : 'lifecycle',
+    severity: transient ? 'high' : 'medium', alertSeverity: transient ? 'high' : 'warning',
+    retryable: transient && !validation, safeToRetry: transient && !validation,
+    source: 'lifecycle_evidence',
+    reason: transient && !validation
+      ? `Provider lifecycle stage ${stage || 'unknown'} failed transiently and may resume from its checkpoint.`
+      : `Provider lifecycle stage ${stage || 'unknown'} requires review before retry.`,
+  };
+}
+
 export async function execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
   const items = this.getInputData();
   const output: INodeExecutionData[] = [];
@@ -206,32 +254,90 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const nonRetryableStatuses = numericList(responsePolicy.nonRetryableStatusCodes);
     const successStatusCodes = numericList(responsePolicy.successStatusCodes);
     const providerStatus = firstByPath(body, paths.status, 'status');
-    const errorMessage = toStringValue(firstByPath(body, paths.errorMessage, 'error.message') ?? (isRecord(raw.error) ? raw.error.message : ''));
+    const transportErrorMessage = toStringValue(firstByPath(body, paths.errorMessage, 'error.message') ?? (isRecord(raw.error) ? raw.error.message : ''));
     const duplicateTransport = transport === 'DUPLICATE';
     const blockedTransport = transport === 'BLOCKED' || transport === 'SKIPPED' || duplicateTransport;
     const neutralTransport = transport === 'DRY_RUN' || transport === 'QUEUED' || blockedTransport;
     const retryableByPolicy = !neutralTransport && retryableStatuses.includes(httpStatus);
     const nonRetryableByPolicy = !neutralTransport && nonRetryableStatuses.includes(httpStatus);
-    const success = raw.success === true && (successStatusCodes.length > 0 ? successStatusCodes.includes(httpStatus) : httpStatus >= 200 && httpStatus < 300);
-    const classification = neutralTransport
+    const transportSuccess = raw.success === true && (successStatusCodes.length > 0 ? successStatusCodes.includes(httpStatus) : httpStatus >= 200 && httpStatus < 300);
+    let classification: ErrorClassification = neutralTransport
       ? { errorType: null, category: 'neutral', severity: 'none', alertSeverity: 'none', retryable: false, safeToRetry: false, source: 'transport', reason: `Neutral transport status ${transport}.` }
-      : baseClassification({ httpStatus, transport, body, message: errorMessage, retryableByPolicy, nonRetryableByPolicy, success });
+      : baseClassification({ httpStatus, transport, body, message: transportErrorMessage, retryableByPolicy, nonRetryableByPolicy, success: transportSuccess });
+
+    const { lifecycle, checkpoint, evidence } = lifecycleRecords(body);
+    const lifecycleOutcome = toStringValue(lifecycle.lifecycleOutcome ?? lifecycle.outcome ?? checkpoint.outcome).toUpperCase();
+    const lifecycleFailedStep = toStringValue(lifecycle.failedStep ?? lifecycle.failed_step ?? checkpoint.failedStep ?? checkpoint.nextStage);
+    const lifecycleInvoiceStatus = toStringValue(lifecycle.invoiceStatus ?? lifecycle.invoice_status ?? checkpoint.invoiceStatus).toUpperCase();
+    const postStatus = toStringValue(lifecycle.postStatus ?? lifecycle.post_status ?? checkpoint.postStatus).toUpperCase();
+    const emailSendRequestedRaw = lifecycle.emailSendRequested ?? lifecycle.email_send_requested ?? checkpoint.emailSendRequested ?? getByPath(body, 'odoo.send_invoice_email');
+    const emailSendRequested = booleanValue(emailSendRequestedRaw);
+    const emailSendStatus = toStringValue(lifecycle.emailSendStatus ?? lifecycle.email_send_status ?? checkpoint.emailSendStatus).toUpperCase();
+    const emailSendMethod = toStringValue(lifecycle.emailSendMethod ?? lifecycle.email_send_method ?? getByPath(body, 'odoo.email_method'));
+    const emailErrorMessage = toStringValue(lifecycle.emailErrorMessage ?? lifecycle.email_error_message ?? checkpoint.errorMessage ?? getByPath(body, 'odoo.email_error_message'));
+
+    let semanticResult = duplicateTransport ? 'DUPLICATE' : blockedTransport ? 'BLOCKED'
+      : transport === 'TIMEOUT' ? 'TIMEOUT' : transportSuccess ? 'SUCCESS'
+        : transport === 'ERROR' ? 'ERROR' : httpStatus ? 'FAILED' : 'UNKNOWN';
+    let semanticErrorMessage = transportErrorMessage;
+    let retryResumeStage = '';
+    if (!neutralTransport && Object.keys(lifecycle).length > 0) {
+      if (postStatus === 'FAILED' || lifecycleFailedStep === 'invoice.post') {
+        semanticResult = 'FAILED';
+        semanticErrorMessage = emailErrorMessage || transportErrorMessage || 'Invoice post/finalize lifecycle stage failed.';
+        retryResumeStage = 'invoice.post';
+        classification = lifecycleFailureClassification(retryResumeStage, semanticErrorMessage, evidence);
+      } else if (emailSendRequested) {
+        if (emailSendStatus === 'SENT') {
+          semanticResult = 'SUCCESS';
+          semanticErrorMessage = '';
+          classification = successClassification('Provider-side email evidence confirmed sent status.');
+        } else if (emailSendStatus === 'QUEUED') {
+          semanticResult = 'PARTIAL_SUCCESS';
+          semanticErrorMessage = '';
+          classification = {
+            errorType: null, category: 'lifecycle_processing', severity: 'none', alertSeverity: 'none', retryable: false,
+            safeToRetry: false, source: 'lifecycle_evidence', reason: 'Provider accepted the invoice email into its outgoing queue.',
+          };
+        } else if (emailSendStatus === 'UNVERIFIED') {
+          semanticResult = 'PARTIAL_SUCCESS';
+          semanticErrorMessage = emailErrorMessage || 'Invoice send wizard completed, but terminal email evidence is unavailable.';
+          classification = {
+            errorType: 'EMAIL_UNVERIFIED', category: 'lifecycle_verification', severity: 'low', alertSeverity: 'warning',
+            retryable: false, safeToRetry: false, source: 'lifecycle_evidence',
+            reason: 'Automatic retry is blocked because the email may already have been sent.',
+          };
+        } else if (emailSendStatus === 'FAILED' || emailSendStatus === 'PENDING' || lifecycleOutcome === 'FAILED') {
+          semanticResult = 'FAILED';
+          semanticErrorMessage = emailErrorMessage || transportErrorMessage || 'Invoice email lifecycle stage failed.';
+          retryResumeStage = lifecycleFailedStep || 'invoice.send_email';
+          classification = lifecycleFailureClassification(retryResumeStage, semanticErrorMessage, evidence);
+        }
+      } else if (lifecycleOutcome === 'PARTIAL' || lifecycleOutcome === 'PROCESSING') {
+        semanticResult = 'PARTIAL_SUCCESS';
+      } else if (lifecycleOutcome === 'FAILED') {
+        semanticResult = 'FAILED';
+        semanticErrorMessage = emailErrorMessage || transportErrorMessage || 'Provider lifecycle failed.';
+        retryResumeStage = lifecycleFailedStep;
+        classification = lifecycleFailureClassification(retryResumeStage, semanticErrorMessage, evidence);
+      } else if (lifecycleOutcome === 'COMPLETED') {
+        semanticResult = 'SUCCESS';
+        classification = successClassification('Provider lifecycle completed the requested stages.');
+      }
+    }
+
     const retryAfter = retryAfterSeconds(headers);
     const retryDelayHint = classification.safeToRetry && retryAfter > 0 ? retryAfter : 0;
     const retryDecision: IDataObject = {
-      retryable: classification.retryable,
-      safeToRetry: classification.safeToRetry,
-      source: classification.source,
-      reason: classification.reason,
-      retryAfterSeconds: retryAfter,
-      retryDelayHintSeconds: retryDelayHint,
-      errorType: classification.errorType,
-      errorCategory: classification.category,
-      httpStatus,
+      retryable: classification.retryable, safeToRetry: classification.safeToRetry, source: classification.source,
+      reason: classification.reason, retryAfterSeconds: retryAfter, retryDelayHintSeconds: retryDelayHint,
+      errorType: classification.errorType, errorCategory: classification.category, httpStatus,
+      resumeStage: retryResumeStage, lifecycleCheckpoint: checkpoint,
     };
     const unknownSuccessStatus = toStringValue(this.getNodeParameter('unknownSuccessStatus', itemIndex, 'CREATED'), 'CREATED').toUpperCase();
-    const invoiceStatus = duplicateTransport ? 'DUPLICATE' : blockedTransport ? 'BLOCKED' : neutralTransport ? 'PENDING' : normalizeStatus(providerStatus, success ? unknownSuccessStatus : 'FAILED');
-    const result = duplicateTransport ? 'DUPLICATE' : blockedTransport ? 'BLOCKED' : transport === 'TIMEOUT' ? 'TIMEOUT' : success ? 'SUCCESS' : transport === 'ERROR' ? 'ERROR' : httpStatus ? 'FAILED' : 'UNKNOWN';
+    const fallbackInvoiceStatus = duplicateTransport ? 'DUPLICATE' : blockedTransport ? 'BLOCKED' : neutralTransport ? 'PENDING'
+      : normalizeStatus(providerStatus, semanticResult === 'SUCCESS' ? unknownSuccessStatus : semanticResult === 'PARTIAL_SUCCESS' ? 'CREATED' : 'FAILED');
+    const invoiceStatus = lifecycleInvoiceStatus || fallbackInvoiceStatus;
     const parsedMetadata: IDataObject = {
       invoiceId: toStringValue(firstByPath(body, paths.invoiceId, 'id')),
       invoiceNumber: toStringValue(firstByPath(body, paths.invoiceNumber, 'invoice_number')),
@@ -239,26 +345,26 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       pdfUrl: toStringValue(firstByPath(body, paths.pdfUrl, 'invoice_pdf')),
       transactionId: toStringValue(firstByPath(body, paths.transactionId, 'transaction_id') ?? raw.transactionId),
       providerReference: toStringValue(getByPath(body, 'reference') ?? getByPath(body, 'data.reference')),
-      providerCustomerId: toStringValue(firstByPath(body, paths.providerCustomerId, 'result.partner_id')),
-      customerStatus: toStringValue(firstByPath(body, paths.customerStatus, 'result.lifecycle.customerStatus')),
-      postStatus: toStringValue(firstByPath(body, paths.postStatus, 'result.lifecycle.postStatus')),
-      emailSendRequested: toStringValue(getByPath(body, 'result.lifecycle.emailSendRequested') ?? getByPath(body, 'result.lifecycle.email_send_requested') ?? getByPath(body, 'odoo.send_invoice_email')),
-      emailSendStatus: toStringValue(firstByPath(body, paths.emailSendStatus, 'result.lifecycle.emailSendStatus')),
-      emailSendMethod: toStringValue(getByPath(body, 'result.lifecycle.emailSendMethod') ?? getByPath(body, 'odoo.email_method')),
-      emailErrorMessage: toStringValue(getByPath(body, 'result.lifecycle.emailErrorMessage') ?? getByPath(body, 'odoo.email_error_message')),
+      providerCustomerId: toStringValue(firstByPath(body, paths.providerCustomerId, 'result.partner_id') ?? checkpoint.providerCustomerId),
+      customerStatus: toStringValue(firstByPath(body, paths.customerStatus, 'result.lifecycle.customerStatus') ?? checkpoint.customerStatus),
+      postStatus,
+      emailSendRequested, emailSendStatus, emailSendMethod, emailErrorMessage,
+      lifecycleOutcome, lifecycleFailedStep, lifecycleCheckpoint: checkpoint, emailEvidence: evidence,
     };
     const includeParsedMetadata = Boolean(this.getNodeParameter('includeParsedMetadata', itemIndex, true));
     const standardStatus: IDataObject = {
       schemaVersion: '1.0', requestId: raw.requestId, providerId: raw.providerId, profileId: raw.profileId, accountId: raw.accountId,
-      workerId: raw.workerId, actionId: raw.actionId, transportStatus: transport, result, invoiceStatus, providerStatus: toStringValue(providerStatus),
-      providerInvoiceId: parsedMetadata.invoiceId, invoiceNumber: parsedMetadata.invoiceNumber,
+      workerId: raw.workerId, actionId: raw.actionId, transportStatus: transport, result: semanticResult, invoiceStatus,
+      providerStatus: toStringValue(providerStatus), providerInvoiceId: parsedMetadata.invoiceId, invoiceNumber: parsedMetadata.invoiceNumber,
       providerCustomerId: parsedMetadata.providerCustomerId, customerStatus: parsedMetadata.customerStatus,
       postStatus: parsedMetadata.postStatus, emailSendRequested: parsedMetadata.emailSendRequested,
       emailSendStatus: parsedMetadata.emailSendStatus, emailSendMethod: parsedMetadata.emailSendMethod,
-      emailErrorMessage: parsedMetadata.emailErrorMessage, httpStatus,
+      emailErrorMessage: parsedMetadata.emailErrorMessage, emailEvidence: evidence,
+      lifecycleOutcome, lifecycleFailedStep, lifecycleCheckpoint: checkpoint, retryResumeStage,
+      partialSuccess: semanticResult === 'PARTIAL_SUCCESS', httpStatus,
       errorType: classification.errorType, errorCategory: classification.category, errorSeverity: classification.severity,
       alertSeverity: classification.alertSeverity, errorCode: toStringValue(firstByPath(body, paths.errorCode, 'error.code')),
-      errorMessage, latencyMs: raw.latencyMs, responseSizeBytes: raw.responseSizeBytes,
+      errorMessage: semanticErrorMessage, latencyMs: raw.latencyMs, responseSizeBytes: raw.responseSizeBytes,
       invoiceUrl: parsedMetadata.invoiceUrl, pdfUrl: parsedMetadata.pdfUrl, transactionId: parsedMetadata.transactionId,
       recipientEmail: toStringValue(recipient.email), idempotency: raw.idempotency ?? request.idempotency ?? null,
       duplicatePrevention: raw.duplicatePrevention ?? request.duplicatePrevention ?? null,
@@ -277,6 +383,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       retryDecision, errorClassification: classification,
       responsePolicy: raw.responsePolicy ?? request.responsePolicy ?? null,
       requestMapping: raw.requestMapping ?? request.requestMapping ?? null,
+      lifecycleResume: raw.lifecycleResume ?? request.lifecycleResume ?? null,
       sendGuard: raw.guard ?? request.sendGuard ?? null, startedAt: raw.startedAt, finishedAt: raw.finishedAt,
       parsedMetadata: includeParsedMetadata ? parsedMetadata : undefined,
       runtime: raw.runtime, checkedAt: nowIso(),

@@ -5,7 +5,7 @@
   "providerId": "stripe",
   "displayName": "Stripe Complete Bulk Email Sending System",
   "templateVersion": "2.0.0",
-  "invoiceRouterVersion": "2.0.0",
+  "invoiceRouterVersion": "2.0.1",
   "supportTier": "tier-2-template-ready-live-proof-required",
   "files": {
     "workbook": "InvoiceRouter_TEMPLATE002_STRIPE_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx",

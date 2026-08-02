@@ -75,3 +75,21 @@ The status writeback branch includes bulk columns such as `bulk_run_id`, `bulk_i
 ## Production recommendation
 
 Use one bulk lane first. Do not duplicate Request Builder / Invoice Sender branches until a real n8n dry-run, sandbox bulk send, writeback verification, and final audit are complete.
+
+## v2 truthful bulk counters
+
+`management.bulkSummary` distinguishes business lifecycle results rather than counting every HTTP success as sent:
+
+```text
+invoiceCreated
+invoicePosted
+emailRequested
+emailSent
+emailQueued
+emailFailed
+emailUnverified
+partial
+failed
+```
+
+The compatibility `sent` counter equals verified `emailSent`. A created or posted invoice is not counted as a sent email. Live bulk remains blocked until a one-recipient canary and retry-resume proof are accepted.

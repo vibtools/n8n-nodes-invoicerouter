@@ -1,53 +1,21 @@
-# InvoiceRouter Template 001 — Odoo Complete Bulk Email Sending System
+# Odoo Complete Bulk Email Template
 
-This provider template is for InvoiceRouter v2.0.0 and the Odoo JSON-RPC adapter.
+This pack configures InvoiceRouter's built-in Odoo JSON-RPC lifecycle without changing the frozen eight-node architecture.
 
-## What this template does
-
-- Reads Odoo provider/API details from the `provider` sheet.
-- Reads recipients from the `email_list` sheet.
-- Builds invoices from the InvoiceRouter n8n Invoice Template node.
-- Searches or creates Odoo customers by email.
-- Creates Odoo customer invoices.
-- Posts invoices when `odooPostInvoice` is true.
-- Attempts invoice email sending when `odooSendInvoiceEmail` is true.
-- Writes lifecycle results into `invoice_results`.
-
-## Included files
-
-- `InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx`
-- `InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_N8N_IMPORT.json`
-- `provider.csv`
-- `email_list.csv`
-- `invoice_results.csv`
-- `provider.lifecycle.json`
-- `provider.recipe.json`
-- `provider.template.ygit`
-- `QUICKSTART.md`
-- `N8N_IMPORT_GUIDE.md`
-- `ODOO_SETUP.md`
-- `LIVE_TEST_CHECKLIST.md`
-- `TROUBLESHOOTING.md`
-
-## Default safety
-
-The workflow import is dry-run safe by default:
+## Runtime flow
 
 ```text
-Dry Run = true
-Activation Safety Mode = dryRunValidation
-Expected Environment = sandbox
+provider sheet credentials
+→ customer search/create
+→ invoice create
+→ invoice post
+→ account.move.send.wizard create
+→ account.move.send.wizard action_send_and_print
+→ mail/PDF evidence inspection
+→ truthful status writeback
 ```
 
-Do not switch to live bulk until dry-run, sandbox/test, and live canary are proven.
-
-## Important Odoo note
-
-This template uses InvoiceRouter's current Odoo JSON-RPC `/jsonrpc` adapter. Odoo 19 documentation states XML-RPC and JSON-RPC endpoints are scheduled for future removal and External JSON-2 is the replacement path. Keep this in mind for long-term provider maintenance.
-
-## Sandbox + live mode files
-
-This template pack now includes both sandbox/test and live-ready files. The original import remains dry-run safe. Use the explicit mode files below when you want real provider API execution.
+## Included modes
 
 | Mode | Workbook | Workflow | Provider CSV |
 |---|---|---|---|
@@ -57,4 +25,42 @@ This template pack now includes both sandbox/test and live-ready files. The orig
 | Live canary | `google-sheets-template-live.xlsx` | `n8n-import-workflow-live-canary.json` | `provider.live.csv` |
 | Live bulk | `google-sheets-template-live.xlsx` | `n8n-import-workflow-live-bulk.json` | `provider.live.csv` |
 
-Live bulk keeps InvoiceRouter safety tokens enabled: `SEND_REAL_INVOICES` and `SEND_BULK_REAL_INVOICES`.
+The default import remains dry-run safe. Live bulk retains `SEND_REAL_INVOICES` and `SEND_BULK_REAL_INVOICES` gates.
+
+## Recipient contract
+
+`email_list` requires only `Email`; `Name` and `Address` are optional. Public samples use reserved `example.com` addresses. Replace them only in your private working Sheet.
+
+## Email result contract
+
+- `SENT`: provider-side terminal sent evidence was found.
+- `QUEUED`: provider accepted/processing evidence was found.
+- `FAILED`: the send stage or provider evidence failed.
+- `UNVERIFIED`: the wizard completed but final evidence could not be established.
+
+`SENT` is not a guarantee of recipient inbox delivery. The live-canary checklist includes a separate inbox check.
+
+## Safe retry
+
+Post and email failures resume the existing provider invoice when Status Manager supplies an approved lifecycle checkpoint. Do not rerun a failed live item by executing Invoice Sender manually.
+
+## Release order
+
+Use this order:
+
+1. Apply all approved deltas and run `npm run verify`.
+2. Submit the complete final project ZIP for forensic audit.
+3. Correct any audit finding and repeat the audit.
+4. Publish only after the final audit passes.
+5. Update InvoiceRouter through n8n Community Nodes.
+6. Run a one-recipient live canary.
+7. Enable live bulk only after evidence is accepted.
+
+## Guides
+
+- `QUICKSTART.md`
+- `N8N_IMPORT_GUIDE.md`
+- `ODOO_SETUP.md`
+- `MODE_SELECTION.md`
+- `LIVE_TEST_CHECKLIST.md`
+- `TROUBLESHOOTING.md`

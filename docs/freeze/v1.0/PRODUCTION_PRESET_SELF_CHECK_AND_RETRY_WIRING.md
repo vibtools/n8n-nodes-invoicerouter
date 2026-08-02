@@ -58,3 +58,20 @@ Before using `liveRealSend`:
 3. Status writeback must be verified.
 4. Retry branch must be tested with a controlled retryable sandbox failure.
 5. Final forensic audit must pass.
+
+## v2 lifecycle checkpoint safety
+
+The retry branch now preserves `lifecycle_checkpoint`, `retry_resume_stage`, and `retry_resume`. Post/email retries reuse the existing provider invoice. The retry request must originate from Status Manager and pass Invoice Sender identity/checkpoint validation.
+
+An email outcome of `UNVERIFIED` does not enter the automatic retry branch. Operators must inspect Odoo mail/PDF evidence and the recipient inbox before deciding on any manual action.
+
+## Final publish sequence
+
+After all approved deltas are applied:
+
+1. Run the full verification suite.
+2. Submit the complete project ZIP for forensic audit.
+3. Correct and re-audit every finding.
+4. Publish only after the full audit passes.
+5. Update through n8n Community Nodes.
+6. Run the one-recipient live canary before live bulk.

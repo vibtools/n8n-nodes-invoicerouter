@@ -44,3 +44,22 @@ Provider templates remain onboarding assets. A provider should be marked product
 ## Step 14D / v2.0.0 Declarative Provider Recipe Runtime
 
 Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice providers can define customer, invoice, post/finalize, and email-send steps in provider recipe JSON instead of requiring core node code changes. This is intended for compatible providers; non-standard OAuth, webhook, UI-only, or SDK-only flows may still require a dedicated adapter.
+
+## Real Odoo email execution and evidence
+
+The Odoo adapter executes the invoice send wizard headlessly:
+
+```text
+account.move.send.wizard.create
+account.move.send.wizard.action_send_and_print
+```
+
+The interactive `account.move.action_send_and_print` opener is not treated as a sent email. InvoiceRouter inspects available message, notification, outgoing-mail, recipient, and PDF evidence and reports `QUEUED`, `SENT`, `FAILED`, or `UNVERIFIED` without claiming inbox delivery.
+
+## Safe lifecycle resume
+
+Post and email failures can resume the existing provider invoice through a Status Manager-approved checkpoint. Email-stage retry does not recreate the customer or invoice. `UNVERIFIED` is manual-review only.
+
+## Publication gate
+
+The v2 release is not approved for publication solely because unit/build verification passes. The complete final source ZIP must pass forensic audit. After publication, the n8n Community Nodes package must be updated before the one-recipient live canary is run.
