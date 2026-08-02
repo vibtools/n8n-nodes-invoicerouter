@@ -20,3 +20,6 @@ Thumbs.db
 
 # Local-only private planning and development notes
 project/
+# Local-only helper scripts must not be committed to release source
+scripts/*.ps1
+scripts/fixers/

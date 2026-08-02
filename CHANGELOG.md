@@ -2,6 +2,11 @@
 
 ## 2.0.0 - Master Universal Provider Lifecycle
 
+### Release candidate cleanup
+
+- Removed the local-only PowerShell clean/verify helper from tracked release source so GitHub CI validation keeps the cross-platform Node.js automation contract.
+- Added ignore rules for local PowerShell helper scripts to prevent the same CI validation failure from recurring.
+
 - Added universal provider lifecycle modes for draft/create/post/send-email execution.
 - Added provider capability and lifecycle metadata.
 - Added Odoo automated post/send-email lifecycle support.
