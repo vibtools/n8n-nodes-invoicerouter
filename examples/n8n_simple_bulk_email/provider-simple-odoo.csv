@@ -1,0 +1,2 @@
+Enabled,Provider,Account,Environment,Action,Method,Base URL,Endpoint,Auth Type,Username,Password,Database,Content-Type,Extra Config JSON,Timeout,Notes
+TRUE,Odoo,Odoo Sandbox 01,sandbox,Create Invoice,POST,https://REPLACE_ODOO_DOMAIN,/jsonrpc,Odoo JSON-RPC,REPLACE_ODOO_USERNAME,REPLACE_ODOO_PASSWORD_OR_API_KEY,REPLACE_ODOO_DATABASE,application/json,"{\"odooPostInvoice\":false}",60,First dry-run/sandbox Odoo account

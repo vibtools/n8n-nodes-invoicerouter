@@ -6,10 +6,26 @@
 
 InvoiceRouter is an eight-node n8n community-node package for loading many provider accounts from Google Sheets, assigning accounts safely, personalizing invoice data, executing provider requests, standardizing results, and creating retry/metrics/alert/audit events.
 
-**Package version:** `1.5.0`  
+**Package version:** `1.6.0`  
 **Architecture:** Version 1.0 Final Freeze  
 **Implementation:** Complete — 8/8 custom nodes registered; v1.5.0 hardened release identity
 
+
+
+## v1.6.0 simple bulk email workflow
+
+`v1.6.0` keeps the frozen eight-node architecture and makes the default workflow match the intended operator UX:
+
+```text
+Google Sheet provider tab = provider/API/secrets/config only
+Google Sheet email_list tab = Email required, Name/Address optional
+n8n Invoice Template node = invoice details
+Trigger execution = one invoice request per recipient row
+```
+
+For Odoo, InvoiceRouter now supports automatic customer handling in the sender path: authenticate from provider-sheet credentials, search `res.partner` by email, create the partner if missing, then create the invoice. Recipient rows do not require `partner_id`, `database`, `uid`, or password fields. Dry Run performs no Odoo API call.
+
+See [`docs/freeze/v1.0/V1_6_0_SIMPLE_BULK_EMAIL_WORKFLOW.md`](docs/freeze/v1.0/V1_6_0_SIMPLE_BULK_EMAIL_WORKFLOW.md).
 
 ## v1.5.0 release identity
 
@@ -339,7 +355,7 @@ For a typical self-hosted n8n installation:
 ```bash
 mkdir -p ~/.n8n/nodes
 cd ~/.n8n/nodes
-npm install /absolute/path/n8n-nodes-invoicerouter-1.5.0.tgz
+npm install /absolute/path/n8n-nodes-invoicerouter-1.6.0.tgz
 ```
 
 Restart n8n after installation.

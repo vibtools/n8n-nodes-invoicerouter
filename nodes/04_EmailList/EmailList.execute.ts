@@ -29,7 +29,8 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
   const batchId = toStringValue(this.getNodeParameter('batchId', 0, 'default'), 'default');
   const emailField = toStringValue(this.getNodeParameter('emailField', 0, 'Email'), 'Email');
   const nameField = toStringValue(this.getNodeParameter('nameField', 0, 'Name'), 'Name');
-  const nameGeneration = toStringValue(this.getNodeParameter('nameGeneration', 0, 'username'));
+  const addressField = toStringValue(this.getNodeParameter('addressField', 0, 'Address'), 'Address');
+  const nameGeneration = toStringValue(this.getNodeParameter('nameGeneration', 0, 'formatted'));
   const invalidPolicy = toStringValue(this.getNodeParameter('invalidPolicy', 0, 'skip'));
   const preserveCustom = Boolean(this.getNodeParameter('preserveCustomColumns', 0, true));
   const preventReuse = Boolean(this.getNodeParameter('preventReuse', 0, true));
@@ -62,7 +63,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const recipient: IDataObject = {
       email, name: suppliedName || generatedName(email, nameGeneration),
       phone: toStringValue(field(item.json, 'Phone', KNOWN.phone)), company: toStringValue(field(item.json, 'Company', KNOWN.company)),
-      address: toStringValue(field(item.json, 'Address', KNOWN.address)), country: toStringValue(field(item.json, 'Country', KNOWN.country)),
+      address: toStringValue(field(item.json, addressField, KNOWN.address)), country: toStringValue(field(item.json, 'Country', KNOWN.country)),
       state: toStringValue(field(item.json, 'State', KNOWN.state)), city: toStringValue(field(item.json, 'City', KNOWN.city)),
       zip: toStringValue(field(item.json, 'ZIP Code', KNOWN.zip)), customFields,
     };

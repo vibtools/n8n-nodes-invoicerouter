@@ -1,6 +1,6 @@
 {
   "freezeVersion": "1.0",
-  "packageVersion": "1.5.0",
+  "packageVersion": "1.6.0",
   "status": "FINAL_FREEZE",
   "generatedAt": "2026-07-28",
   "sourceOfTruth": "VERSION_1_0_FREEZE.md",
@@ -41,20 +41,33 @@
     "docs/freeze/v1.0/NOTION_SOURCE_MAP.md",
     "docs/freeze/v1.0/CLEAN_REPOSITORY_CONTRACT.md",
     "docs/freeze/v1.0/IMPLEMENTATION_AUDIT.md",
-    "docs/freeze/v1.0/N8N_REGISTRY_UI_INSTALL_COMPATIBILITY.md"
+    "docs/freeze/v1.0/N8N_REGISTRY_UI_INSTALL_COMPATIBILITY.md",
+    "docs/freeze/v1.0/V1_6_0_SIMPLE_BULK_EMAIL_WORKFLOW.md"
   ],
   "verification": {
     "typecheck": true,
     "build": true,
-    "tests": 39,
+    "tests": 46,
     "packDryRun": true
   },
-  "releaseStatus": "v1.5.0 live-test-ready release identity; live approval requires real n8n dry-run and sandbox evidence",
+  "releaseStatus": "v1.6.0 simple bulk email workflow; Odoo auto customer handling added; live approval requires dry-run, sandbox, and live canary evidence",
   "registryUiCompatibility": {
     "npmPackageName": "n8n-nodes-invoicerouter",
     "requiredKeyword": "n8n-community-node-package",
     "editorSearchPrefix": "InvoiceRouter",
     "runtimePeerDependencies": false,
     "diagnosticScript": "scripts/diagnose-n8n-package.mjs"
+  },
+  "simpleBulkEmailWorkflow": {
+    "emailListRequiredColumns": [
+      "Email"
+    ],
+    "emailListOptionalColumns": [
+      "Name",
+      "Address"
+    ],
+    "providerSheetOwnsSecrets": true,
+    "odooAutoCustomerHandling": true,
+    "workflow": "workflows/InvoiceRouter-v1.6-simple-bulk-email.json"
   }
 }

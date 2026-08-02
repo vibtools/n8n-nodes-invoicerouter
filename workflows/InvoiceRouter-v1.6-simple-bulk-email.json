@@ -1,5 +1,5 @@
 {
-  "name": "InvoiceRouter v1.6.0 - Simple Bulk Email Production",
+  "name": "InvoiceRouter v1.6.0 - Simple Bulk Email Live Test",
   "nodes": [
     {
       "parameters": {},
@@ -17,7 +17,7 @@
         "operation": "read",
         "documentId": {
           "__rl": true,
-          "value": "REPLACE_INVOICEROUTER_SPREADSHEET_ID",
+          "value": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -64,7 +64,7 @@
         "operation": "read",
         "documentId": {
           "__rl": true,
-          "value": "REPLACE_INVOICEROUTER_SPREADSHEET_ID",
+          "value": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -290,7 +290,7 @@
         "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
-          "value": "REPLACE_INVOICEROUTER_SPREADSHEET_ID",
+          "value": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
           "mode": "id"
         },
         "sheetName": {
@@ -964,7 +964,8 @@
     "templateCredsSetupCompleted": false,
     "invoiceRouterFreeze": "1.0",
     "invoiceRouterRelease": "1.6.0",
-    "template": "simple-bulk-email-production"
+    "template": "simple-bulk-email-live-test-import-ready",
+    "spreadsheetPlaceholder": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID"
   },
   "tags": []
 }
