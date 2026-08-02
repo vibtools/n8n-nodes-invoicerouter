@@ -3,9 +3,10 @@ import { finalizeInvoiceSend, getSecretMaterial, reserveInvoiceSend } from '../.
 import { redactJson, redactString, secretValues } from '../../shared/security/Redaction';
 import { isRecord, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
 
-function secretVariables(secret: { apiKey: string; apiSecret: string; extraValue: string }): Record<string, string> {
+function secretVariables(secret: { apiKey: string; apiSecret: string; extraValue: string; username?: string; password?: string; database?: string }): Record<string, string> {
   const variables: Record<string, string> = {
-    API_KEY: secret.apiKey, ACCESS_TOKEN: secret.apiKey, API_SECRET: secret.apiSecret, EXTRA_VALUE: secret.extraValue,
+    API_KEY: secret.apiKey || toStringValue(secret.username), ACCESS_TOKEN: secret.apiKey || toStringValue(secret.username), API_SECRET: secret.apiSecret || toStringValue(secret.password),
+    USERNAME: toStringValue(secret.username || secret.apiKey), PASSWORD: toStringValue(secret.password || secret.apiSecret), DATABASE: toStringValue(secret.database), DB: toStringValue(secret.database), EXTRA_VALUE: secret.extraValue || toStringValue(secret.database),
     SESSION_ID: secret.extraValue, BASE64_KEY_SECRET: globalThis.btoa(`${secret.apiKey}:${secret.apiSecret}`),
     realmId: secret.extraValue, accountId: secret.extraValue, organizationId: secret.extraValue, tenantId: secret.extraValue, site: secret.extraValue,
   };
@@ -57,6 +58,143 @@ function responseParts(response: unknown): { statusCode: number; headers: IDataO
     };
   }
   return { statusCode: 200, headers: {}, body: parseResponseBody(response) };
+}
+
+
+function valueFromRecord(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function odooConfig(secret: { apiKey: string; apiSecret: string; username?: string; password?: string; database?: string; extraConfig?: IDataObject }): IDataObject {
+  const extraConfig = isRecord(secret.extraConfig) ? secret.extraConfig : {};
+  return {
+    database: toStringValue(secret.database ?? extraConfig.database),
+    username: toStringValue(secret.username ?? secret.apiKey ?? extraConfig.username),
+    password: toStringValue(secret.password ?? secret.apiSecret ?? extraConfig.password),
+    uid: toFiniteNumber(extraConfig.uid, 0),
+    postInvoice: extraConfig.odooPostInvoice === true || toStringValue(extraConfig.odooPostInvoice).toLowerCase() === 'true',
+  };
+}
+
+function odooPayload(id: string, service: string, method: string, args: JsonValue[]): IDataObject {
+  return { jsonrpc: '2.0', method: 'call', params: { service, method, args }, id };
+}
+
+async function odooJsonRpc(context: IExecuteFunctions, url: string, timeout: number, body: IDataObject, secrets: string[]): Promise<JsonValue> {
+  const response = await context.helpers.httpRequest({
+    method: 'POST', url, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body,
+    json: true, timeout, returnFullResponse: true, ignoreHttpStatusErrors: true,
+  });
+  const parts = responseParts(response);
+  if (parts.statusCode < 200 || parts.statusCode >= 300) throw new Error(`Odoo JSON-RPC HTTP ${parts.statusCode}: ${redactString(JSON.stringify(parts.body), secrets)}`);
+  if (isRecord(parts.body) && parts.body.error !== undefined) throw new Error(`Odoo JSON-RPC error: ${redactString(JSON.stringify(parts.body.error), secrets)}`);
+  return isRecord(parts.body) ? (parts.body.result ?? null) : null;
+}
+
+async function odooExecuteKw(context: IExecuteFunctions, input: {
+  url: string;
+  timeout: number;
+  database: string;
+  uid: number;
+  password: string;
+  model: string;
+  method: string;
+  args: JsonValue[];
+  kwargs?: IDataObject;
+  id: string;
+  secrets: string[];
+}): Promise<JsonValue> {
+  const positionalArgs: JsonValue[] = [input.database, input.uid, input.password, input.model, input.method, input.args];
+  if (input.kwargs && Object.keys(input.kwargs).length > 0) positionalArgs.push(input.kwargs);
+  return odooJsonRpc(context, input.url, input.timeout, odooPayload(input.id, 'object', 'execute_kw', positionalArgs), input.secrets);
+}
+
+async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, request: IDataObject, options: IHttpRequestOptions, secret: { apiKey: string; apiSecret: string; username?: string; password?: string; database?: string; extraConfig?: IDataObject }, secrets: string[]): Promise<{ statusCode: number; headers: IDataObject; body: JsonValue }> {
+  const config = odooConfig(secret);
+  const database = toStringValue(config.database).trim();
+  const username = toStringValue(config.username).trim();
+  const password = toStringValue(config.password).trim();
+  if (!database) throw new Error('Odoo provider Database is missing in the provider sheet.');
+  if (!username) throw new Error('Odoo provider Username is missing in the provider sheet.');
+  if (!password) throw new Error('Odoo provider Password/API key is missing in the provider sheet.');
+
+  const timeout = Math.max(1, toFiniteNumber(options.timeout, 60_000));
+  const url = toStringValue(options.url);
+  const recipient = isRecord(request.recipient) ? request.recipient : {};
+  const invoice = isRecord(request.invoice) ? request.invoice : {};
+  const body = isRecord(request.body) ? request.body : {};
+  const invoiceBody = isRecord(body.invoice) ? body.invoice : {};
+  const recipientName = toStringValue(recipient.name || valueFromRecord(body.customer, 'name') || recipient.email, 'Customer');
+  const recipientEmail = toStringValue(recipient.email || valueFromRecord(body.customer, 'email')).trim().toLowerCase();
+  const recipientAddress = toStringValue(recipient.address || valueFromRecord(body.customer, 'address'));
+  if (!recipientEmail) throw new Error('Odoo auto customer flow requires recipient email.');
+
+  let uid = toFiniteNumber(config.uid, 0);
+  if (uid <= 0) {
+    const authResult = await odooJsonRpc(context, url, timeout, odooPayload(`${toStringValue(request.transactionId)}-auth`, 'common', 'authenticate', [database, username, password, {}]), secrets);
+    uid = toFiniteNumber(authResult, 0);
+  }
+  if (uid <= 0) throw new Error('Odoo authentication failed or returned an empty UID.');
+
+  const existingPartners = await odooExecuteKw(context, {
+    url, timeout, database, uid, password, model: 'res.partner', method: 'search_read',
+    args: [[['email', '=', recipientEmail]] as unknown as JsonValue],
+    kwargs: { fields: ['id', 'name', 'email'], limit: 1 }, id: `${toStringValue(request.transactionId)}-partner-search`, secrets,
+  });
+  const found = Array.isArray(existingPartners) && isRecord(existingPartners[0]) ? existingPartners[0] : undefined;
+  let partnerId = toFiniteNumber(found?.id, 0);
+  let partnerCreated = false;
+  if (partnerId <= 0) {
+    const partnerPayload: IDataObject = { name: recipientName, email: recipientEmail };
+    if (recipientAddress) partnerPayload.street = recipientAddress;
+    const created = await odooExecuteKw(context, {
+      url, timeout, database, uid, password, model: 'res.partner', method: 'create', args: [partnerPayload],
+      id: `${toStringValue(request.transactionId)}-partner-create`, secrets,
+    });
+    partnerId = toFiniteNumber(created, 0);
+    partnerCreated = true;
+  }
+  if (partnerId <= 0) throw new Error('Odoo partner lookup/create did not return a valid partner id.');
+
+  const rawLineItems = Array.isArray(invoiceBody.line_items) ? invoiceBody.line_items : [];
+  const invoiceLineIds = rawLineItems.map((line) => {
+    const record = isRecord(line) ? line : {};
+    return [0, 0, {
+      name: toStringValue(record.name, 'Service'),
+      quantity: Math.max(1, toFiniteNumber(record.quantity, 1)),
+      price_unit: Math.max(0, toFiniteNumber(record.price_unit, 0)),
+    }];
+  });
+  if (invoiceLineIds.length === 0) throw new Error('Odoo invoice requires at least one line item.');
+  const movePayload: IDataObject = {
+    move_type: 'out_invoice', partner_id: partnerId,
+    invoice_date: toStringValue(invoice.invoiceDate || invoiceBody.invoice_date),
+    invoice_line_ids: invoiceLineIds as unknown as JsonValue,
+  };
+  const dueDate = toStringValue(invoice.dueDate || invoiceBody.due_date);
+  if (dueDate) movePayload.invoice_date_due = dueDate;
+  const invoiceId = await odooExecuteKw(context, {
+    url, timeout, database, uid, password, model: 'account.move', method: 'create', args: [movePayload],
+    id: `${toStringValue(request.transactionId)}-invoice-create`, secrets,
+  });
+  const numericInvoiceId = toFiniteNumber(invoiceId, 0);
+  if (numericInvoiceId <= 0) throw new Error('Odoo invoice create did not return a valid invoice id.');
+  let posted = false;
+  if (config.postInvoice === true) {
+    await odooExecuteKw(context, {
+      url, timeout, database, uid, password, model: 'account.move', method: 'action_post', args: [[numericInvoiceId] as unknown as JsonValue],
+      id: `${toStringValue(request.transactionId)}-invoice-post`, secrets,
+    });
+    posted = true;
+  }
+  return {
+    statusCode: 201,
+    headers: { 'content-type': 'application/json' },
+    body: {
+      result: { id: numericInvoiceId, partner_id: partnerId, partner_created: partnerCreated, state: posted ? 'posted' : 'draft' },
+      odoo: { uid, database: '[REDACTED]', strategy: 'auto_customer_then_invoice', post_invoice: posted },
+    },
+  };
 }
 
 function byteSize(value: unknown): number {
@@ -548,7 +686,10 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
         request.duplicatePrevention = { enabled: true, scopeKey, key, ttlHours: duplicateTtlHours, reserved: true };
         request.idempotencyRetentionMs = ttlMs;
       }
-      const response = await this.helpers.httpRequest(options);
+      const strategy = toStringValue(isRecord(request.requestMapping) ? request.requestMapping.transportStrategy : '', 'single_http_request');
+      const response = strategy === 'odoo_auto_customer_invoice'
+        ? await executeOdooAutoCustomerInvoice(this, request, options, secret, secrets)
+        : await this.helpers.httpRequest(options);
       const parts = responseParts(response);
       const finishedAt = new Date();
       const safeBody = includeResponseBody ? redactJson(parts.body, secrets) : null;

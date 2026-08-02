@@ -91,7 +91,7 @@ async function runPipeline({ dryRun = false, httpStatus = 201, providers = provi
 
   const { execute: loadEmails } = load('nodes/04_EmailList/EmailList.execute.js');
   const emailContext = context([recipients], {
-    batchId, __executionId: executionId, emailField: 'Email', nameField: 'Name', nameGeneration: 'formatted', invalidPolicy: 'skip', preserveCustomColumns: true, preventReuse: true,
+    batchId, __executionId: executionId, emailField: 'Email', nameField: 'Name', addressField: 'Address', nameGeneration: 'formatted', invalidPolicy: 'skip', preserveCustomColumns: true, preventReuse: true,
   });
   const emails = await loadEmails.call(emailContext);
 
@@ -144,7 +144,7 @@ async function runPipeline({ dryRun = false, httpStatus = 201, providers = provi
 
 test('package registers exactly the frozen eight custom nodes', () => {
   assert.equal(pkg.name, 'n8n-nodes-invoicerouter');
-  assert.equal(pkg.version, '1.5.0');
+  assert.equal(pkg.version, '1.6.0');
   assert.equal(pkg.n8n.nodes.length, 8);
   assert.equal(pkg.invoiceRouterFreeze.targetNodeCount, 8);
   assert.equal(pkg.invoiceRouterFreeze.currentNodeCount, 8);
@@ -188,7 +188,7 @@ test('all frozen custom nodes use searchable InvoiceRouter display names', () =>
 test('installed package diagnostic validates the built package root', () => {
   const output = execFileSync(process.execPath, [path.join(root, 'scripts/diagnose-n8n-package.mjs'), root], { encoding: 'utf8' });
   assert.match(output, /Diagnostic result: PASS/);
-  assert.match(output, /n8n-nodes-invoicerouter@1\.5\.0/);
+  assert.match(output, /n8n-nodes-invoicerouter@1\.6\.0/);
 });
 
 test('all declared node artifacts and main declarations exist', () => {
@@ -255,8 +255,10 @@ test('production workflow and validation package keep first import run dry-run s
   const workflow = JSON.parse(fs.readFileSync(path.join(root, 'workflows/InvoiceRouter-v1-production.json'), 'utf8'));
   const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
   assert.equal(byName['Provider Selector'].parameters.environmentFilter, 'sandbox');
-  assert.equal(byName['Provider Selector'].parameters.conditionalRouting, true);
-  assert.equal(byName['Provider Selector'].parameters.requireConditionalMatch, true);
+  assert.equal(byName['Provider Selector'].parameters.conditionalRouting, false);
+  assert.equal(byName['Provider Selector'].parameters.providerFilter, 'Odoo');
+  assert.equal(byName['Provider Selector'].parameters.actionFilter, 'Create Invoice');
+  assert.equal(byName['Provider Selector'].parameters.requireConditionalMatch, false);
   assert.equal(byName['Request Builder'].parameters.sendGuardMode, 'strict');
   assert.equal(byName['Request Builder'].parameters.strictProviderValidation, true);
   assert.equal(byName['Invoice Sender'].parameters.dryRun, true);
@@ -303,7 +305,7 @@ test('production workflow wires status writeback branch to Google Sheets append/
   assert.ok(statusTargets.includes('Prepare Retry Request'));
   assert.deepEqual(writebackTargets, ['Google Sheets - Status Writeback']);
   assert.equal(byName['Google Sheets - Status Writeback'].parameters.sheetName.value, 'invoice_results');
-  assert.equal(byName['Google Sheets - Status Writeback'].parameters.documentId.value, 'REPLACE_STATUS_SPREADSHEET_ID');
+  assert.equal(byName['Google Sheets - Status Writeback'].parameters.documentId.value, 'REPLACE_INVOICEROUTER_SPREADSHEET_ID');
   assert.equal(byName['Google Sheets - Status Writeback'].parameters.columns.value.writeback_key, '={{ $json.writeback_key }}');
   assert.equal(byName['Google Sheets - Status Writeback'].parameters.columns.value.activation_mode, '={{ $json.activation_mode }}');
   const headers = fs.readFileSync(path.join(root, 'examples/n8n_dry_run_validation/status-writeback-columns.csv'), 'utf8').trim().split(',');
@@ -350,6 +352,23 @@ test('Email List validates, deduplicates, generates names, and preserves custom 
   assert.equal(result.emails[0][0].json.recipient.name, 'John Doe');
   assert.equal(result.emails[0][0].json.recipient.customFields.Department, 'Finance');
   assert.equal(result.emails[0][0].json.skippedRecipients.length, 1);
+});
+
+test('Email List simple bulk mode requires only email and keeps blank address empty', async () => {
+  const { execute: loadEmails } = load('nodes/04_EmailList/EmailList.execute.js');
+  const emailContext = context([[
+    { json: { Email: 'alpha.customer@example.com' } },
+    { json: { Email: 'beta@example.com', Name: 'Beta User', Address: '123 Test Street' } },
+  ]], {
+    batchId: 'simple-bulk', emailField: 'Email', nameField: 'Name', addressField: 'Address', nameGeneration: 'formatted', invalidPolicy: 'skip', preserveCustomColumns: false, preventReuse: true,
+  });
+  const result = await loadEmails.call(emailContext);
+  assert.equal(result[0].length, 2);
+  assert.equal(result[0][0].json.recipient.name, 'Alpha Customer');
+  assert.equal(result[0][0].json.recipient.address, '');
+  assert.equal(result[0][0].json.recipient.customFields && Object.keys(result[0][0].json.recipient.customFields).length, 0);
+  assert.equal(result[0][1].json.recipient.name, 'Beta User');
+  assert.equal(result[0][1].json.recipient.address, '123 Test Street');
 });
 
 test('Invoice Template calculates totals and Request Builder merges all three inputs', async () => {
@@ -939,4 +958,68 @@ test('Status Manager retry output can be prepared for automatic retry execution'
   assert.equal(retryItem.json.retryCount, 1);
   assert.equal(retryItem.json.retryLoop.enabled, true);
   assert.ok(retryItem.json.readyRequest);
+});
+
+
+test('v1.6 simple workflow keeps recipient rows provider-free', () => {
+  const workflow = JSON.parse(fs.readFileSync(path.join(root, 'workflows/InvoiceRouter-v1.6-simple-bulk-email.json'), 'utf8'));
+  const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
+  assert.equal(workflow.meta.invoiceRouterRelease, '1.6.0');
+  assert.equal(byName['Provider Selector'].parameters.conditionalRouting, false);
+  assert.equal(byName['Provider Selector'].parameters.providerFilter, 'Odoo');
+  assert.equal(byName['Email List'].parameters.emailField, 'Email');
+  assert.equal(byName['Email List'].parameters.nameField, 'Name');
+  assert.equal(byName['Email List'].parameters.addressField, 'Address');
+  assert.equal(byName['Email List'].parameters.preserveCustomColumns, false);
+  const providerCsv = fs.readFileSync(path.join(root, 'examples/n8n_simple_bulk_email/provider-simple-odoo.csv'), 'utf8');
+  const emailCsv = fs.readFileSync(path.join(root, 'examples/n8n_simple_bulk_email/email-list-simple.csv'), 'utf8');
+  assert.match(providerCsv.split(/\r?\n/)[0], /Username,Password,Database/);
+  assert.equal(emailCsv.split(/\r?\n/)[0], 'Email,Name,Address');
+});
+
+test('Provider Loader accepts Odoo account credentials from provider sheet only', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const loaderContext = context([[
+    { json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Sandbox', Environment: 'sandbox', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"odooPostInvoice":false}', Timeout: 60 } },
+  ]], { batchId: 'odoo-provider', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true });
+  const result = await loadProviders.call(loaderContext);
+  const provider = result[0][0].json.providers[0];
+  assert.equal(provider.providerId, 'odoo');
+  assert.equal(provider.authType, 'odoo-json-rpc');
+  assert.equal(provider.connection.extraConfig.odooPostInvoice, false);
+  assert.equal(JSON.stringify(result).includes('odoo-secret'), false);
+});
+
+test('Odoo request build no longer requires partner_id in email_list', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Sandbox', Environment: 'sandbox', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"odooPostInvoice":false}', Timeout: 60 } }];
+  const recipients = [{ json: { Email: 'new.customer@example.com' } }];
+  const result = await runPipeline({ dryRun: true, providers, recipients, selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'sandbox' }, requestParams: { strictProviderValidation: true } });
+  const request = result.built[0][0].json.readyRequest;
+  assert.equal(request.providerId, 'odoo');
+  assert.equal(request.recipient.name, 'New Customer');
+  assert.equal(request.requestMapping.transportStrategy, 'odoo_auto_customer_invoice');
+  assert.equal(result.built[0][0].json.requestBuild.providerValidationErrorCount, 0);
+});
+
+test('Invoice Sender executes Odoo auto customer then invoice sequence', async () => {
+  const providers = [{ json: { Enabled: true, Provider: 'Odoo', Account: 'Odoo Sandbox', Environment: 'sandbox', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://odoo.example.test', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'odoo-user@example.com', Password: 'odoo-secret', Database: 'odoo-db', 'Content-Type': 'application/json', 'Extra Config JSON': '{"odooPostInvoice":false}', Timeout: 60 } }];
+  const recipients = [{ json: { Email: 'new.customer@example.com', Address: '42 Test Lane' } }];
+  const responses = [
+    { statusCode: 200, headers: {}, body: { result: 7 } },
+    { statusCode: 200, headers: {}, body: { result: [] } },
+    { statusCode: 200, headers: {}, body: { result: 88 } },
+    { statusCode: 200, headers: {}, body: { result: 501 } },
+  ];
+  const result = await runPipeline({ dryRun: true, providers, recipients, selectorParams: { providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'sandbox' }, requestParams: { strictProviderValidation: true } });
+  const { execute: sendInvoice } = load('nodes/06_InvoiceSender/InvoiceSender.execute.js');
+  const senderContext = context([result.built[0]], {
+    dryRun: false, includeResponseBody: true, requireSendGuard: true, activationSafetyMode: 'sandboxRealSend', expectedEnvironment: 'sandbox', sandboxModeConfirmation: 'SEND_SANDBOX_INVOICES', liveModeConfirmation: '', preventDuplicateSends: false, duplicateTtlHours: 720, reservationTtlMinutes: 15, stopOnTransportError: false,
+  }, responses);
+  const sent = await sendInvoice.call(senderContext);
+  assert.equal(senderContext.calls.length, 4);
+  assert.equal(sent[0][0].json.rawExecution.httpStatus, 201);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.id, 501);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.partner_id, 88);
+  assert.equal(sent[0][0].json.rawExecution.responseBody.result.partner_created, true);
+  assert.equal(JSON.stringify(sent).includes('odoo-secret'), false);
 });

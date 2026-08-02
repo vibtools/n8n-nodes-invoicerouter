@@ -32,7 +32,7 @@ const PROVIDER_REQUEST_MAPPINGS: Record<string, IDataObject> = {
   'zoho-books': { canonicalAction: 'create_invoice', method: 'POST', contentType: 'application/json', idempotencyHeader: 'X-Request-Id', responseKind: 'zoho_books.invoice' },
   xero: { canonicalAction: 'create_accounts_receivable_invoice', method: 'POST', contentType: 'application/json', idempotencyHeader: 'Idempotency-Key', responseKind: 'xero.invoices' },
   erpnext: { canonicalAction: 'create_sales_invoice', method: 'POST', contentType: 'application/json', idempotencyHeader: 'X-Request-Id', responseKind: 'erpnext.sales_invoice' },
-  odoo: { canonicalAction: 'execute_kw_account_move_create', method: 'POST', contentType: 'application/json', idempotencyHeader: 'X-Request-Id', responseKind: 'odoo.jsonrpc' },
+  odoo: { canonicalAction: 'auto_customer_then_invoice', method: 'POST', contentType: 'application/json', idempotencyHeader: 'X-Request-Id', responseKind: 'odoo.jsonrpc', transportStrategy: 'odoo_auto_customer_invoice' },
   quickbooks: { canonicalAction: 'create_invoice', method: 'POST', contentType: 'application/json', idempotencyHeader: 'Request-Id', responseKind: 'quickbooks.invoice' },
   freshbooks: { canonicalAction: 'create_invoice', method: 'POST', contentType: 'application/json', idempotencyHeader: 'Idempotency-Key', responseKind: 'freshbooks.invoice' },
   chargebee: { canonicalAction: 'create_invoice_or_charge', method: 'POST', contentType: 'application/x-www-form-urlencoded', idempotencyHeader: 'Idempotency-Key', responseKind: 'chargebee.invoice' },
@@ -50,7 +50,9 @@ function providerRequestMapping(providerId: string, actionId: string): IDataObje
   return {
     schemaVersion: '1.0', providerId, actionId: toStringValue(actionId), canonicalAction: preset.canonicalAction,
     method: preset.method, contentType: preset.contentType, idempotencyHeader: preset.idempotencyHeader,
-    responseKind: preset.responseKind, allowedMethods: ['POST', 'PUT', 'PATCH'], source: providerId === 'custom' ? 'custom-provider-profile' : 'built-in-provider-preset',
+    responseKind: preset.responseKind, transportStrategy: preset.transportStrategy ?? 'single_http_request',
+    customerMode: providerId === 'odoo' ? 'auto_search_or_create_by_email' : 'provider_specific',
+    allowedMethods: ['POST', 'PUT', 'PATCH'], source: providerId === 'custom' ? 'custom-provider-profile' : 'built-in-provider-preset',
   };
 }
 
@@ -315,19 +317,27 @@ export function buildProviderRequest(input: ProviderBuildInput): ProviderBuildRe
       remarks: toStringValue(invoice.notes),
     };
   } else if (providerId === 'odoo') {
-    requireCustom(errors, invoice, recipient, 'database', 'Odoo');
-    requireCustom(errors, invoice, recipient, 'uid', 'Odoo');
-    requireCustom(errors, invoice, recipient, 'password', 'Odoo');
-    requireCustom(errors, invoice, recipient, 'partner_id', 'Odoo');
     body = {
-      jsonrpc: '2.0',
-      method: 'call',
-      params: {
-        service: 'object',
-        method: 'execute_kw',
-        args: [custom(invoice, recipient, 'database') ?? null, custom(invoice, recipient, 'uid') ?? null, custom(invoice, recipient, 'password') ?? null, 'account.move', 'create', [{ move_type: 'out_invoice', partner_id: custom(invoice, recipient, 'partner_id') ?? null, invoice_date: toStringValue(invoice.invoiceDate), invoice_line_ids: items.map((item) => [0, 0, { name: item.description || item.name || '', quantity: item.quantity ?? 1, price_unit: item.unitPrice ?? 0 }]) }]],
+      customer: {
+        lookup: 'email',
+        email: toStringValue(recipient.email),
+        name: toStringValue(recipient.name),
+        address: toStringValue(recipient.address),
       },
-      id: toStringValue(invoice.transactionId),
+      invoice: {
+        move_type: 'out_invoice',
+        invoice_number: toStringValue(invoice.invoiceNumber),
+        invoice_date: toStringValue(invoice.invoiceDate),
+        due_date: toStringValue(invoice.dueDate),
+        currency: toStringValue(invoice.currency, 'USD'),
+        notes: toStringValue(invoice.notes),
+        line_items: items.map((item) => ({ name: item.description || item.name || '', quantity: item.quantity ?? 1, price_unit: item.unitPrice ?? 0 })),
+      },
+      automation: {
+        provider: 'odoo',
+        strategy: 'search-or-create-customer-then-create-invoice',
+        requiresProviderSheetCredentials: ['Database', 'Username', 'Password'],
+      },
     };
   } else if (providerId === 'quickbooks') {
     requireCustom(errors, invoice, recipient, 'customer_id', 'QuickBooks');

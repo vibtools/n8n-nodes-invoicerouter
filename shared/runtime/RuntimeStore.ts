@@ -12,6 +12,10 @@ export interface SecretMaterial {
   headerName: string;
   headerValue: string;
   authType: string;
+  username?: string;
+  password?: string;
+  database?: string;
+  extraConfig?: IDataObject;
 }
 
 interface LockOwner {

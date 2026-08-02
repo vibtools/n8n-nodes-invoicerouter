@@ -1,5 +1,11 @@
 # InvoiceRouter Architecture
 
+## v1.6.0 simple bulk email workflow boundary
+
+The package release identity is `v1.6.0`. The architectural freeze remains Version 1.0 with exactly eight custom nodes. v1.6.0 does not add or remove custom node types; it changes the default workflow contract so provider credentials stay in the `provider` sheet and recipient rows require only `Email`, with optional `Name` and `Address`.
+
+Odoo customer handling is now automated by the sender path: Odoo credentials are loaded from the provider account row, the customer is searched by email, a missing partner can be created automatically, and the invoice is then created for that partner. The first workflow import remains dry-run safe.
+
 ## v1.5.0 release boundary
 
 The package release identity is `v1.5.0`. The architectural freeze remains Version 1.0 with exactly eight custom nodes. v1.5.0 does not add custom node types or replace the data-flow architecture; it hardens the frozen flow for bulk invoice sending, guarded real API activation, retry/writeback evidence, preset self-checks, and packaged node branding.

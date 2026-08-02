@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.0 — Simple bulk email workflow and Odoo auto-customer handling
+
+- Simplifies the default workflow so `email_list` requires only `Email`; `Name` and `Address` are optional.
+- Keeps provider/API/secret/config fields in the `provider` sheet instead of recipient rows.
+- Adds Odoo JSON-RPC account fields to Provider Loader: `Username`, `Password`, `Database`, and `Extra Config JSON`.
+- Changes the bundled production workflow to single-provider easy mode with conditional routing disabled by default.
+- Adds Odoo auto customer handling: authenticate, search partner by email, create partner if missing, then create invoice.
+- Adds a v1.6.0 simple bulk email workflow JSON and examples.
+- Preserves the frozen eight custom-node topology and existing activation/bulk/idempotency safety controls.
+
 ## Unreleased — Step 12B n8n registry/UI install compatibility
 
 - Removed the runtime `n8n-workflow` peer dependency declaration to reduce self-hosted n8n UI/npm install resolution risk.

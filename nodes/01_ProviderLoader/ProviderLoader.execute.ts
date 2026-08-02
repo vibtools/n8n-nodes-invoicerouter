@@ -1,7 +1,7 @@
 import type { IDataObject, IExecuteFunctions, INodeExecutionData } from '../../shared/types/N8n';
 import { maskSecret } from '../../shared/security/Redaction';
 import { executionIdentity, registerProviderProfiles, type SecretMaterial } from '../../shared/runtime/RuntimeStore';
-import { isRecord, normalizedKey, nowIso, slug, toBoolean, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
+import { isRecord, normalizedKey, nowIso, parseJsonObject, slug, toBoolean, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
 import { normalizeProviderId } from '../../providers';
 
 const COLUMN_ALIASES: Record<string, string[]> = {
@@ -10,6 +10,8 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   baseUrl: ['baseurl', 'apiurl'], endpoint: ['endpoint', 'path'], authType: ['authtype', 'authentication'],
   apiVersion: ['apiversion', 'version'], contentType: ['contenttype'], headerName: ['headername'],
   headerValue: ['headervalue'], apiKey: ['apikey', 'accesstoken'], apiSecret: ['apisecret', 'secret'],
+  username: ['username', 'user', 'login', 'odoologin'], password: ['password', 'apikeysecret', 'odooapikey'],
+  database: ['database', 'dbname', 'odoodatabase'], extraConfigJson: ['extraconfigjson', 'configjson', 'providerconfigjson'],
   extraValue: ['extravalue', 'tenantid', 'realmid', 'organizationid'], timeout: ['timeout'], notes: ['notes'],
 };
 
@@ -32,6 +34,7 @@ function normalizeAuth(value: unknown): string {
   if (auth.includes('basic')) return 'basic';
   if (auth.includes('token')) return 'token';
   if (auth.includes('session')) return 'session';
+  if (auth.includes('odoo') || auth.includes('jsonrpc')) return 'odoo-json-rpc';
   if (auth.includes('none')) return 'none';
   return auth || 'custom';
 }
@@ -77,13 +80,23 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     if (!(timeoutSeconds > 0)) errors.push('Timeout must be a positive number');
     const apiKey = toStringValue(row.apiKey);
     const apiSecret = toStringValue(row.apiSecret);
+    const username = toStringValue(row.username);
+    const password = toStringValue(row.password || row.apiSecret);
+    const database = toStringValue(row.database);
     const extraValue = toStringValue(row.extraValue);
     const headerName = toStringValue(row.headerName);
     const headerValue = toStringValue(row.headerValue);
+    let extraConfig: IDataObject = {};
+    if (toStringValue(row.extraConfigJson).trim()) extraConfig = parseJsonObject(row.extraConfigJson, `Row ${itemIndex + 2} Extra Config`);
     if (['bearer', 'oauth2'].includes(authType) && !apiKey && !headerValue) errors.push('API Key or Header Value is required for bearer/oauth2 auth');
     if (authType === 'basic' && (!apiKey || !apiSecret)) errors.push('API Key and API Secret are required for basic auth');
     if (authType === 'token' && (!apiKey || !apiSecret)) errors.push('API Key and API Secret are required for token auth');
     if (authType === 'session' && !extraValue && !headerValue) errors.push('Extra Value or Header Value is required for session auth');
+    if (providerName && normalizeProviderId(providerName) === 'odoo') {
+      if (!database) errors.push('Database is required for Odoo provider rows');
+      if (!username && !apiKey) errors.push('Username or API Key is required for Odoo provider rows');
+      if (!password && !apiSecret) errors.push('Password or API Secret is required for Odoo provider rows');
+    }
     if (headerValue && !headerName && !['bearer', 'oauth2', 'basic', 'token', 'session'].includes(authType)) errors.push('Header Name is required when Header Value is set for custom auth');
     if (errors.length) {
       const message = `Row ${itemIndex + 2}: ${errors.join('; ')}`;
@@ -106,11 +119,12 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       authType, apiVersion: toStringValue(row.apiVersion), contentType: toStringValue(row.contentType, 'application/json'),
       timeoutMs: Math.round(timeoutSeconds * 1000),
       headerName, headerPreview: headerValue ? maskHeader(headerValue) : '',
-      apiKeyPreview: maskSecret(apiKey), apiSecretPreview: maskSecret(apiSecret), extraValuePreview: maskSecret(extraValue),
+      apiKeyPreview: maskSecret(apiKey || username), apiSecretPreview: maskSecret(apiSecret || password), extraValuePreview: maskSecret(extraValue || database),
+      connection: { usernamePreview: maskSecret(username || apiKey), database: database ? maskSecret(database) : '', extraConfig },
       notes: toStringValue(row.notes), priority: itemIndex, weight: 1,
       metadata: { sourceType: 'google_sheet', sheetName: sourceName, sheetRow: itemIndex + 2 },
     };
-    const secret: SecretMaterial = { apiKey, apiSecret, extraValue, headerName, headerValue, authType };
+    const secret: SecretMaterial = { apiKey, apiSecret, extraValue, headerName, headerValue, authType, username, password, database, extraConfig };
     if (byId.has(id)) {
       const message = `Duplicate provider action profile: ${id}`;
       if (duplicatePolicy === 'error') throw new Error(message);

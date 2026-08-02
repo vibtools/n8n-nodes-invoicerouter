@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-invoicerouter",
-  "version": "1.5.0",
-  "description": "Hardened eight-node n8n Invoice Router for bulk invoice routing, guarded real API sending, retry/status writeback, and v1.5.0 live acceptance workflows.",
+  "version": "1.6.0",
+  "description": "Simplified eight-node n8n Invoice Router for provider-account API setup, simple bulk email lists, auto customer handling, guarded real API sending, and status writeback.",
   "keywords": [
     "n8n",
     "n8n-community-node",
@@ -66,7 +66,10 @@
     "examples/n8n_dry_run_validation",
     "docs/freeze/v1.0/V1_5_0_BUILD_INSTALL_LIVE_TEST_RUNBOOK.md",
     "docs/freeze/v1.0/N8N_REGISTRY_UI_INSTALL_COMPATIBILITY.md",
-    "scripts/diagnose-n8n-package.mjs"
+    "scripts/diagnose-n8n-package.mjs",
+    "docs/freeze/v1.0/V1_6_0_SIMPLE_BULK_EMAIL_WORKFLOW.md",
+    "examples/n8n_simple_bulk_email",
+    "workflows/InvoiceRouter-v1.6-simple-bulk-email.json"
   ],
   "scripts": {
     "clean": "node scripts/clean.mjs",
