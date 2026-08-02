@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.1 - 2026-08-02 — Real email, truthful lifecycle, and release synchronization
+
+### Runtime corrections
+
+- Replaced the Odoo interactive send-action opener with headless `account.move.send.wizard` creation and execution.
+- Added provider-side email/PDF evidence and strict `QUEUED`, `SENT`, `FAILED`, and `UNVERIFIED` semantics.
+- Prevented HTTP success or wizard completion alone from producing false sent status.
+- Added partial lifecycle outcomes and truthful bulk counters.
+- Added checkpoint-based post-only and send-only retry resume against the existing provider invoice.
+- Blocked automatic retry for unverified email outcomes.
+- Removed declarative-provider 2xx-to-SENT fallback and preserved queued/unverified states.
+- Corrected lifecycle writeback expressions and added evidence/checkpoint/resume columns without removing existing columns.
+- Bound Odoo sent/queued evidence to mail messages created by the current send attempt; historical invoice mail records can no longer produce a false `SENT`.
+- Classified Odoo email notification `pending` as queued/processing rather than terminal sent evidence.
+- Preserved boolean `emailSendRequested` values through Status Checker and Google Sheets row preparation so `false` is never serialized as `true`.
+
+### Documentation and release synchronization
+
+- Added Odoo email evidence and lifecycle-resume developer contracts.
+- Added Odoo email troubleshooting and synchronized user/template guides.
+- Replaced the public personal-looking Odoo sample recipient with `customer@example.com`.
+- Added validation for malformed n8n expressions and consumer-webmail sample addresses.
+- Expanded the GitHub install bundle with the v2 master workflow, compatibility workflows, Odoo mode pack, common status assets, and synchronized documentation.
+- Added the final release order: complete-project forensic audit, publish, n8n Community Nodes update, one-recipient live canary, then approved live bulk.
+
+Package, lockfile, VibProject metadata, documentation version metadata, provider compatibility metadata, and release tests are synchronized to `2.0.1`. The frozen eight-node architecture and workflow contract remain version `2.0`.
+
 ## 2.0.0 - Master Universal Provider Lifecycle
 
 ### Release candidate cleanup

@@ -132,3 +132,24 @@ The writeback branch now carries activation safety metadata from Invoice Sender 
 | `activation_safety` | JSON string of `management.statusWriteback.values.activationSafety` |
 
 These fields are required for post-run forensic review before promoting from dry-run validation to sandbox real send or from sandbox real send to live real send.
+
+## v2 lifecycle evidence additions
+
+The canonical header is now `template/status-writeback-columns.csv`. Existing columns remain unchanged, and these fields are additive:
+
+```text
+email_evidence
+lifecycle_outcome
+lifecycle_failed_step
+lifecycle_checkpoint
+retry_resume_stage
+retry_resume
+```
+
+All workflow mappings must use valid n8n expression syntax, for example:
+
+```text
+={{ $json.email_send_status }}
+```
+
+A successful transport does not override provider lifecycle evidence. Requested email outcomes remain distinct as `QUEUED`, `SENT`, `FAILED`, or `UNVERIFIED`.

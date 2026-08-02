@@ -7,7 +7,7 @@ The eight-node architecture remains frozen. v2.0.0 adds a universal lifecycle la
 
 ## v1.6.0 simple bulk email workflow boundary
 
-The package release identity is `v1.6.0`. The architectural freeze remains Version 1.0 with exactly eight custom nodes. v1.6.0 does not add or remove custom node types; it changes the default workflow contract so provider credentials stay in the `provider` sheet and recipient rows require only `Email`, with optional `Name` and `Address`.
+The historical v1.6.0 boundary kept Version 1.0 with exactly eight custom nodes. v1.6.0 does not add or remove custom node types; it changes the default workflow contract so provider credentials stay in the `provider` sheet and recipient rows require only `Email`, with optional `Name` and `Address`.
 
 Odoo customer handling is now automated by the sender path: Odoo credentials are loaded from the provider account row, the customer is searched by email, a missing partner can be created automatically, and the invoice is then created for that partner. The first workflow import remains dry-run safe.
 
@@ -28,9 +28,9 @@ The Version 1.0 responsibilities are frozen in [`VERSION_1_0_FREEZE.md`](VERSION
 3. **Selection:** Provider Selector and its runtime account pool.
 4. **Invoice data:** Invoice Template.
 5. **Merge:** Request Builder combines account, template, and recipient through three inputs, then attaches `sendGuard` approval metadata and a structured idempotency key.
-6. **Execution:** Invoice Sender injects the runtime secret, enforces send guard/live-mode/duplicate-prevention checks, and executes one request only when those gates allow it.
-7. **Analysis:** Status Checker converts the raw response to a standard status.
-8. **Management:** Status Manager creates decisions/events, writes provider feedback, and emits normalized execution-log/status-writeback payloads.
+6. **Execution:** Invoice Sender injects runtime secrets, enforces send guard/activation/duplicate/bulk checks, executes provider lifecycle stages, records provider evidence, and accepts only approved lifecycle-resume requests.
+7. **Analysis:** Status Checker combines transport and lifecycle evidence into success, partial, failure, or neutral standard status.
+8. **Management:** Status Manager creates decisions/events, truthful bulk counters, provider feedback, safe retry-resume requests, and normalized execution-log/status-writeback payloads.
 9. **Writeback wiring:** Built-in Code and Google Sheets nodes flatten and upsert `management.statusWriteback` into the configured `invoice_results` Sheet.
 
 ## Feedback model
@@ -48,7 +48,7 @@ The workflow does not contain a physical cyclic connection. Status Manager updat
 
 ## Importable workflow
 
-`workflows/InvoiceRouter-v1-production.json` is the canonical Version 1 workflow template. It is an inactive, Dry Run-first template with placeholder Google Sheet and credential IDs. The template is production-shaped, but it is not production-configured until the private provider Sheet, email Sheet, Provider Selector filters or conditional routing rules, provider-specific values, sendGuard review, and sandbox verification are completed.
+`workflows/InvoiceRouter-v2-master-universal.json` is the canonical master workflow template. `workflows/InvoiceRouter-v1-production.json` and `workflows/InvoiceRouter-v1.6-simple-bulk-email.json` remain compatibility/reference templates. It is an inactive, Dry Run-first template with placeholder Google Sheet and credential IDs. The template is production-shaped, but it is not production-configured until the private provider Sheet, email Sheet, Provider Selector filters or conditional routing rules, provider-specific values, sendGuard review, and sandbox verification are completed.
 
 The reference workbook under `examples/google_sheets/` is a demo/preset contract artifact. It must be copied to a private Google Sheet before real use; demo rows or example conditional notes must not be treated as runtime approval conditions. Runtime conditional routing lives in Provider Selector settings. Guarded send approval lives in Request Builder `sendGuard` metadata and Invoice Sender guard enforcement. Duplicate-send prevention lives in Request Builder idempotency metadata plus Invoice Sender runtime/static-data reservations.
 
@@ -126,7 +126,7 @@ Status Manager now exposes `management.bulkSummary` and includes bulk safety met
 
 ## Step 11E - Production Preset and Retry Loop
 
-Invoice Sender now performs a production preset self-check before transport. The check prevents UI reset or accidental parameter edits from weakening dry-run, sandbox, or live activation safety. The production workflow also includes a guarded automatic retry branch from Status Manager through a built-in Code node and Wait node back into Invoice Sender. Retry attempts remain subject to send guard, activation safety, duplicate prevention, bulk safety, and provider retry classification.
+Invoice Sender now performs a production preset self-check before transport. The check prevents UI reset or accidental parameter edits from weakening dry-run, sandbox, or live activation safety. The production workflow also includes a guarded automatic retry branch from Status Manager through a built-in Code node and Wait node back into Invoice Sender. Retry attempts remain subject to send guard, activation safety, duplicate prevention, bulk safety, provider retry classification, and lifecycle checkpoint validation. Post/email retries resume the existing provider invoice instead of recreating it.
 
 ## Step 12B - n8n Registry/UI Install Compatibility
 
@@ -144,3 +144,29 @@ The master lifecycle layer writes customer, invoice, post, and email-send status
 ## Step 14D / v2.0.0 Declarative Provider Recipe Runtime
 
 Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice providers can define customer, invoice, post/finalize, and email-send steps in provider recipe JSON instead of requiring core node code changes. This is intended for compatible providers; non-standard OAuth, webhook, UI-only, or SDK-only flows may still require a dedicated adapter.
+
+## v2 email evidence boundary
+
+Odoo invoice email execution is a provider lifecycle stage, not a successful HTTP-call assumption. The built-in adapter creates and executes `account.move.send.wizard`, then inspects provider-side mail/PDF evidence. Status Checker preserves `QUEUED`, `SENT`, `FAILED`, and `UNVERIFIED` as distinct outcomes. Inbox delivery is outside the provider transport status and remains a live-canary proof item.
+
+The evidence boundary is execution-specific. Invoice Sender captures a readable pre-send message baseline, identifies newly created post-send message IDs, and restricts notification/mail queries to those IDs. If that binding cannot be established, historical evidence is excluded and the lifecycle remains `UNVERIFIED`. Status metadata keeps `emailSendRequested` as a boolean through writeback preparation.
+
+The evidence fields are additive to the existing writeback contract:
+
+```text
+email_evidence
+lifecycle_outcome
+lifecycle_failed_step
+lifecycle_checkpoint
+retry_resume_stage
+retry_resume
+```
+
+## v2 lifecycle-resume boundary
+
+Status Manager is the only component that may approve a stage resume. Invoice Sender validates the source, request/provider identity, recognized stage, and existing provider invoice checkpoint before post-only or send-only execution. A fabricated or incomplete resume object is rejected. `EMAIL_UNVERIFIED` is manual-review only.
+
+## Release synchronization boundary
+
+The GitHub install bundle contains the npm tarball, v2 master and compatibility workflows, the Odoo mode pack, common status-writeback assets, and synchronized user/developer/troubleshooting documentation. Release staging is audited before the tarball is added to the bundle. Final publication remains blocked until a complete-project forensic audit passes. Community-node update precedes the one-recipient live canary.
+

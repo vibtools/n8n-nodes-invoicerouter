@@ -3,8 +3,8 @@ import { applyProviderFeedback, persistFeedback } from '../../shared/runtime/Run
 import { isRecord, nowIso, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
 
 const RETRYABLE_HTTP = new Set([408, 425, 429, 500, 502, 503, 504]);
-const RETRYABLE_ERRORS = new Set(['TIMEOUT_ERROR', 'NETWORK_ERROR', 'RATE_LIMIT_ERROR', 'SERVER_ERROR', 'RETRYABLE_PROVIDER_ERROR']);
-const NON_RETRYABLE_ERRORS = new Set(['AUTHENTICATION_ERROR', 'AUTHORIZATION_ERROR', 'VALIDATION_ERROR', 'NOT_FOUND_ERROR', 'CONFLICT_ERROR']);
+const RETRYABLE_ERRORS = new Set(['TIMEOUT_ERROR', 'NETWORK_ERROR', 'RATE_LIMIT_ERROR', 'SERVER_ERROR', 'RETRYABLE_PROVIDER_ERROR', 'EMAIL_SEND_ERROR', 'INVOICE_POST_ERROR']);
+const NON_RETRYABLE_ERRORS = new Set(['AUTHENTICATION_ERROR', 'AUTHORIZATION_ERROR', 'VALIDATION_ERROR', 'NOT_FOUND_ERROR', 'CONFLICT_ERROR', 'EMAIL_UNVERIFIED']);
 
 function workflowIdentity(context: IExecuteFunctions): IDataObject {
   const workflow = context.getWorkflow?.();
@@ -22,12 +22,24 @@ function writebackKey(status: IDataObject, mode: string): string {
   return toStringValue(status.requestId);
 }
 
-function workflowStateFor(input: { duplicateExecution: boolean; blockedExecution: boolean; neutralExecution: boolean; result: string; shouldRetry: boolean }): string {
+function booleanValue(value: unknown): boolean {
+  if (value === true) return true;
+  return ['true', '1', 'yes', 'on', 'requested'].includes(toStringValue(value).trim().toLowerCase());
+}
+
+function workflowStateFor(input: {
+  duplicateExecution: boolean;
+  blockedExecution: boolean;
+  neutralExecution: boolean;
+  result: string;
+  shouldRetry: boolean;
+}): string {
   if (input.duplicateExecution) return 'DUPLICATE';
   if (input.blockedExecution) return 'BLOCKED';
   if (input.neutralExecution) return 'PROCESSING';
-  if (input.result === 'SUCCESS') return 'COMPLETED';
   if (input.shouldRetry) return 'PENDING_RETRY';
+  if (input.result === 'SUCCESS') return 'COMPLETED';
+  if (input.result === 'PARTIAL_SUCCESS') return 'PARTIAL';
   if (input.result === 'UNKNOWN') return 'PROCESSING';
   return 'FAILED';
 }
@@ -35,28 +47,47 @@ function workflowStateFor(input: { duplicateExecution: boolean; blockedExecution
 function buildBulkSummary(items: INodeExecutionData[]): IDataObject {
   const statuses = items.map((item) => isRecord(item.json.standardStatus) ? item.json.standardStatus : {});
   const count = (predicate: (status: IDataObject) => boolean): number => statuses.filter(predicate).length;
+  const upper = (value: unknown): string => toStringValue(value).toUpperCase();
   const runIds = [...new Set(statuses.map((status) => toStringValue(status.bulkRunId)).filter(Boolean))];
   const environments = [...new Set(statuses.flatMap((status) => {
     const bulk = isRecord(status.bulkSafety) ? status.bulkSafety : {};
     return Array.isArray(bulk.environments) ? bulk.environments.map((entry) => toStringValue(entry)).filter(Boolean) : [];
   }))].sort();
   const total = statuses.length;
-  const sent = count((status) => toStringValue(status.result).toUpperCase() === 'SUCCESS');
-  const failed = count((status) => ['FAILED', 'ERROR', 'TIMEOUT'].includes(toStringValue(status.result).toUpperCase()));
-  const blocked = count((status) => toStringValue(status.result).toUpperCase() === 'BLOCKED');
-  const duplicate = count((status) => toStringValue(status.result).toUpperCase() === 'DUPLICATE');
-  const dryRun = count((status) => toStringValue(status.transportStatus).toUpperCase() === 'DRY_RUN');
-  const pending = Math.max(0, total - sent - failed - blocked - duplicate - dryRun);
+  const succeeded = count((status) => upper(status.result) === 'SUCCESS');
+  const partial = count((status) => upper(status.result) === 'PARTIAL_SUCCESS');
+  const failed = count((status) => ['FAILED', 'ERROR', 'TIMEOUT'].includes(upper(status.result)));
+  const blocked = count((status) => upper(status.result) === 'BLOCKED');
+  const duplicate = count((status) => upper(status.result) === 'DUPLICATE');
+  const dryRun = count((status) => upper(status.transportStatus) === 'DRY_RUN');
+  const invoiceCreated = count((status) => ['CREATED', 'SENT', 'PAID', 'PARTIALLY_PAID', 'OVERDUE', 'VIEWED'].includes(upper(status.invoiceStatus)) || Boolean(toStringValue(status.providerInvoiceId)));
+  const invoicePosted = count((status) => upper(status.postStatus) === 'POSTED');
+  const emailRequested = count((status) => booleanValue(status.emailSendRequested));
+  const emailSent = count((status) => upper(status.emailSendStatus) === 'SENT');
+  const emailQueued = count((status) => upper(status.emailSendStatus) === 'QUEUED');
+  const emailFailed = count((status) => upper(status.emailSendStatus) === 'FAILED');
+  const emailUnverified = count((status) => upper(status.emailSendStatus) === 'UNVERIFIED');
+  const pending = Math.max(0, total - succeeded - partial - failed - blocked - duplicate - dryRun);
   return {
-    schemaVersion: '1.0', runId: runIds[0] ?? '', totalItems: total, sent, failed, blocked, duplicate, dryRun, pending,
-    environments, allSucceeded: total > 0 && sent === total, hasFailures: failed > 0, hasBlocked: blocked > 0, hasDuplicates: duplicate > 0,
+    schemaVersion: '2.0', runId: runIds[0] ?? '', totalItems: total,
+    sent: emailSent, succeeded, partial, failed, blocked, duplicate, dryRun, pending,
+    invoiceCreated, invoicePosted, emailRequested, emailSent, emailQueued, emailFailed, emailUnverified,
+    environments, allSucceeded: total > 0 && succeeded === total, hasFailures: failed > 0,
+    hasPartial: partial > 0, hasBlocked: blocked > 0, hasDuplicates: duplicate > 0,
     completedAt: nowIso(),
   };
 }
 
-function retryDecisionFallback(input: { status: IDataObject; result: string; neutralExecution: boolean; errorType: string; httpStatus: number; retryableByPolicy: boolean; nonRetryableByPolicy: boolean }): IDataObject {
-  if (input.neutralExecution || input.result === 'SUCCESS') {
-    return { retryable: false, safeToRetry: false, source: 'status-manager-neutral', reason: 'Neutral or successful execution does not need retry.' };
+function retryDecisionFallback(input: {
+  result: string;
+  neutralExecution: boolean;
+  errorType: string;
+  httpStatus: number;
+  retryableByPolicy: boolean;
+  nonRetryableByPolicy: boolean;
+}): IDataObject {
+  if (input.neutralExecution || ['SUCCESS', 'PARTIAL_SUCCESS'].includes(input.result)) {
+    return { retryable: false, safeToRetry: false, source: 'status-manager-neutral', reason: 'Neutral, successful, or partial execution does not receive an automatic full retry.' };
   }
   if (input.nonRetryableByPolicy || NON_RETRYABLE_ERRORS.has(input.errorType)) {
     return { retryable: false, safeToRetry: false, source: 'status-manager-non-retryable', reason: `${input.errorType || `HTTP_${input.httpStatus}`} requires review before retry.` };
@@ -68,7 +99,15 @@ function retryDecisionFallback(input: { status: IDataObject; result: string; neu
   };
 }
 
-function retryDelaySeconds(input: { shouldRetry: boolean; nextRetryCount: number; baseDelay: number; capDelay: number; respectRetryAfter: boolean; retryDecision: IDataObject; status: IDataObject }): number {
+function retryDelaySeconds(input: {
+  shouldRetry: boolean;
+  nextRetryCount: number;
+  baseDelay: number;
+  capDelay: number;
+  respectRetryAfter: boolean;
+  retryDecision: IDataObject;
+  status: IDataObject;
+}): number {
   if (!input.shouldRetry) return 0;
   const exponentialDelay = input.baseDelay * Math.pow(2, Math.max(0, input.nextRetryCount - 1));
   const retryAfter = toFiniteNumber(input.retryDecision.retryAfterSeconds ?? input.status.retryAfterSeconds, 0);
@@ -76,6 +115,24 @@ function retryDelaySeconds(input: { shouldRetry: boolean; nextRetryCount: number
   const providerDelay = input.respectRetryAfter ? Math.max(retryAfter, retryDelayHint) : 0;
   const rawDelay = Math.max(exponentialDelay, providerDelay);
   return Math.max(1, Math.min(Math.max(1, input.capDelay), Math.ceil(rawDelay)));
+}
+
+function lifecycleResume(status: IDataObject, retryDecision: IDataObject): IDataObject | null {
+  const checkpoint = isRecord(status.lifecycleCheckpoint) ? status.lifecycleCheckpoint : {};
+  const stage = toStringValue(status.retryResumeStage ?? retryDecision.resumeStage ?? checkpoint.nextStage);
+  if (!stage) return null;
+  const providerInvoiceId = toStringValue(status.providerInvoiceId ?? checkpoint.providerInvoiceId);
+  const providerCustomerId = toStringValue(status.providerCustomerId ?? checkpoint.providerCustomerId);
+  if (['invoice.post', 'invoice.send_email'].includes(stage) && !providerInvoiceId) return null;
+  return {
+    schemaVersion: '1.0', source: 'status-manager', approved: true, stage,
+    requestId: status.requestId, providerId: status.providerId, profileId: status.profileId, accountId: status.accountId,
+    providerCustomerId, providerInvoiceId, invoiceNumber: status.invoiceNumber ?? checkpoint.invoiceNumber,
+    checkpoint, facts: isRecord(checkpoint.facts) ? checkpoint.facts : {
+      providerCustomerId, providerInvoiceId, invoiceNumber: status.invoiceNumber,
+    },
+    createdAt: nowIso(),
+  };
 }
 
 function buildExecutionLog(input: {
@@ -87,24 +144,28 @@ function buildExecutionLog(input: {
   retryCount: number;
   retryDelaySeconds: number;
   retryDecision: IDataObject;
+  retryResume: IDataObject | null;
   checkedAt: string;
   managedAt: string;
 }): IDataObject {
   return {
-    schemaVersion: '1.0', event: 'INVOICE_ROUTER_EXECUTION_RESULT', executionId: toStringValue(input.context.getExecutionId?.()),
+    schemaVersion: '2.0', event: 'INVOICE_ROUTER_EXECUTION_RESULT', executionId: toStringValue(input.context.getExecutionId?.()),
     workflow: workflowIdentity(input.context), requestId: input.status.requestId, transactionId: input.status.transactionId,
     idempotencyKey: idempotencyKey(input.status), providerId: input.status.providerId, profileId: input.status.profileId,
     accountId: input.status.accountId, actionId: input.status.actionId, workerId: input.status.workerId,
-      providerCustomerId: input.status.providerCustomerId, customerStatus: input.status.customerStatus, postStatus: input.status.postStatus,
-      emailSendRequested: input.status.emailSendRequested, emailSendStatus: input.status.emailSendStatus,
-      emailSendMethod: input.status.emailSendMethod, emailErrorMessage: input.status.emailErrorMessage,
+    providerCustomerId: input.status.providerCustomerId, customerStatus: input.status.customerStatus, postStatus: input.status.postStatus,
+    emailSendRequested: input.status.emailSendRequested, emailSendStatus: input.status.emailSendStatus,
+    emailSendMethod: input.status.emailSendMethod, emailErrorMessage: input.status.emailErrorMessage,
+    emailEvidence: input.status.emailEvidence, lifecycleOutcome: input.status.lifecycleOutcome,
+    lifecycleFailedStep: input.status.lifecycleFailedStep, lifecycleCheckpoint: input.status.lifecycleCheckpoint,
     recipientEmail: input.status.recipientEmail, result: input.result, workflowState: input.workflowState,
     invoiceStatus: input.status.invoiceStatus, providerStatus: input.status.providerStatus,
     providerInvoiceId: input.status.providerInvoiceId, invoiceNumber: input.status.invoiceNumber,
     httpStatus: input.status.httpStatus, errorType: input.status.errorType, errorCategory: input.status.errorCategory,
     errorSeverity: input.status.errorSeverity, errorCode: input.status.errorCode, errorMessage: input.status.errorMessage,
     retryScheduled: input.retryScheduled, retryCount: input.retryCount, retryDelaySeconds: input.retryDelaySeconds,
-    retryDecision: input.retryDecision, latencyMs: input.status.latencyMs, responseSizeBytes: input.status.responseSizeBytes,
+    retryDecision: input.retryDecision, retryResume: input.retryResume,
+    latencyMs: input.status.latencyMs, responseSizeBytes: input.status.responseSizeBytes,
     transportStatus: input.status.transportStatus, activationSafety: input.status.activationSafety,
     activationMode: input.status.activationMode, activationApproved: input.status.activationApproved,
     presetSelfCheck: input.status.presetSelfCheck, presetSelfCheckMode: input.status.presetSelfCheckMode,
@@ -117,7 +178,6 @@ function buildExecutionLog(input: {
     checkedAt: input.checkedAt, managedAt: input.managedAt,
   };
 }
-
 
 function requestMappingValue(status: IDataObject, key: string): unknown {
   const mapping = isRecord(status.requestMapping) ? status.requestMapping : {};
@@ -144,12 +204,13 @@ function buildStatusWriteback(input: {
   retryCount: number;
   retryDelaySeconds: number;
   retryDecision: IDataObject;
+  retryResume: IDataObject | null;
   retryQueueEntry: IDataObject | null;
   managedAt: string;
 }): IDataObject {
   const key = writebackKey(input.status, input.keyMode);
   return {
-    schemaVersion: '1.0', action: 'UPSERT', target: input.target, keyMode: input.keyMode, key,
+    schemaVersion: '2.0', action: 'UPSERT', target: input.target, keyMode: input.keyMode, key,
     values: {
       requestId: input.status.requestId, transactionId: input.status.transactionId, idempotencyKey: idempotencyKey(input.status),
       providerId: input.status.providerId, profileId: input.status.profileId, accountId: input.status.accountId,
@@ -159,7 +220,10 @@ function buildStatusWriteback(input: {
       providerCustomerId: input.status.providerCustomerId, customerStatus: input.status.customerStatus,
       postStatus: input.status.postStatus, emailSendRequested: input.status.emailSendRequested,
       emailSendStatus: input.status.emailSendStatus, emailSendMethod: input.status.emailSendMethod,
-      emailErrorMessage: input.status.emailErrorMessage,
+      emailErrorMessage: input.status.emailErrorMessage, emailEvidence: input.status.emailEvidence,
+      lifecycleOutcome: input.status.lifecycleOutcome, lifecycleFailedStep: input.status.lifecycleFailedStep,
+      lifecycleCheckpoint: input.status.lifecycleCheckpoint, retryResumeStage: input.status.retryResumeStage,
+      retryResume: input.retryResume,
       providerInvoiceId: input.status.providerInvoiceId, invoiceNumber: input.status.invoiceNumber,
       invoiceUrl: input.status.invoiceUrl, pdfUrl: input.status.pdfUrl, httpStatus: input.status.httpStatus,
       errorType: input.status.errorType, errorCategory: input.status.errorCategory, errorSeverity: input.status.errorSeverity,
@@ -173,8 +237,8 @@ function buildStatusWriteback(input: {
       providerRecipeId: toStringValue(requestMappingLifecycle(input.status).recipeId ?? requestMappingValue(input.status, 'recipeId')),
       activationMode: input.status.activationMode, activationApproved: input.status.activationApproved,
       activationSafety: input.status.activationSafety, presetSelfCheckMode: input.status.presetSelfCheckMode,
-      presetSelfCheckApproved: input.status.presetSelfCheckApproved, presetSelfCheck: input.status.presetSelfCheck, bulkRunId: input.status.bulkRunId,
-      bulkItemNumber: input.status.bulkItemNumber, bulkTotalItems: input.status.bulkTotalItems,
+      presetSelfCheckApproved: input.status.presetSelfCheckApproved, presetSelfCheck: input.status.presetSelfCheck,
+      bulkRunId: input.status.bulkRunId, bulkItemNumber: input.status.bulkItemNumber, bulkTotalItems: input.status.bulkTotalItems,
       bulkDecision: input.status.bulkDecision, bulkSafety: input.status.bulkSafety,
       duplicatePrevention: input.status.duplicatePrevention, retryableByPolicy: input.status.retryableByPolicy,
       nonRetryableByPolicy: input.status.nonRetryableByPolicy, checkedAt: input.status.checkedAt, managedAt: input.managedAt,
@@ -219,15 +283,21 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const duplicateExecution = transportStatus === 'DUPLICATE' || result === 'DUPLICATE';
     const blockedExecution = transportStatus === 'BLOCKED' || transportStatus === 'SKIPPED' || duplicateExecution;
     const neutralExecution = transportStatus === 'DRY_RUN' || transportStatus === 'QUEUED' || blockedExecution;
+    const partialExecution = result === 'PARTIAL_SUCCESS';
     const errorType = toStringValue(status.errorType).toUpperCase();
     const httpStatus = toFiniteNumber(status.httpStatus, 0);
     const existingRetry = toFiniteNumber(item.json.retryCount, 0);
     const retryableByPolicy = status.retryableByPolicy === true;
     const nonRetryableByPolicy = status.nonRetryableByPolicy === true;
     const incomingRetryDecision = isRecord(status.retryDecision) ? status.retryDecision : retryDecisionFallback({
-      status, result, neutralExecution, errorType, httpStatus, retryableByPolicy, nonRetryableByPolicy,
+      result, neutralExecution, errorType, httpStatus, retryableByPolicy, nonRetryableByPolicy,
     });
-    const retryable = !neutralExecution && result !== 'SUCCESS' && incomingRetryDecision.retryable === true && incomingRetryDecision.safeToRetry !== false;
+    const proposedResume = lifecycleResume(status, incomingRetryDecision);
+    const requestedResumeStage = toStringValue(status.retryResumeStage ?? incomingRetryDecision.resumeStage);
+    const resumeRequired = ['invoice.post', 'invoice.send_email'].includes(requestedResumeStage);
+    const retryable = !neutralExecution && !partialExecution && result !== 'SUCCESS'
+      && incomingRetryDecision.retryable === true && incomingRetryDecision.safeToRetry !== false
+      && (!resumeRequired || proposedResume !== null);
     const shouldRetry = retryable && existingRetry < retryLimit;
     const nextRetryCount = shouldRetry ? existingRetry + 1 : existingRetry;
     const retryDelay = retryDelaySeconds({
@@ -235,8 +305,11 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       respectRetryAfter, retryDecision: incomingRetryDecision, status,
     });
     const authFailure = ['AUTHENTICATION_ERROR', 'AUTHORIZATION_ERROR'].includes(errorType);
-    const manualFixRequired = ['VALIDATION_ERROR', 'NOT_FOUND_ERROR', 'CONFLICT_ERROR'].includes(errorType);
-    const recommendation = neutralExecution ? 'NO_CHANGE' : result === 'SUCCESS' ? 'RELEASE' : authFailure && disableOnAuthFailure ? 'DISABLE' : manualFixRequired ? 'REVIEW' : 'COOLDOWN';
+    const manualFixRequired = ['VALIDATION_ERROR', 'NOT_FOUND_ERROR', 'CONFLICT_ERROR', 'EMAIL_UNVERIFIED'].includes(errorType);
+    const emailQueued = toStringValue(status.emailSendStatus).toUpperCase() === 'QUEUED';
+    const recommendation = neutralExecution ? 'NO_CHANGE' : result === 'SUCCESS' ? 'RELEASE'
+      : partialExecution ? emailQueued ? 'WAIT' : 'REVIEW'
+        : authFailure && disableOnAuthFailure ? 'DISABLE' : manualFixRequired ? 'REVIEW' : 'COOLDOWN';
     const cooldownSeconds = httpStatus === 429 ? Math.max(toFiniteNumber(status.retryAfterSeconds, 0), 60, defaultCooldown) : defaultCooldown;
     const workflowState = workflowStateFor({ duplicateExecution, blockedExecution, neutralExecution, result, shouldRetry });
     const runtime = isRecord(status.runtime) ? status.runtime : {};
@@ -251,45 +324,51 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       errorSeverity: status.errorSeverity, errorCode: status.errorCode, httpStatus, latencyMs: status.latencyMs,
       retryCount: nextRetryCount, cooldownSeconds, retryDecision: incomingRetryDecision, recommendation, timestamp: managedAt,
     };
-    if (!neutralExecution && scopeKey && profileId) {
+    if (!neutralExecution && !partialExecution && scopeKey && profileId) {
       applyProviderFeedback(scopeKey, {
         feedbackId, profileId, workerId: toStringValue(status.workerId), status: toStringValue(status.invoiceStatus), result,
         errorType, httpStatus, latencyMs: toFiniteNumber(status.latencyMs), retryCount: nextRetryCount, cooldownSeconds, recommendation,
       });
       persistFeedback(this, providerFeedback);
     }
+    const retryResume = shouldRetry ? proposedResume : null;
     const retryQueueEntry: IDataObject | null = shouldRetry ? {
       requestId: status.requestId, profileId, accountId: status.accountId, retryCount: nextRetryCount,
       scheduledAt: new Date(Date.now() + retryDelay * 1000).toISOString(), delaySeconds: retryDelay,
       reason: toStringValue(incomingRetryDecision.reason) || errorType || `HTTP_${httpStatus}`,
       source: toStringValue(incomingRetryDecision.source), errorType, errorCategory: status.errorCategory,
-      retryAfterSeconds: status.retryAfterSeconds, retryDecision: incomingRetryDecision,
+      retryAfterSeconds: status.retryAfterSeconds, retryDecision: incomingRetryDecision, lifecycleResume: retryResume,
     } : null;
+    const readyRequest = isRecord(item.json.readyRequest) ? item.json.readyRequest : {};
+    const retryRequest: IDataObject | null = shouldRetry && Object.keys(readyRequest).length > 0
+      ? { ...readyRequest, lifecycleResume: retryResume ?? undefined }
+      : null;
     const executionLog = buildExecutionLog({
       context: this, status, result, workflowState, retryScheduled: shouldRetry, retryCount: nextRetryCount,
-      retryDelaySeconds: retryDelay, retryDecision: incomingRetryDecision, checkedAt, managedAt,
+      retryDelaySeconds: retryDelay, retryDecision: incomingRetryDecision, retryResume, checkedAt, managedAt,
     });
     if (persistLog) persistExecutionLog(this, executionLog, executionLogRetention);
     const statusWriteback = buildStatusWriteback({
       status, workflowState, result, keyMode: writebackKeyMode, target: writebackTarget,
       retryScheduled: shouldRetry, retryCount: nextRetryCount, retryDelaySeconds: retryDelay,
-      retryDecision: incomingRetryDecision, retryQueueEntry, managedAt,
+      retryDecision: incomingRetryDecision, retryResume, retryQueueEntry, managedAt,
     });
     const alertSeverity = toStringValue(status.alertSeverity) || (authFailure ? 'critical' : httpStatus >= 500 ? 'high' : 'warning');
+    const alertNeeded = !neutralExecution && (result !== 'SUCCESS' && !emailQueued) && (result !== 'PARTIAL_SUCCESS' || errorType === 'EMAIL_UNVERIFIED');
     const managementEvents: IDataObject = {
       database: { event: 'UPSERT_INVOICE_RESULT', key: statusWriteback.key, state: workflowState, writeback: statusWriteback },
-      dashboard: { event: 'UPDATE_COUNTERS', result, workflowState, providerId: status.providerId },
-      metrics: { event: 'RECORD_EXECUTION', success: result === 'SUCCESS', latencyMs: status.latencyMs, httpStatus, providerId: status.providerId, accountId: status.accountId },
-      analytics: { event: 'INVOICE_ROUTER_RESULT', invoiceStatus: status.invoiceStatus, errorType, errorCategory: status.errorCategory, timestamp: managedAt },
+      dashboard: { event: 'UPDATE_COUNTERS', result, workflowState, providerId: status.providerId, bulkSummary },
+      metrics: { event: 'RECORD_EXECUTION', success: result === 'SUCCESS', partial: partialExecution, latencyMs: status.latencyMs, httpStatus, providerId: status.providerId, accountId: status.accountId },
+      analytics: { event: 'INVOICE_ROUTER_RESULT', invoiceStatus: status.invoiceStatus, lifecycleOutcome: status.lifecycleOutcome, errorType, errorCategory: status.errorCategory, timestamp: managedAt },
       retryQueue: retryQueueEntry,
-      alert: !neutralExecution && result !== 'SUCCESS' && alertOnFailure ? { event: 'INVOICE_ROUTER_FAILURE', severity: alertSeverity.toUpperCase(), message: status.errorMessage || errorType || `HTTP ${httpStatus}`, retryScheduled: shouldRetry, retryDecision: incomingRetryDecision } : null,
-      notification: result === 'SUCCESS' || neutralExecution ? null : { event: 'NOTIFICATION_REQUESTED', channels: ['email', 'webhook'], severity: alertSeverity, retryScheduled: shouldRetry },
-      audit: { event: 'WORKFLOW_DECISION', requestId: status.requestId, result, workflowState, retryScheduled: shouldRetry, retryDecision: incomingRetryDecision, timestamp: managedAt },
+      alert: alertNeeded && alertOnFailure ? { event: 'INVOICE_ROUTER_FAILURE', severity: alertSeverity.toUpperCase(), message: status.errorMessage || errorType || `HTTP ${httpStatus}`, retryScheduled: shouldRetry, retryDecision: incomingRetryDecision } : null,
+      notification: alertNeeded ? { event: 'NOTIFICATION_REQUESTED', channels: ['email', 'webhook'], severity: alertSeverity, retryScheduled: shouldRetry } : null,
+      audit: { event: 'WORKFLOW_DECISION', requestId: status.requestId, result, workflowState, retryScheduled: shouldRetry, retryDecision: incomingRetryDecision, retryResume, timestamp: managedAt },
     };
     const management: IDataObject = {
-      schemaVersion: '1.0', workflowState, completed: workflowState === 'COMPLETED', retryScheduled: shouldRetry,
-      retryCount: nextRetryCount, retryDelaySeconds: retryDelay, retryDecision: incomingRetryDecision,
-      retryQueueEntry, providerFeedback, bulkSummary,
+      schemaVersion: '2.0', workflowState, completed: workflowState === 'COMPLETED', partial: partialExecution,
+      retryScheduled: shouldRetry, retryCount: nextRetryCount, retryDelaySeconds: retryDelay,
+      retryDecision: incomingRetryDecision, retryResume, retryRequest, retryQueueEntry, providerFeedback, bulkSummary,
       executionLog: includeExecutionLog ? executionLog : undefined,
       statusWriteback: includeStatusWriteback ? statusWriteback : undefined,
       events: includeEvents ? managementEvents : undefined,
@@ -300,6 +379,9 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
         providerCustomerId: status.providerCustomerId, customerStatus: status.customerStatus, postStatus: status.postStatus,
         emailSendRequested: status.emailSendRequested, emailSendStatus: status.emailSendStatus,
         emailSendMethod: status.emailSendMethod, emailErrorMessage: status.emailErrorMessage,
+        emailEvidence: status.emailEvidence, lifecycleOutcome: status.lifecycleOutcome,
+        lifecycleFailedStep: status.lifecycleFailedStep, lifecycleCheckpoint: status.lifecycleCheckpoint,
+        retryResumeStage: status.retryResumeStage, retryResume,
         lifecycleMode: toStringValue(requestMappingValue(status, 'lifecycleMode') ?? requestMappingLifecycle(status).mode),
         lifecycleSteps: lifecycleStepsText(status), providerRecipeId: toStringValue(requestMappingLifecycle(status).recipeId ?? requestMappingValue(status, 'recipeId')),
         invoiceUrl: status.invoiceUrl, pdfUrl: status.pdfUrl, writebackKey: statusWriteback.key,

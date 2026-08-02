@@ -1,6 +1,6 @@
 # InvoiceRouter Template 001 — Odoo Complete Bulk Email Sending System
 
-This provider template is for InvoiceRouter v2.0.0 and the Odoo JSON-RPC adapter.
+This provider template is for InvoiceRouter v2.0.0 and the built-in Odoo JSON-RPC adapter.
 
 ## What this template does
 
@@ -10,28 +10,33 @@ This provider template is for InvoiceRouter v2.0.0 and the Odoo JSON-RPC adapter
 - Searches or creates Odoo customers by email.
 - Creates Odoo customer invoices.
 - Posts invoices when `odooPostInvoice` is true.
-- Attempts invoice email sending when `odooSendInvoiceEmail` is true.
-- Writes lifecycle results into `invoice_results`.
+- Creates and executes the standard Odoo invoice send wizard when `odooSendInvoiceEmail` is true.
+- Reads Odoo message, notification, outgoing-mail, and PDF evidence when the account permits it.
+- Writes truthful lifecycle results, checkpoints, evidence, and retry-resume fields into `invoice_results`.
 
 ## Included files
 
-- `InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx`
-- `InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_N8N_IMPORT.json`
+- `google-sheets-template.xlsx`
+- `google-sheets-template-sandbox.xlsx`
+- `google-sheets-template-live.xlsx`
+- `n8n-import-workflow-dry-run.json`
+- `n8n-import-workflow-sandbox-canary.json`
+- `n8n-import-workflow-sandbox-bulk.json`
+- `n8n-import-workflow-live-canary.json`
+- `n8n-import-workflow-live-bulk.json`
 - `provider.csv`
+- `provider.sandbox.csv`
+- `provider.live.csv`
 - `email_list.csv`
 - `invoice_results.csv`
 - `provider.lifecycle.json`
 - `provider.recipe.json`
 - `provider.template.ygit`
-- `QUICKSTART.md`
-- `N8N_IMPORT_GUIDE.md`
-- `ODOO_SETUP.md`
-- `LIVE_TEST_CHECKLIST.md`
-- `TROUBLESHOOTING.md`
+- setup, import, troubleshooting, and live-test guides
 
 ## Default safety
 
-The workflow import is dry-run safe by default:
+The default workflow import is dry-run safe:
 
 ```text
 Dry Run = true
@@ -39,182 +44,66 @@ Activation Safety Mode = dryRunValidation
 Expected Environment = sandbox
 ```
 
-Do not switch to live bulk until dry-run, sandbox/test, and live canary are proven.
+Do not switch to live bulk until the package has passed the final full-project forensic audit, has been published, has been updated through n8n Community Nodes, and a one-recipient live canary has passed.
 
-## Important Odoo note
+## Actual email path
 
-This template uses InvoiceRouter's current Odoo JSON-RPC `/jsonrpc` adapter. Odoo 19 documentation states XML-RPC and JSON-RPC endpoints are scheduled for future removal and External JSON-2 is the replacement path. Keep this in mind for long-term provider maintenance.
-
-
-# Quickstart — Odoo Complete Bulk Email
-
-## 1. Create Google Sheet
-
-1. Upload `InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx` to Google Drive.
-2. Open it with Google Sheets.
-3. Copy the spreadsheet ID from the URL.
-
-## 2. Fill provider sheet
-
-Replace the placeholder cells in `provider`:
+The headless Odoo email path is:
 
 ```text
-Base URL = https://YOUR-SUBDOMAIN.odoo.com
-Endpoint = /jsonrpc
-Username = your Odoo username/email
-Password = your Odoo password or API key
-Database = exact Odoo database name
-Extra Config JSON = {"invoiceLifecycle":"createPostAndSendEmail","odooPostInvoice":true,"odooSendInvoiceEmail":true,"odooEmailForceSend":true,"odooEmailBody":"Your invoice has been created and posted."}
+account.move create
+→ account.move action_post
+→ account.move.send.wizard create
+→ account.move.send.wizard action_send_and_print
+→ provider evidence inspection
 ```
 
-Keep only one provider environment active while testing.
+The older `account.move.action_send_and_print` opener is not treated as a completed email send.
 
-## 3. Fill email_list
+## Status meanings
 
-Only `Email` is required.
+| Status | Operator action |
+|---|---|
+| `SENT` | Confirm recipient inbox result; retain provider evidence. |
+| `QUEUED` | Wait for Odoo mail processing and inspect the outgoing queue. |
+| `FAILED` | Correct the recorded error; retry only through the approved resume branch. |
+| `UNVERIFIED` | Review Odoo manually; do not automatically retry or claim sent. |
 
-```text
-Email,Name,Address
-customer@example.com,Customer Name,
-```
+## Duplicate-safe retry
 
-## 4. Import n8n workflow
+When an invoice already exists:
 
-Import `InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_N8N_IMPORT.json`.
-Replace the Google Sheet ID and Google credential in all three Google Sheets nodes.
+- post failure resumes the existing invoice at `invoice.post`;
+- email failure resumes the existing invoice at `invoice.send_email`;
+- the retry branch must preserve the provider invoice ID and lifecycle checkpoint;
+- an unverified email requires manual review and is not retried automatically.
 
-## 5. Run in order
+## Required run order
 
 1. Dry-run validation.
-2. Sandbox/test real single recipient.
-3. Sandbox/test real bulk.
-4. Live canary single recipient.
-5. Live bulk.
+2. Sandbox/test single recipient.
+3. Sandbox/test retry-resume proof.
+4. Sandbox/test approved bulk.
+5. Final full-source forensic audit and any required correction.
+6. Publish the approved release.
+7. Update the package through n8n Community Nodes and restart/verify the runtime.
+8. Live canary with one recipient.
+9. Live bulk only after the canary evidence is accepted.
 
-Never start with live bulk.
+## Production evidence
 
+Capture all of the following:
 
-# n8n Import Guide — Odoo Complete Bulk Email
+- request ID and idempotency key;
+- Odoo customer and invoice IDs;
+- actual Odoo invoice number and posted state;
+- invoice PDF attachment evidence;
+- email status and `email_evidence`;
+- lifecycle checkpoint and retry-resume evidence;
+- `invoice_results` row;
+- Odoo chatter/outgoing-mail evidence;
+- recipient inbox result.
 
-## Nodes to configure after import
+## Important Odoo API note
 
-### Google Sheets - Provider Accounts
-
-```text
-Document ID = your Google Spreadsheet ID
-Sheet Name = provider
-Credential = your Google Sheets OAuth credential
-```
-
-### Google Sheets - Email List
-
-```text
-Document ID = same spreadsheet ID
-Sheet Name = email_list
-Credential = same Google Sheets OAuth credential
-```
-
-### Google Sheets - Status Writeback
-
-```text
-Document ID = same spreadsheet ID
-Sheet Name = invoice_results
-Matching Column = writeback_key
-```
-
-## Provider Selector defaults
-
-```text
-Provider Filter = Odoo
-Action Filter = Create Invoice
-Environment Filter = sandbox
-Conditional Routing = false
-```
-
-## Invoice Sender modes
-
-### Dry-run
-
-```text
-Dry Run = true
-Activation Safety Mode = dryRunValidation
-Expected Environment = sandbox
-```
-
-### Sandbox/test real send
-
-```text
-Dry Run = false
-Activation Safety Mode = sandboxRealSend
-Expected Environment = sandbox
-Sandbox Mode Confirmation = SEND_SANDBOX_INVOICES
-```
-
-### Live single/canary
-
-```text
-Dry Run = false
-Activation Safety Mode = liveRealSend
-Expected Environment = live
-Live Mode Confirmation = SEND_REAL_INVOICES
-Max Invoices Per Execution = 1
-```
-
-### Live bulk
-
-```text
-Dry Run = false
-Activation Safety Mode = liveRealSend
-Expected Environment = live
-Live Mode Confirmation = SEND_REAL_INVOICES
-Live Bulk Confirmation = SEND_BULK_REAL_INVOICES
-Max Invoices Per Execution = exact recipient count or approved cap
-```
-
-
-# Odoo Setup — Complete Bulk Email
-
-## Required Odoo information
-
-- Base URL, for example `https://your-company.odoo.com`
-- Database technical name
-- Username/email
-- Password or API key accepted by your Odoo instance
-- Accounting/Invoicing permissions for customer and invoice operations
-- Outgoing email configured in Odoo if you expect customer inbox delivery
-
-## Required provider sheet fields
-
-```text
-Provider = Odoo
-Environment = sandbox or live
-Action = Create Invoice
-Method = POST
-Endpoint = /jsonrpc
-Auth Type = Odoo JSON-RPC
-```
-
-## Extra Config JSON
-
-```json
-{"invoiceLifecycle":"createPostAndSendEmail","odooPostInvoice":true,"odooSendInvoiceEmail":true,"odooEmailForceSend":true,"odooEmailBody":"Your invoice has been created and posted."}
-```
-
-## What InvoiceRouter attempts
-
-1. Authenticate.
-2. Search `res.partner` by email.
-3. Create `res.partner` if missing.
-4. Create `account.move` customer invoice.
-5. Run `account.move.action_post` when posting is enabled.
-6. Run Odoo email-send path when email sending is enabled.
-
-## Proof required
-
-For production proof, capture:
-
-- n8n execution success.
-- `invoice_results` row with lifecycle fields.
-- Odoo invoice status posted.
-- Odoo chatter/mail log evidence.
-- Recipient inbox evidence.
+This template uses InvoiceRouter's current Odoo JSON-RPC `/jsonrpc` adapter. Odoo's long-term API direction may require a future approved adapter update. That future migration is outside this release and must not be performed silently.

@@ -3,10 +3,12 @@
   "providerId": "odoo",
   "recipeId": "odoo-complete-bulk-email",
   "displayName": "Odoo Complete Bulk Email",
-  "supportTier": "tier-1-candidate-live-core-proven-email-proof-required",
+  "supportTier": "tier-1-candidate-deployment-proof-required",
   "runtime": {
     "type": "built_in_odoo_json_rpc",
-    "endpoint": "/jsonrpc"
+    "endpoint": "/jsonrpc",
+    "emailSendModel": "account.move.send.wizard",
+    "emailSendMethod": "action_send_and_print"
   },
   "defaultLifecycleMode": "createPostAndSendEmail",
   "lifecycleModes": [
@@ -34,8 +36,21 @@
     "customer.create_if_missing",
     "invoice.create",
     "invoice.post",
-    "invoice.send_email"
+    "invoice.send_email",
+    "invoice.email_evidence"
   ],
+  "emailStatusContract": {
+    "NOT_REQUESTED": "The lifecycle did not request email sending.",
+    "QUEUED": "Odoo accepted the message and exposed outgoing/ready/process evidence.",
+    "SENT": "Odoo exposed terminal sent evidence for the recipient.",
+    "FAILED": "The wizard failed or Odoo exposed exception, bounce, or cancel evidence.",
+    "UNVERIFIED": "The wizard completed but sufficient provider evidence was unavailable."
+  },
+  "retryResume": {
+    "invoice.post": "Reuse the existing provider invoice and retry posting only.",
+    "invoice.send_email": "Reuse the existing posted invoice and retry email only.",
+    "EMAIL_UNVERIFIED": "Manual review; never retry automatically."
+  },
   "extraConfig": {
     "invoiceLifecycle": "createPostAndSendEmail",
     "odooPostInvoice": true,
@@ -50,10 +65,28 @@
     "email_send_requested",
     "email_send_status",
     "email_send_method",
-    "email_error_message"
+    "email_error_message",
+    "email_evidence",
+    "lifecycle_outcome",
+    "lifecycle_failed_step",
+    "lifecycle_checkpoint",
+    "retry_resume_stage",
+    "retry_resume"
+  ],
+  "productionProof": [
+    "dry-run validation",
+    "sandbox/test single recipient",
+    "retry-resume proof without a duplicate invoice",
+    "final full-project forensic audit",
+    "published package updated through n8n Community Nodes",
+    "one-recipient live canary",
+    "Odoo mail/PDF evidence",
+    "recipient inbox evidence"
   ],
   "sourceNotes": [
+    "InvoiceRouter uses account.move.send.wizard for headless invoice email execution.",
+    "SENT is provider-side transport evidence and does not guarantee recipient inbox delivery.",
     "Current InvoiceRouter v2 Odoo adapter uses Odoo JSON-RPC /jsonrpc.",
-    "Odoo 19 documentation states XML-RPC/JSON-RPC endpoints are scheduled for future removal and JSON-2 is the replacement."
+    "A future Odoo API migration requires a separately approved change."
   ]
 }

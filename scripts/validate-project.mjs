@@ -1,6 +1,7 @@
 import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { extname, join } from 'node:path';
 
 const requiredFiles = [
   'package.json', 'package-lock.json', 'tsconfig.json', '.gitignore', '.gitattributes', '.editorconfig',
@@ -27,7 +28,15 @@ const requiredFiles = [
   'examples/n8n_dry_run_validation/expected-dry-run-outcomes.json',
   'workflows/InvoiceRouter-v1-production.json',
   'scripts/clean.mjs', 'scripts/format.mjs', 'scripts/lint.mjs', 'scripts/validate-project.mjs', 'scripts/copy-node-icons.mjs',
-  'scripts/diagnose-n8n-package.mjs',
+  'scripts/diagnose-n8n-package.mjs', 'scripts/audit-release-source.mjs',
+  'workflows/InvoiceRouter-v1.6-simple-bulk-email.json', 'workflows/InvoiceRouter-v2-master-universal.json',
+  'docs/user/provider-support-matrix.md', 'docs/user/providers/odoo-complete-bulk-email.md',
+  'docs/developer/odoo-email-evidence-contract.md', 'docs/developer/lifecycle-retry-resume.md',
+  'docs/troubleshooting/index.md', 'docs/troubleshooting/odoo-email-sending.md',
+  'template/providers/odoo/README.md', 'template/providers/odoo/QUICKSTART.md',
+  'template/providers/odoo/ODOO_SETUP.md', 'template/providers/odoo/TROUBLESHOOTING.md',
+  'template/providers/odoo/LIVE_TEST_CHECKLIST.md', 'template/providers/odoo/email_list.csv',
+  'template/providers/odoo/provider.lifecycle.json', 'template/providers/odoo/provider.recipe.json',
 ];
 
 const nodeFolders = [
@@ -40,6 +49,7 @@ const nodeFolders = [
 const requiredDirectories = [
   '.github/workflows', 'assets/architecture', 'assets/node-cards/v1.0', 'docs/freeze/v1.0',
   'examples/google_sheets', 'examples/n8n_dry_run_validation', 'manifest', 'nodes', 'providers', 'scripts', 'shared', 'tests', 'workflows',
+  'docs/user', 'docs/developer', 'docs/troubleshooting', 'template/providers/odoo',
 ];
 
 const forbiddenPaths = [
@@ -63,6 +73,24 @@ async function requireFile(path) {
 async function requireDirectory(path) {
   try { if (!(await stat(path)).isDirectory()) errors.push(`${path} is not a directory`); }
   catch { errors.push(`${path} directory is missing`); }
+}
+
+async function walkFiles(directory, output = []) {
+  if (!(await exists(directory))) return output;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) await walkFiles(path, output);
+    else output.push(path);
+  }
+  return output;
+}
+
+async function requireText(path, fragments) {
+  const source = await readFile(path, 'utf8');
+  for (const fragment of fragments) {
+    if (!source.includes(fragment)) errors.push(`${path} must document ${fragment}`);
+  }
+  return source;
 }
 
 for (const path of requiredFiles) await requireFile(path);
@@ -111,12 +139,29 @@ for (const [folder, className] of nodeFolders) {
   if (/<text[\s>]/.test(iconSource) || /font-family/.test(iconSource)) errors.push(`${expectedIcon} must not depend on text glyph rendering.`);
 }
 
-for (const path of ['package.json', 'package-lock.json', 'manifest/freeze-v1.0.json', 'workflows/InvoiceRouter-v1-production.json']) {
+for (const path of ['package.json', 'package-lock.json', 'manifest/freeze-v1.0.json', 'workflows/InvoiceRouter-v1-production.json', 'workflows/InvoiceRouter-v1.6-simple-bulk-email.json', 'workflows/InvoiceRouter-v2-master-universal.json', 'template/providers/odoo/provider.lifecycle.json', 'template/providers/odoo/provider.recipe.json']) {
   try { JSON.parse(await readFile(path, 'utf8')); }
   catch (error) { errors.push(`${path} is invalid JSON: ${error.message}`); }
 }
 
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
+const packageLock = JSON.parse(await readFile('package-lock.json', 'utf8'));
+const vibProject = JSON.parse(await readFile('vibproject.ygit', 'utf8'));
+const docsManifest = JSON.parse(await readFile('docs/docs.minifest.ygit', 'utf8'));
+const readmeSource = await readFile('README.md', 'utf8');
+const changelogSource = await readFile('CHANGELOG.md', 'utf8');
+
+if (pkg.version !== '2.0.1') errors.push('package.json must use approved release version 2.0.1.');
+if (packageLock.version !== pkg.version || packageLock.packages?.['']?.version !== pkg.version) errors.push('package-lock.json version must match package.json.');
+if (vibProject.project?.version !== pkg.version || vibProject.release?.latestVersion !== pkg.version) errors.push('vibproject.ygit release metadata must match package.json.');
+if (docsManifest.versions?.current !== pkg.version || docsManifest.versions?.latest !== pkg.version || !docsManifest.versions?.available?.includes(pkg.version)) errors.push('docs/docs.minifest.ygit version metadata must include the package release.');
+if (!readmeSource.includes(`**Package version:** \`${pkg.version}\``)) errors.push('README.md current package version must match package.json.');
+if (!changelogSource.includes(`## ${pkg.version} - 2026-08-02`)) errors.push('CHANGELOG.md must contain the dated 2.0.1 release entry.');
+if (!(pkg.files ?? []).includes('docs/troubleshooting')) errors.push('package.json must include docs/troubleshooting in npm files.');
+for (const providerId of ['odoo', 'stripe', 'zoho-books']) {
+  const manifest = JSON.parse(await readFile(`template/providers/${providerId}/provider.template.ygit`, 'utf8'));
+  if (manifest.invoiceRouterVersion !== pkg.version) errors.push(`${providerId} provider template invoiceRouterVersion must match package.json.`);
+}
 const nodes = pkg.n8n?.nodes ?? [];
 if (!Array.isArray(nodes) || nodes.length !== 8) errors.push('package.json must register exactly eight frozen custom nodes.');
 if (pkg.n8n?.credentials) errors.push('package.json must not register a separate credential type in the Version 1 Sheet-credential flow.');
@@ -182,6 +227,54 @@ const retryTargets = (((workflow.connections ?? {})['Prepare Retry Request']?.ma
 if (!retryTargets.includes('Wait Before Retry')) errors.push('Prepare Retry Request must feed Wait Before Retry.');
 const waitTargets = (((workflow.connections ?? {})['Wait Before Retry']?.main ?? [])[0] ?? []).map((connection) => connection.node);
 if (!waitTargets.includes('Invoice Sender')) errors.push('Wait Before Retry must feed Invoice Sender for automatic retry execution.');
+
+
+const workflowJsonFiles = (await walkFiles('workflows'))
+  .concat(await walkFiles('template/providers'))
+  .filter((path) => extname(path) === '.json' && (/workflow/i.test(path) || /N8N_IMPORT/i.test(path)));
+for (const path of workflowJsonFiles) {
+  const source = await readFile(path, 'utf8');
+  try { JSON.parse(source); } catch (error) { errors.push(`${path} is invalid JSON: ${error.message}`); continue; }
+  if (/=\{(?!\{)\s*\$/.test(source)) errors.push(`${path} contains malformed n8n expression syntax; use ={{ ... }}.`);
+}
+
+const consumerEmailPattern = /[A-Z0-9._%+-]+@(gmail|yahoo|outlook|hotmail|icloud|protonmail|proton)\.[A-Z]{2,}/gi;
+const publicTextFiles = (await walkFiles('template'))
+  .concat(await walkFiles('examples'))
+  .filter((path) => ['.csv', '.json', '.md', '.txt', '.yml', '.yaml'].includes(extname(path).toLowerCase()));
+for (const path of publicTextFiles) {
+  const source = await readFile(path, 'utf8');
+  const matches = source.match(consumerEmailPattern) ?? [];
+  if (matches.length > 0) errors.push(`${path} contains personal-looking public sample email(s): ${[...new Set(matches)].join(', ')}`);
+}
+
+const odooSample = await readFile('template/providers/odoo/email_list.csv', 'utf8');
+if (!odooSample.includes('customer@example.com')) errors.push('Odoo public email_list sample must use customer@example.com.');
+
+const odooLifecycle = JSON.parse(await readFile('template/providers/odoo/provider.lifecycle.json', 'utf8'));
+for (const status of ['QUEUED', 'SENT', 'FAILED', 'UNVERIFIED']) {
+  if (!odooLifecycle.emailStatusContract?.[status]) errors.push(`Odoo lifecycle template must define emailStatusContract.${status}.`);
+}
+for (const field of ['email_evidence', 'lifecycle_outcome', 'lifecycle_failed_step', 'lifecycle_checkpoint', 'retry_resume_stage', 'retry_resume']) {
+  if (!odooLifecycle.writebackFields?.includes(field)) errors.push(`Odoo lifecycle template writebackFields must include ${field}.`);
+}
+if (odooLifecycle.runtime?.emailSendModel !== 'account.move.send.wizard') errors.push('Odoo lifecycle runtime must document account.move.send.wizard.');
+
+await requireText('docs/developer/odoo-email-evidence-contract.md', ['account.move.send.wizard', '`QUEUED`', '`SENT`', '`FAILED`', '`UNVERIFIED`']);
+await requireText('docs/developer/lifecycle-retry-resume.md', ['invoice.post', 'invoice.send_email', 'EMAIL_UNVERIFIED']);
+await requireText('template/providers/odoo/LIVE_TEST_CHECKLIST.md', ['complete project ZIP', 'n8n Community Nodes', 'recipient inbox']);
+
+const releaseWorkflow = await readFile('.github/workflows/release.yml', 'utf8');
+for (const fragment of [
+  'workflows/InvoiceRouter-v2-master-universal.json',
+  'workflows/InvoiceRouter-v1.6-simple-bulk-email.json',
+  'template/providers/odoo/.',
+  'template/status-writeback-columns.csv',
+  'docs/troubleshooting',
+  'node scripts/audit-release-source.mjs release/bundle',
+]) {
+  if (!releaseWorkflow.includes(fragment)) errors.push(`Release workflow must include ${fragment}.`);
+}
 
 for (const folder of await readdir('nodes')) {
   const entries = await readdir(`nodes/${folder}`);

@@ -276,7 +276,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => value === undefined || value === null ? '' : String(Boolean(value));\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_customer_id: text(values.providerCustomerId),\n      customer_status: text(values.customerStatus),\n      post_status: text(values.postStatus),\n      email_send_requested: boolText(values.emailSendRequested),\n      email_send_status: text(values.emailSendStatus),\n      email_send_method: text(values.emailSendMethod),\n      email_error_message: text(values.emailErrorMessage),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      lifecycle_mode: text(values.lifecycleMode),\n      lifecycle_steps: text(values.lifecycleSteps),\n      provider_recipe_id: text(values.providerRecipeId),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
+        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => { if (value === undefined || value === null || value === '') return ''; if (typeof value === 'boolean') return String(value); return String(['true', '1', 'yes', 'on', 'requested'].includes(String(value).trim().toLowerCase())); };\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_customer_id: text(values.providerCustomerId),\n      customer_status: text(values.customerStatus),\n      post_status: text(values.postStatus),\n      email_send_requested: boolText(values.emailSendRequested),\n      email_send_status: text(values.emailSendStatus),\n      email_send_method: text(values.emailSendMethod),\n      email_error_message: text(values.emailErrorMessage),\n      email_evidence: jsonText(values.emailEvidence),\n      lifecycle_outcome: text(values.lifecycleOutcome),\n      lifecycle_failed_step: text(values.lifecycleFailedStep),\n      lifecycle_checkpoint: jsonText(values.lifecycleCheckpoint),\n      retry_resume_stage: text(values.retryResumeStage),\n      retry_resume: jsonText(values.retryResume),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      lifecycle_mode: text(values.lifecycleMode),\n      lifecycle_steps: text(values.lifecycleSteps),\n      provider_recipe_id: text(values.providerRecipeId),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
       },
       "id": "prepare-status-writeback-row",
       "name": "Prepare Status Writeback Row",
@@ -366,7 +366,13 @@
             "duplicate_prevention": "={{ $json.duplicate_prevention }}",
             "checked_at": "={{ $json.checked_at }}",
             "managed_at": "={{ $json.managed_at }}",
-            "updated_at": "={{ $json.updated_at }}"
+            "updated_at": "={{ $json.updated_at }}",
+            "email_evidence": "={{ $json.email_evidence }}",
+            "lifecycle_outcome": "={{ $json.lifecycle_outcome }}",
+            "lifecycle_failed_step": "={{ $json.lifecycle_failed_step }}",
+            "lifecycle_checkpoint": "={{ $json.lifecycle_checkpoint }}",
+            "retry_resume_stage": "={{ $json.retry_resume_stage }}",
+            "retry_resume": "={{ $json.retry_resume }}"
           },
           "matchingColumns": [
             "writeback_key"
@@ -1011,6 +1017,66 @@
               "type": "string",
               "canBeUsedToMatch": false,
               "removed": false
+            },
+            {
+              "id": "email_evidence",
+              "displayName": "email_evidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "lifecycle_outcome",
+              "displayName": "lifecycle_outcome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "lifecycle_failed_step",
+              "displayName": "lifecycle_failed_step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "lifecycle_checkpoint",
+              "displayName": "lifecycle_checkpoint",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_resume_stage",
+              "displayName": "retry_resume_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_resume",
+              "displayName": "retry_resume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
             }
           ],
           "attemptToConvertTypes": false,
@@ -1035,7 +1101,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const retryItems = [];\nfor (const item of items) {\n  const management = item.json.management || {};\n  if (management.retryScheduled !== true || !management.retryQueueEntry) continue;\n  const delaySeconds = Math.max(1, Number(management.retryDelaySeconds || management.retryQueueEntry.delaySeconds || 1));\n  retryItems.push({\n    json: {\n      ...item.json,\n      retryCount: Number(management.retryCount || 0),\n      retryDelaySeconds: delaySeconds,\n      retryQueueEntry: management.retryQueueEntry,\n      retryLoop: {\n        enabled: true,\n        source: 'Status Manager',\n        nextRetryCount: Number(management.retryCount || 0),\n        delaySeconds,\n        scheduledAt: management.retryQueueEntry.scheduledAt || '',\n        reason: management.retryQueueEntry.reason || '',\n      },\n    },\n    pairedItem: item.pairedItem,\n  });\n}\nreturn retryItems;"
+        "jsCode": "const retryItems = [];\nfor (const item of items) {\n  const management = item.json.management || {};\n  if (management.retryScheduled !== true || !management.retryQueueEntry) continue;\n  const delaySeconds = Math.max(1, Number(management.retryDelaySeconds || management.retryQueueEntry.delaySeconds || 1));\n  retryItems.push({\n    json: {\n      ...item.json,\n      readyRequest: management.retryRequest || item.json.readyRequest,\n      retryCount: Number(management.retryCount || 0),\n      retryDelaySeconds: delaySeconds,\n      retryQueueEntry: management.retryQueueEntry,\n      retryLoop: {\n        enabled: true,\n        source: 'Status Manager',\n        nextRetryCount: Number(management.retryCount || 0),\n        delaySeconds,\n        scheduledAt: management.retryQueueEntry.scheduledAt || '',\n        reason: management.retryQueueEntry.reason || '',\n        lifecycleResume: management.retryResume || management.retryQueueEntry.lifecycleResume || null,\n      },\n    },\n    pairedItem: item.pairedItem,\n  });\n}\nreturn retryItems;"
       },
       "id": "prepare-retry-request",
       "name": "Prepare Retry Request",
