@@ -17,3 +17,6 @@ Thumbs.db
 .cache/
 .tmp/
 .nyc_output/
+
+# Local-only private planning and development notes
+project/

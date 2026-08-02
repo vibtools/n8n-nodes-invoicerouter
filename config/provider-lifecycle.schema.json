@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schema.vib.tools/invoicerouter/provider-lifecycle.schema.json",
+  "schemaVersion": "2.0",
+  "type": "object",
+  "required": [
+    "providerId",
+    "recipeId",
+    "lifecycleModes",
+    "steps"
+  ],
+  "properties": {
+    "providerId": {
+      "type": "string"
+    },
+    "recipeId": {
+      "type": "string"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "metadata_only",
+            "declarative_http"
+          ]
+        }
+      }
+    },
+    "lifecycleModes": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "draftOnly",
+          "createOnly",
+          "createAndPost",
+          "createPostAndSendEmail"
+        ]
+      }
+    },
+    "requiredAccountFields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "capabilities": {
+      "type": "object"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "request": {
+                "type": "object"
+              },
+              "responseMap": {
+                "type": "object"
+              },
+              "successStatusCodes": {
+                "type": "array"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

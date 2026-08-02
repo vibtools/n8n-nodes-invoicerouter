@@ -2,7 +2,7 @@ import type { IDataObject, IExecuteFunctions, INodeExecutionData } from '../../s
 import { maskSecret } from '../../shared/security/Redaction';
 import { executionIdentity, registerProviderProfiles, type SecretMaterial } from '../../shared/runtime/RuntimeStore';
 import { isRecord, normalizedKey, nowIso, parseJsonObject, slug, toBoolean, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
-import { normalizeProviderId } from '../../providers';
+import { lifecycleMetadata, normalizeProviderId } from '../../providers';
 
 const COLUMN_ALIASES: Record<string, string[]> = {
   enabled: ['enabled', 'active'], provider: ['provider', 'providername'], account: ['account', 'accountname'],
@@ -123,6 +123,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       connection: { usernamePreview: maskSecret(username || apiKey), database: database ? maskSecret(database) : '', extraConfig },
       notes: toStringValue(row.notes), priority: itemIndex, weight: 1,
       metadata: { sourceType: 'google_sheet', sheetName: sourceName, sheetRow: itemIndex + 2 },
+      lifecycle: lifecycleMetadata(providerId, extraConfig),
     };
     const secret: SecretMaterial = { apiKey, apiSecret, extraValue, headerName, headerValue, authType, username, password, database, extraConfig };
     if (byId.has(id)) {

@@ -2,6 +2,7 @@ import type { IDataObject, IExecuteFunctions, INodeExecutionData, IHttpRequestOp
 import { finalizeInvoiceSend, getSecretMaterial, reserveInvoiceSend } from '../../shared/runtime/RuntimeStore';
 import { redactJson, redactString, secretValues } from '../../shared/security/Redaction';
 import { isRecord, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
+import { declarativeRecipePlan, executeDeclarativeProviderRecipe } from '../../providers/DeclarativeRecipeRuntime';
 
 function secretVariables(secret: { apiKey: string; apiSecret: string; extraValue: string; username?: string; password?: string; database?: string }): Record<string, string> {
   const variables: Record<string, string> = {
@@ -72,7 +73,10 @@ function odooConfig(secret: { apiKey: string; apiSecret: string; username?: stri
     username: toStringValue(secret.username ?? secret.apiKey ?? extraConfig.username),
     password: toStringValue(secret.password ?? secret.apiSecret ?? extraConfig.password),
     uid: toFiniteNumber(extraConfig.uid, 0),
-    postInvoice: extraConfig.odooPostInvoice === true || toStringValue(extraConfig.odooPostInvoice).toLowerCase() === 'true',
+    postInvoice: extraConfig.odooPostInvoice === true || toStringValue(extraConfig.odooPostInvoice).toLowerCase() === 'true' || ['createAndPost', 'createPostAndSendEmail'].includes(toStringValue(extraConfig.invoiceLifecycle)),
+    sendInvoiceEmail: extraConfig.odooSendInvoiceEmail === true || toStringValue(extraConfig.odooSendInvoiceEmail).toLowerCase() === 'true' || toStringValue(extraConfig.invoiceLifecycle) === 'createPostAndSendEmail',
+    emailForceSend: extraConfig.odooEmailForceSend !== false && toStringValue(extraConfig.odooEmailForceSend).toLowerCase() !== 'false',
+    emailBody: toStringValue(extraConfig.odooEmailBody, 'Your invoice has been created and posted.'),
   };
 }
 
@@ -107,6 +111,57 @@ async function odooExecuteKw(context: IExecuteFunctions, input: {
   const positionalArgs: JsonValue[] = [input.database, input.uid, input.password, input.model, input.method, input.args];
   if (input.kwargs && Object.keys(input.kwargs).length > 0) positionalArgs.push(input.kwargs);
   return odooJsonRpc(context, input.url, input.timeout, odooPayload(input.id, 'object', 'execute_kw', positionalArgs), input.secrets);
+}
+
+async function tryOdooExecuteKw(
+  context: IExecuteFunctions,
+  input: {
+    url: string;
+    timeout: number;
+    database: string;
+    uid: number;
+    password: string;
+    model: string;
+    method: string;
+    args: JsonValue[];
+    kwargs?: IDataObject;
+    id: string;
+    secrets: string[];
+  },
+): Promise<{ success: boolean; result: JsonValue; errorMessage: string }> {
+  try {
+    return { success: true, result: await odooExecuteKw(context, input), errorMessage: '' };
+  } catch (error) {
+    return { success: false, result: null, errorMessage: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function lifecycleResult(input: {
+  partnerId: number;
+  partnerCreated: boolean;
+  invoiceId: number;
+  posted: boolean;
+  emailRequested: boolean;
+  emailSent: boolean;
+  emailMethod: string;
+  emailError: string;
+}): IDataObject {
+  return {
+    customer_status: input.partnerCreated ? 'CREATED' : 'FOUND',
+    customerStatus: input.partnerCreated ? 'CREATED' : 'FOUND',
+    invoice_status: 'CREATED',
+    invoiceStatus: 'CREATED',
+    post_status: input.posted ? 'POSTED' : 'DRAFT',
+    postStatus: input.posted ? 'POSTED' : 'DRAFT',
+    email_send_requested: input.emailRequested,
+    emailSendRequested: input.emailRequested,
+    email_send_status: input.emailRequested ? (input.emailSent ? 'SENT' : 'FAILED') : 'NOT_REQUESTED',
+    emailSendStatus: input.emailRequested ? (input.emailSent ? 'SENT' : 'FAILED') : 'NOT_REQUESTED',
+    email_send_method: input.emailMethod,
+    emailSendMethod: input.emailMethod,
+    email_error_message: input.emailError,
+    emailErrorMessage: input.emailError,
+  };
 }
 
 async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, request: IDataObject, options: IHttpRequestOptions, secret: { apiKey: string; apiSecret: string; username?: string; password?: string; database?: string; extraConfig?: IDataObject }, secrets: string[]): Promise<{ statusCode: number; headers: IDataObject; body: JsonValue }> {
@@ -180,19 +235,57 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
   const numericInvoiceId = toFiniteNumber(invoiceId, 0);
   if (numericInvoiceId <= 0) throw new Error('Odoo invoice create did not return a valid invoice id.');
   let posted = false;
-  if (config.postInvoice === true) {
+  const emailRequested = config.sendInvoiceEmail === true;
+  if (config.postInvoice === true || emailRequested) {
     await odooExecuteKw(context, {
       url, timeout, database, uid, password, model: 'account.move', method: 'action_post', args: [[numericInvoiceId] as unknown as JsonValue],
       id: `${toStringValue(request.transactionId)}-invoice-post`, secrets,
     });
     posted = true;
   }
+
+  let emailSent = false;
+  let emailMethod = '';
+  let emailError = '';
+  if (emailRequested) {
+    const sendAndPrint = await tryOdooExecuteKw(context, {
+      url, timeout, database, uid, password, model: 'account.move', method: 'action_send_and_print', args: [[numericInvoiceId] as unknown as JsonValue],
+      kwargs: { context: { force_send: config.emailForceSend === true } }, id: `${toStringValue(request.transactionId)}-invoice-send-and-print`, secrets,
+    });
+    if (sendAndPrint.success) {
+      emailSent = true;
+      emailMethod = 'account.move.action_send_and_print';
+    } else {
+      const postMessage = await tryOdooExecuteKw(context, {
+        url, timeout, database, uid, password, model: 'account.move', method: 'message_post',
+        args: [[numericInvoiceId] as unknown as JsonValue],
+        kwargs: { body: toStringValue(config.emailBody), message_type: 'comment', partner_ids: [partnerId] },
+        id: `${toStringValue(request.transactionId)}-invoice-message-post`, secrets,
+      });
+      if (postMessage.success) {
+        emailSent = true;
+        emailMethod = 'account.move.message_post';
+        emailError = sendAndPrint.errorMessage;
+      } else {
+        emailMethod = 'account.move.action_send_and_print/account.move.message_post';
+        emailError = `${sendAndPrint.errorMessage}; ${postMessage.errorMessage}`;
+      }
+    }
+  }
+
+  const lifecycle = lifecycleResult({ partnerId, partnerCreated, invoiceId: numericInvoiceId, posted, emailRequested, emailSent, emailMethod, emailError });
   return {
-    statusCode: 201,
+    statusCode: emailRequested && !emailSent ? 207 : 201,
     headers: { 'content-type': 'application/json' },
     body: {
-      result: { id: numericInvoiceId, partner_id: partnerId, partner_created: partnerCreated, state: posted ? 'posted' : 'draft' },
-      odoo: { uid, database: '[REDACTED]', strategy: 'auto_customer_then_invoice', post_invoice: posted },
+      result: {
+        id: numericInvoiceId,
+        partner_id: partnerId,
+        partner_created: partnerCreated,
+        state: emailRequested && !emailSent ? 'email_failed' : posted ? 'posted' : 'draft',
+        lifecycle,
+      },
+      odoo: { uid, database: '[REDACTED]', strategy: 'auto_customer_then_invoice', post_invoice: posted, send_invoice_email: emailRequested, email_sent: emailSent, email_method: emailMethod, email_error_message: emailError },
     },
   };
 }
@@ -650,7 +743,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
           schemaVersion: '1.0', success: true, transportStatus: 'DRY_RUN', requestId: request.requestId,
           providerId: request.providerId, profileId: request.profileId, accountId: request.accountId, workerId: request.workerId,
           httpStatus: 0, responseHeaders: {}, responseBody: null, latencyMs: 0, responseSizeBytes: 0,
-          requestPreview: { method: options.method, url: redactString(options.url, secrets), headerNames: Object.keys(headers), queryNames: Object.keys(query), contentType, unresolvedTokens },
+          requestPreview: { method: options.method, url: redactString(options.url, secrets), headerNames: Object.keys(headers), queryNames: Object.keys(query), contentType, unresolvedTokens, declarativeRecipePlan: toStringValue(isRecord(request.requestMapping) ? request.requestMapping.transportStrategy : '') === 'declarative_provider_recipe' ? declarativeRecipePlan(request) : null },
           idempotency: request.idempotency ?? null, activationSafety: activationSafety ?? null, bulkSafety: bulkSafetyBase, presetSelfCheck, responsePolicy: request.responsePolicy ?? null, requestMapping: request.requestMapping ?? null,
           startedAt: startedAt.toISOString(), finishedAt: new Date().toISOString(), runtime: request.runtime,
         } }, pairedItem: { item: itemIndex } });
@@ -689,7 +782,9 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       const strategy = toStringValue(isRecord(request.requestMapping) ? request.requestMapping.transportStrategy : '', 'single_http_request');
       const response = strategy === 'odoo_auto_customer_invoice'
         ? await executeOdooAutoCustomerInvoice(this, request, options, secret, secrets)
-        : await this.helpers.httpRequest(options);
+        : strategy === 'declarative_provider_recipe'
+          ? await executeDeclarativeProviderRecipe(this, { request, options, secret, secrets })
+          : await this.helpers.httpRequest(options);
       const parts = responseParts(response);
       const finishedAt = new Date();
       const safeBody = includeResponseBody ? redactJson(parts.body, secrets) : null;

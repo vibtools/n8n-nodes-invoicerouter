@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schema.ygit.dev/vpms/v2/vibproject.schema.json",
+  "schemaVersion": 2,
+  "manifestVersion": "2.0.0",
+  "project": {
+    "id": "n8n-nodes-invoicerouter",
+    "name": "n8n-nodes-invoicerouter",
+    "slug": "n8n-nodes-invoicerouter",
+    "displayName": "InvoiceRouter",
+    "description": "Vib Tools n8n community node package for guarded multi-provider invoice automation.",
+    "summary": "InvoiceRouter provides a master universal provider lifecycle engine, simple bulk email inputs, provider-account Google Sheet setup, guarded create/post/send execution, and status writeback.",
+    "version": "2.0.0",
+    "status": "stable",
+    "visibility": "public",
+    "category": "n8n-community-node",
+    "keywords": [
+      "n8n",
+      "invoice",
+      "automation",
+      "provider-lifecycle",
+      "vib-tools"
+    ],
+    "homepage": "https://vib.tools/",
+    "website": "https://github.com/vibtools/n8n-nodes-invoicerouter"
+  },
+  "organization": {
+    "company": "Vib Tools",
+    "owner": "Vib Tools",
+    "maintainers": [
+      "Vib Tools Core Team"
+    ]
+  },
+  "repository": {
+    "provider": "GitHub",
+    "url": "https://github.com/vibtools/n8n-nodes-invoicerouter",
+    "branch": "main",
+    "defaultBranch": "main"
+  },
+  "technology": {
+    "languages": [
+      "TypeScript",
+      "JavaScript",
+      "Markdown",
+      "JSON"
+    ],
+    "packageManagers": [
+      "npm"
+    ],
+    "apis": [
+      "n8n",
+      "Google Sheets",
+      "Odoo",
+      "Stripe",
+      "Zoho Books",
+      "QuickBooks"
+    ]
+  },
+  "runtime": {
+    "node": ">=22.0.0 <25",
+    "docker": false
+  },
+  "entrypoints": {
+    "application": "dist/index.js",
+    "documentation": "README.md",
+    "tests": "tests/"
+  },
+  "paths": {
+    "source": "nodes/",
+    "tests": "tests/",
+    "documentation": "docs/",
+    "scripts": "scripts/",
+    "assets": "assets/",
+    "examples": "examples/",
+    "configuration": "config/",
+    "data": "data/",
+    "templates": "template/"
+  },
+  "release": {
+    "versioning": "Semantic Versioning",
+    "latestVersion": "2.0.0",
+    "releaseNotes": "CHANGELOG.md"
+  }
+}

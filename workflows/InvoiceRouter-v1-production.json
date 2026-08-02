@@ -274,7 +274,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => value === undefined || value === null ? '' : String(Boolean(value));\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
+        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => value === undefined || value === null ? '' : String(Boolean(value));\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_customer_id: text(values.providerCustomerId),\n      customer_status: text(values.customerStatus),\n      post_status: text(values.postStatus),\n      email_send_requested: boolText(values.emailSendRequested),\n      email_send_status: text(values.emailSendStatus),\n      email_send_method: text(values.emailSendMethod),\n      email_error_message: text(values.emailErrorMessage),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      lifecycle_mode: text(values.lifecycleMode),\n      lifecycle_steps: text(values.lifecycleSteps),\n      provider_recipe_id: text(values.providerRecipeId),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
       },
       "id": "prepare-status-writeback-row",
       "name": "Prepare Status Writeback Row",
@@ -319,29 +319,52 @@
             "invoice_status": "={{ $json.invoice_status }}",
             "provider_status": "={{ $json.provider_status }}",
             "transport_status": "={{ $json.transport_status }}",
+            "provider_customer_id": "={ $json.provider_customer_id }",
+            "customer_status": "={ $json.customer_status }",
+            "post_status": "={ $json.post_status }",
+            "email_send_requested": "={ $json.email_send_requested }",
+            "email_send_status": "={ $json.email_send_status }",
+            "email_send_method": "={ $json.email_send_method }",
+            "email_error_message": "={ $json.email_error_message }",
             "provider_invoice_id": "={{ $json.provider_invoice_id }}",
             "invoice_number": "={{ $json.invoice_number }}",
             "invoice_url": "={{ $json.invoice_url }}",
             "pdf_url": "={{ $json.pdf_url }}",
             "http_status": "={{ $json.http_status }}",
             "error_type": "={{ $json.error_type }}",
+            "error_category": "={ $json.error_category }",
+            "error_severity": "={ $json.error_severity }",
             "error_code": "={{ $json.error_code }}",
             "error_message": "={{ $json.error_message }}",
             "retry_scheduled": "={{ $json.retry_scheduled }}",
             "retry_count": "={{ $json.retry_count }}",
+            "retry_delay_seconds": "={ $json.retry_delay_seconds }",
+            "retry_decision_source": "={ $json.retry_decision_source }",
+            "retry_decision_reason": "={ $json.retry_decision_reason }",
+            "retry_after_seconds": "={ $json.retry_after_seconds }",
+            "retry_delay_hint_seconds": "={ $json.retry_delay_hint_seconds }",
             "next_retry_at": "={{ $json.next_retry_at }}",
+            "lifecycle_mode": "={ $json.lifecycle_mode }",
+            "lifecycle_steps": "={ $json.lifecycle_steps }",
+            "provider_recipe_id": "={ $json.provider_recipe_id }",
+            "preset_self_check_mode": "={{ $json.preset_self_check_mode }}",
+            "preset_self_check_approved": "={{ $json.preset_self_check_approved }}",
+            "preset_self_check": "={{ $json.preset_self_check }}",
+            "activation_mode": "={{ $json.activation_mode }}",
+            "activation_approved": "={{ $json.activation_approved }}",
+            "activation_safety": "={{ $json.activation_safety }}",
+            "bulk_run_id": "={ $json.bulk_run_id }",
+            "bulk_item_number": "={ $json.bulk_item_number }",
+            "bulk_total_items": "={ $json.bulk_total_items }",
+            "bulk_decision": "={ $json.bulk_decision }",
+            "bulk_safety": "={ $json.bulk_safety }",
+            "bulk_summary": "={ $json.bulk_summary }",
             "retryable_by_policy": "={{ $json.retryable_by_policy }}",
             "non_retryable_by_policy": "={{ $json.non_retryable_by_policy }}",
             "duplicate_prevention": "={{ $json.duplicate_prevention }}",
             "checked_at": "={{ $json.checked_at }}",
             "managed_at": "={{ $json.managed_at }}",
-            "updated_at": "={{ $json.updated_at }}",
-            "activation_mode": "={{ $json.activation_mode }}",
-            "activation_approved": "={{ $json.activation_approved }}",
-            "activation_safety": "={{ $json.activation_safety }}",
-            "preset_self_check_mode": "={{ $json.preset_self_check_mode }}",
-            "preset_self_check_approved": "={{ $json.preset_self_check_approved }}",
-            "preset_self_check": "={{ $json.preset_self_check }}"
+            "updated_at": "={{ $json.updated_at }}"
           },
           "matchingColumns": [
             "writeback_key"
@@ -528,6 +551,76 @@
               "removed": false
             },
             {
+              "id": "provider_customer_id",
+              "displayName": "provider_customer_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "customer_status",
+              "displayName": "customer_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "post_status",
+              "displayName": "post_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_send_requested",
+              "displayName": "email_send_requested",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_send_status",
+              "displayName": "email_send_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_send_method",
+              "displayName": "email_send_method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "email_error_message",
+              "displayName": "email_error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
               "id": "provider_invoice_id",
               "displayName": "provider_invoice_id",
               "required": false,
@@ -588,6 +681,26 @@
               "removed": false
             },
             {
+              "id": "error_category",
+              "displayName": "error_category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "error_severity",
+              "displayName": "error_severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
               "id": "error_code",
               "displayName": "error_code",
               "required": false,
@@ -628,8 +741,208 @@
               "removed": false
             },
             {
+              "id": "retry_delay_seconds",
+              "displayName": "retry_delay_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_decision_source",
+              "displayName": "retry_decision_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_decision_reason",
+              "displayName": "retry_decision_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_after_seconds",
+              "displayName": "retry_after_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "retry_delay_hint_seconds",
+              "displayName": "retry_delay_hint_seconds",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
               "id": "next_retry_at",
               "displayName": "next_retry_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "lifecycle_mode",
+              "displayName": "lifecycle_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "lifecycle_steps",
+              "displayName": "lifecycle_steps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_recipe_id",
+              "displayName": "provider_recipe_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "preset_self_check_mode",
+              "displayName": "preset_self_check_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "preset_self_check_approved",
+              "displayName": "preset_self_check_approved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "preset_self_check",
+              "displayName": "preset_self_check",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_mode",
+              "displayName": "activation_mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_approved",
+              "displayName": "activation_approved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "activation_safety",
+              "displayName": "activation_safety",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_run_id",
+              "displayName": "bulk_run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_item_number",
+              "displayName": "bulk_item_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_total_items",
+              "displayName": "bulk_total_items",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_decision",
+              "displayName": "bulk_decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_safety",
+              "displayName": "bulk_safety",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "bulk_summary",
+              "displayName": "bulk_summary",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -690,36 +1003,6 @@
             {
               "id": "updated_at",
               "displayName": "updated_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": false,
-              "removed": false
-            },
-            {
-              "id": "activation_mode",
-              "displayName": "activation_mode",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": false,
-              "removed": false
-            },
-            {
-              "id": "activation_approved",
-              "displayName": "activation_approved",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": false,
-              "removed": false
-            },
-            {
-              "id": "activation_safety",
-              "displayName": "activation_safety",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -963,7 +1246,7 @@
   "meta": {
     "templateCredsSetupCompleted": false,
     "invoiceRouterFreeze": "1.0",
-    "invoiceRouterRelease": "1.6.0",
+    "invoiceRouterRelease": "2.0.0",
     "template": "simple-bulk-email-production"
   },
   "tags": []

@@ -1,5 +1,6 @@
 import type { IDataObject, JsonValue } from '../shared/types/N8n';
 import { isRecord, slug, toFiniteNumber, toStringValue } from '../shared/utils/Helpers';
+import { lifecycleMetadata } from './ProviderLifecycle';
 
 export interface ProviderBuildInput {
   providerId: string;
@@ -45,14 +46,32 @@ const PROVIDER_REQUEST_MAPPINGS: Record<string, IDataObject> = {
   custom: { canonicalAction: 'custom_request', method: 'POST', contentType: 'application/json', idempotencyHeader: 'Idempotency-Key', responseKind: 'custom' },
 };
 
-function providerRequestMapping(providerId: string, actionId: string): IDataObject {
+function providerRequestMapping(providerId: string, actionId: string, profile: IDataObject): IDataObject {
   const preset = PROVIDER_REQUEST_MAPPINGS[providerId] ?? PROVIDER_REQUEST_MAPPINGS.custom;
+  const connection = isRecord(profile.connection) ? profile.connection : {};
+  const extraConfig = isRecord(connection.extraConfig) ? connection.extraConfig : {};
+  const lifecycle = isRecord(profile.lifecycle) ? profile.lifecycle : lifecycleMetadata(providerId, extraConfig);
+  const readiness = isRecord(lifecycle.recipeReadiness) ? lifecycle.recipeReadiness : {};
+  const declarativeRecipe = isRecord(lifecycle.declarativeRecipe) ? lifecycle.declarativeRecipe : {};
+  const declarativeExecutable = readiness.executable === true && Object.keys(declarativeRecipe).length > 0;
   return {
-    schemaVersion: '1.0', providerId, actionId: toStringValue(actionId), canonicalAction: preset.canonicalAction,
-    method: preset.method, contentType: preset.contentType, idempotencyHeader: preset.idempotencyHeader,
-    responseKind: preset.responseKind, transportStrategy: preset.transportStrategy ?? 'single_http_request',
+    schemaVersion: '2.0',
+    providerId,
+    actionId: toStringValue(actionId),
+    canonicalAction: preset.canonicalAction,
+    method: preset.method,
+    contentType: preset.contentType,
+    idempotencyHeader: preset.idempotencyHeader,
+    responseKind: preset.responseKind,
+    transportStrategy: declarativeExecutable ? 'declarative_provider_recipe' : preset.transportStrategy ?? 'single_http_request',
     customerMode: providerId === 'odoo' ? 'auto_search_or_create_by_email' : 'provider_specific',
-    allowedMethods: ['POST', 'PUT', 'PATCH'], source: providerId === 'custom' ? 'custom-provider-profile' : 'built-in-provider-preset',
+    lifecycleMode: lifecycle.mode,
+    lifecycleSteps: lifecycle.steps,
+    lifecycle,
+    declarativeRecipe: declarativeExecutable ? declarativeRecipe : null,
+    recipeExecutable: declarativeExecutable,
+    allowedMethods: ['POST', 'PUT', 'PATCH'],
+    source: declarativeExecutable ? 'declarative-provider-recipe' : providerId === 'custom' ? 'custom-provider-profile' : 'built-in-provider-preset',
   };
 }
 
@@ -185,6 +204,10 @@ function responsePaths(providerId: string): IDataObject {
     status: ['status', 'invoice.status', 'data.status'],
     invoiceUrl: ['hosted_invoice_url', 'invoice_url', 'invoice.invoice_url', 'data.url'],
     pdfUrl: ['invoice_pdf', 'pdf_url', 'invoice.pdf_url'],
+      providerCustomerId: ['result.partner_id', 'result.customer_id', 'customer.id'],
+      customerStatus: ['result.lifecycle.customer_status', 'result.lifecycle.customerStatus', 'customer_status'],
+      postStatus: ['result.lifecycle.post_status', 'result.lifecycle.postStatus', 'post_status'],
+      emailSendStatus: ['result.lifecycle.email_send_status', 'result.lifecycle.emailSendStatus', 'email_send_status'],
     transactionId: ['transaction_id', 'transaction.id', 'data.transaction_id'],
     errorCode: ['error.code', 'code', 'errors.0.code'],
     errorMessage: ['error.message', 'message', 'errors.0.message', 'data.error.message'],
@@ -382,7 +405,7 @@ export function buildProviderRequest(input: ProviderBuildInput): ProviderBuildRe
   if (isRecord(customBody) || Array.isArray(customBody)) body = customBody;
   return {
     body, query, warnings, errors, responsePaths: responsePaths(providerId),
-    requestMapping: providerRequestMapping(providerId, input.actionId),
+    requestMapping: providerRequestMapping(providerId, input.actionId, input.profile),
     responsePolicy: providerResponsePolicy(providerId),
   };
 }

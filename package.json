@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-invoicerouter",
-  "version": "1.6.0",
-  "description": "Simplified eight-node n8n Invoice Router for provider-account API setup, simple bulk email lists, auto customer handling, guarded real API sending, and status writeback.",
+  "version": "2.0.0",
+  "description": "Master eight-node n8n InvoiceRouter for universal provider lifecycles, declarative provider recipes, simple bulk email lists, guarded create/post/send execution, template packs, and status writeback.",
   "keywords": [
     "n8n",
     "n8n-community-node",
@@ -21,7 +21,13 @@
     "invoice-router",
     "bulk-invoice",
     "invoice-automation",
-    "n8n-invoice-router"
+    "n8n-invoice-router",
+    "provider-lifecycle",
+    "invoice-email",
+    "universal-invoice",
+    "vib-tools",
+    "vibproject",
+    "declarative-provider-recipes"
   ],
   "homepage": "https://github.com/vibtools/n8n-nodes-invoicerouter",
   "repository": {
@@ -69,7 +75,25 @@
     "scripts/diagnose-n8n-package.mjs",
     "docs/freeze/v1.0/V1_6_0_SIMPLE_BULK_EMAIL_WORKFLOW.md",
     "examples/n8n_simple_bulk_email",
-    "workflows/InvoiceRouter-v1.6-simple-bulk-email.json"
+    "workflows/InvoiceRouter-v1.6-simple-bulk-email.json",
+    "PROJECT_STRUCTURE.md",
+    "vibproject.ygit",
+    "docs/docs.minifest.ygit",
+    "docs/user",
+    "docs/developer",
+    "docs/freeze/v1.0/V2_0_0_MASTER_UNIVERSAL_PROVIDER_LIFECYCLE.md",
+    "config",
+    "data",
+    "template",
+    "workflows/InvoiceRouter-v2-master-universal.json",
+    "docs/index.md",
+    "docs/user/provider-support-matrix.md",
+    "docs/user/google-sheets-easy-mode.md",
+    "docs/developer/provider-template-pack-contract.md",
+    "template/status-writeback-columns.csv",
+    "template/google-sheets/auto-fix-invoice-results-headers.gs",
+    "docs/developer/declarative-provider-recipe-runtime.md",
+    "docs/user/declarative-provider-recipes.md"
   ],
   "scripts": {
     "clean": "node scripts/clean.mjs",
@@ -81,14 +105,16 @@
     "test": "node --test tests/smoke.test.cjs",
     "dev": "tsc -p tsconfig.json --watch",
     "validate": "node scripts/validate-project.mjs",
-    "verify": "npm run validate && npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm pack --dry-run",
+    "verify": "npm run validate && npm run validate:templates && npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm pack --dry-run",
     "prepack": "npm run build",
-    "diagnose:n8n-package": "node scripts/diagnose-n8n-package.mjs"
+    "diagnose:n8n-package": "node scripts/diagnose-n8n-package.mjs",
+    "validate:templates": "node scripts/validate-provider-templates.mjs",
+    "audit:release-source": "node scripts/audit-release-source.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "typescript": "^5.9.0",
-    "n8n-workflow": "^1.100.0"
+    "n8n-workflow": "^2.16.0",
+    "typescript": "^5.9.0"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
@@ -109,11 +135,11 @@
   },
   "sideEffects": false,
   "invoiceRouterFreeze": {
-    "architectureVersion": "1.0",
-    "status": "FINAL_FREEZE",
+    "architectureVersion": "2.0",
+    "status": "MASTER_PROVIDER_LIFECYCLE_FREEZE",
     "implementationStatus": "COMPLETE",
     "targetNodeCount": 8,
     "currentNodeCount": 8,
-    "sourceOfTruth": "VERSION_1_0_FREEZE.md"
+    "sourceOfTruth": "docs/freeze/v1.0/V2_0_0_MASTER_UNIVERSAL_PROVIDER_LIFECYCLE.md"
   }
 }

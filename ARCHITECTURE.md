@@ -1,5 +1,10 @@
 # InvoiceRouter Architecture
 
+## v2.0.0 Master Universal Provider Lifecycle
+
+The eight-node architecture remains frozen. v2.0.0 adds a universal lifecycle layer over provider adapters: customer resolve/create, invoice create, invoice post/finalize, invoice email send, and normalized lifecycle status writeback.
+
+
 ## v1.6.0 simple bulk email workflow boundary
 
 The package release identity is `v1.6.0`. The architectural freeze remains Version 1.0 with exactly eight custom nodes. v1.6.0 does not add or remove custom node types; it changes the default workflow contract so provider credentials stay in the `provider` sheet and recipient rows require only `Email`, with optional `Name` and `Address`.
@@ -130,3 +135,12 @@ Step 12B changes only release/discovery metadata and n8n editor searchability. T
 The published package is intended to be installed from npm through the n8n Community Nodes UI. To support that path, package metadata keeps the required n8n community-node keyword and compiled `n8n.nodes` manifest, removes the runtime `n8n-workflow` peer dependency risk, and ships a diagnostic script for fallback manual installs.
 
 All custom node display names are prefixed with `InvoiceRouter` so users can find the node family from the n8n editor search. Existing workflow node instance names can remain short because n8n resolves custom node types by their package/type key, not by the visible display label.
+## v2.0.0 release-hardening layer
+
+The master lifecycle layer writes customer, invoice, post, and email-send status into the same status writeback contract. Provider template packs are validated through a public manifest, and `project/` remains a private, ignored planning area.
+
+
+
+## Step 14D / v2.0.0 Declarative Provider Recipe Runtime
+
+Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice providers can define customer, invoice, post/finalize, and email-send steps in provider recipe JSON instead of requiring core node code changes. This is intended for compatible providers; non-standard OAuth, webhook, UI-only, or SDK-only flows may still require a dedicated adapter.

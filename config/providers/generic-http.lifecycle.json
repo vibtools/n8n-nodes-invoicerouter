@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "2.0",
+  "providerId": "generic-http",
+  "recipeId": "generic-http",
+  "displayName": "Generic HTTP",
+  "lifecycleModes": [
+    "createOnly"
+  ],
+  "requiredAccountFields": [],
+  "steps": [
+    "single_http_request"
+  ]
+}

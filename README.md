@@ -1,4 +1,9 @@
-# InvoiceRouter for n8n
+# InvoiceRouter
+
+## v2.0.0 Master Universal Provider Lifecycle
+
+InvoiceRouter v2.0.0 stabilizes the master model: one package, one master workflow, universal provider lifecycle modes, public provider templates under `template/`, public documentation under `docs/`, and private local planning under ignored `project/`.
+ for n8n
 
 [![InvoiceRouter CI](https://github.com/vibtools/n8n-nodes-invoicerouter/actions/workflows/ci.yml/badge.svg)](https://github.com/vibtools/n8n-nodes-invoicerouter/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/n8n-nodes-invoicerouter.svg)](https://www.npmjs.com/package/n8n-nodes-invoicerouter)
@@ -482,3 +487,12 @@ For sandbox bulk real send, use `SEND_SANDBOX_INVOICES` plus `SEND_BULK_SANDBOX_
 ### Step 11E production preset self-check and retry wiring
 
 The production workflow now includes a guarded retry loop and a runtime preset self-check. The default workflow remains dry-run safe with `Production Preset Self-Check = Dry Run Validation`. Retryable provider failures can flow from Status Manager to Prepare Retry Request, Wait Before Retry, and back to Invoice Sender. Non-retryable validation/auth/resource errors remain blocked for manual review.
+## v2.0.0 master hardening
+
+InvoiceRouter v2.0.0 now includes provider lifecycle writeback, canonical provider template pack contracts, Google Sheets header repair assets, and release-source audit tooling. Provider templates are onboarding assets; live production claims require provider-specific proof.
+
+
+
+## Step 14D / v2.0.0 Declarative Provider Recipe Runtime
+
+Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice providers can define customer, invoice, post/finalize, and email-send steps in provider recipe JSON instead of requiring core node code changes. This is intended for compatible providers; non-standard OAuth, webhook, UI-only, or SDK-only flows may still require a dedicated adapter.

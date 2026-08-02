@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.vib.tools/invoicerouter/provider-template.schema.json",
+  "schemaVersion": "2.0",
+  "templateId": "template-003-zoho-books-complete-bulk-email",
+  "providerId": "zoho-books",
+  "displayName": "Zoho Books Complete Bulk Email Sending System",
+  "templateVersion": "2.0.0",
+  "invoiceRouterVersion": "2.0.0",
+  "supportTier": "tier-2-template-ready-live-proof-required",
+  "files": {
+    "workbook": "InvoiceRouter_TEMPLATE003_ZOHO_BOOKS_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx",
+    "n8nWorkflow": "InvoiceRouter_TEMPLATE003_ZOHO_BOOKS_COMPLETE_BULK_EMAIL_N8N_IMPORT.json",
+    "provider": "provider.csv",
+    "emailList": "email_list.csv",
+    "invoiceResults": "invoice_results.csv",
+    "lifecycleRecipe": "provider.lifecycle.json",
+    "readme": "README.md",
+    "quickstart": "QUICKSTART.md"
+  },
+  "sheetContract": {
+    "providerSheet": "provider",
+    "emailListSheet": "email_list",
+    "invoiceResultsSheet": "invoice_results",
+    "emailListRequiredColumns": [
+      "Email"
+    ],
+    "emailListOptionalColumns": [
+      "Name",
+      "Address"
+    ]
+  },
+  "defaultSafetyMode": "dryRunValidation",
+  "liveBulkRequires": [
+    "SEND_REAL_INVOICES",
+    "SEND_BULK_REAL_INVOICES"
+  ],
+  "notes": "Template-ready for Zoho Books API. Live Zoho email delivery must be proven with a valid Zoho OAuth token and organization ID before production claims."
+}

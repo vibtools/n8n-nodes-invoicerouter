@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "2.0",
+  "providerId": "generic-http",
+  "recipeId": "generic-http-declarative-example",
+  "displayName": "Generic HTTP Declarative Invoice Example",
+  "runtime": {
+    "type": "declarative_http"
+  },
+  "lifecycleModes": [
+    "createOnly",
+    "createAndPost",
+    "createPostAndSendEmail"
+  ],
+  "requiredAccountFields": [
+    "API Key"
+  ],
+  "capabilities": {
+    "supportsInvoiceCreate": true,
+    "supportsInvoicePost": true,
+    "supportsInvoiceEmailSend": true
+  },
+  "steps": [
+    {
+      "id": "invoice.create",
+      "lifecycleStep": "invoice.create",
+      "request": {
+        "method": "POST",
+        "url": "{{request.baseUrl}}/{{request.endpoint}}",
+        "headers": {
+          "Authorization": "Bearer {{API_KEY}}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "email": "{{recipient.email}}",
+          "name": "{{recipient.name}}",
+          "invoice_number": "{{invoice.invoiceNumber}}",
+          "amount": "{{invoice.totals.grandTotal}}",
+          "currency": "{{invoice.currency}}"
+        }
+      },
+      "successStatusCodes": [
+        200,
+        201,
+        202
+      ],
+      "responseMap": {
+        "providerInvoiceId": [
+          "id",
+          "invoice.id"
+        ],
+        "invoiceNumber": [
+          "number",
+          "invoice.number"
+        ],
+        "invoiceStatus": [
+          "status",
+          "invoice.status"
+        ]
+      }
+    },
+    {
+      "id": "invoice.post",
+      "lifecycleStep": "invoice.post",
+      "onlyWhenLifecycleIncludes": "invoice.post",
+      "request": {
+        "method": "POST",
+        "url": "{{request.baseUrl}}/invoices/{{facts.providerInvoiceId}}/post",
+        "headers": {
+          "Authorization": "Bearer {{API_KEY}}"
+        }
+      },
+      "successStatusCodes": [
+        200,
+        201,
+        202,
+        204
+      ],
+      "responseMap": {
+        "postStatus": [
+          "status",
+          "state"
+        ]
+      }
+    },
+    {
+      "id": "invoice.send_email",
+      "lifecycleStep": "invoice.send_email",
+      "onlyWhenLifecycleIncludes": "invoice.send_email",
+      "request": {
+        "method": "POST",
+        "url": "{{request.baseUrl}}/invoices/{{facts.providerInvoiceId}}/send",
+        "headers": {
+          "Authorization": "Bearer {{API_KEY}}"
+        },
+        "body": {
+          "recipient": "{{recipient.email}}"
+        }
+      },
+      "successStatusCodes": [
+        200,
+        201,
+        202,
+        204
+      ],
+      "responseMap": {
+        "emailSendStatus": [
+          "email.status",
+          "status"
+        ]
+      }
+    }
+  ]
+}
