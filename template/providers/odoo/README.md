@@ -64,3 +64,8 @@ Use this order:
 - `MODE_SELECTION.md`
 - `LIVE_TEST_CHECKLIST.md`
 - `TROUBLESHOOTING.md`
+
+
+## v2.1.0 bulk reliability
+
+Use `n8n-import-workflow-live-bulk.json` as the canonical one-workflow Odoo template. The workbook includes provider status, recipient status, retry queue, account report, and campaign report tabs.

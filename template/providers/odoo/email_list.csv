@@ -1,2 +1,2 @@
-Email,Name,Address
-customer@example.com,Customer Example,
+Email,status,Name,Address,Job_ID,Campaign_ID,Attempt_Count,Last_Account,Last_Error,Updated_At
+customer@example.com,PENDING,Customer Example,,,,0,,,

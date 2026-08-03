@@ -15,3 +15,6 @@ InvoiceRouter is a Vib Tools n8n community node package for guarded invoice auto
 - Release Notes
 
 Private planning and internal development notes belong under `project/`, which is intentionally ignored by Git.
+
+- [Odoo production bulk reliability](user/odoo-production-bulk-reliability.md)
+- [Bulk retry and failover contract](developer/bulk-retry-failover-contract.md)

@@ -1,5 +1,23 @@
 # InvoiceRouter Architecture
 
+## v2.1.0 Bulk Reliability Layer
+
+The eight-node topology remains frozen. The canonical Odoo production workflow serializes recipient jobs through a one-item loop so Provider Selector allocates immediately before each send. Status Manager feedback is available before the next recipient allocation.
+
+Data flow:
+
+```text
+provider -> Provider Loader -> email_list -> Email List -> Invoice Template
+-> Loop Over Recipient Jobs -> Provider Selector -> Request Builder -> Invoice Sender
+-> Status Checker -> Status Manager
+```
+
+Status Manager branches into invoice results, recipient status, provider status, retry queue, account report, and campaign report writebacks. Only approved same-account retry returns to Invoice Sender. Only pre-side-effect failover returns to Provider Selector. Sheet writeback branches never return to the transport path.
+
+Provider Loader performs optional read-only Odoo account preflight before pool registration. The canonical production template enables authentication, active-currency, and model-access checks. Each managed Google Sheets write branch retries its write independently up to three times.
+
+Stable job identity is `Campaign_ID + Job_ID`. The `campaignJob` idempotency key excludes the current provider profile for safe pre-side-effect failover; once a provider invoice exists, lifecycle checkpoint data locks post/send resume to the original profile/database.
+
 ## v2.0.0 Master Universal Provider Lifecycle
 
 The eight-node architecture remains frozen. v2.0.0 adds a universal lifecycle layer over provider adapters: customer resolve/create, invoice create, invoice post/finalize, invoice email send, and normalized lifecycle status writeback.

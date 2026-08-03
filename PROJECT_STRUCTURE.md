@@ -42,3 +42,8 @@ vibproject.ygit
 ## Rule
 
 Do not move existing `nodes/`, `providers/`, or `shared/` files unless explicitly approved. The VibProject structure is an organizational layer, not a migration.
+
+
+## v2.1.0 Odoo managed workbook assets
+
+`template/providers/odoo/` now includes `retry_queue.csv`, `account_report.csv`, and `campaign_report.csv` beside the existing provider, recipient, and invoice-result templates. Existing source paths and custom-node directories are unchanged.

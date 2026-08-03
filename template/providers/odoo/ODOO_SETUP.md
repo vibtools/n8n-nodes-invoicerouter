@@ -25,7 +25,7 @@ Auth Type = Odoo JSON-RPC
 ## Extra Config JSON
 
 ```json
-{"invoiceLifecycle":"createPostAndSendEmail","odooPostInvoice":true,"odooSendInvoiceEmail":true,"odooEmailForceSend":true,"odooEmailBody":"Your invoice has been created and posted."}
+{"invoiceLifecycle":"createPostAndSendEmail","odooPostInvoice":true,"odooSendInvoiceEmail":true,"odooEmailForceSend":true}
 ```
 
 ## Runtime sequence

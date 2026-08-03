@@ -1,5 +1,5 @@
 {
-  "name": "InvoiceRouter v2.0.0 - Odoo Complete Bulk Email Template",
+  "name": "InvoiceRouter v2.1.0 - Odoo Complete Bulk Email Template",
   "nodes": [
     {
       "parameters": {},
@@ -44,7 +44,7 @@
     },
     {
       "parameters": {
-        "batchId": "={{$execution.id}}",
+        "batchId": "odoo-production-pool",
         "sourceName": "provider",
         "duplicatePolicy": "error",
         "includeDisabled": false,
@@ -91,14 +91,19 @@
     },
     {
       "parameters": {
-        "batchId": "={{$execution.id}}",
+        "batchId": "odoo-production-pool",
         "emailField": "Email",
         "nameField": "Name",
         "nameGeneration": "formatted",
         "invalidPolicy": "skip",
         "preserveCustomColumns": false,
         "preventReuse": true,
-        "addressField": "Address"
+        "addressField": "Address",
+        "statusField": "status",
+        "jobIdField": "Job_ID",
+        "campaignIdField": "Campaign_ID",
+        "defaultCampaignId": "default-campaign",
+        "fixedCustomerName": ""
       },
       "id": "email-list",
       "name": "Email List",
@@ -173,7 +178,7 @@
         "allowHttp": false,
         "sendGuardMode": "strict",
         "strictProviderValidation": true,
-        "idempotencyKeyMode": "providerInvoiceRecipient",
+        "idempotencyKeyMode": "campaignJob",
         "idempotencyScope": "workflow"
       },
       "id": "request-builder",
@@ -233,7 +238,7 @@
     },
     {
       "parameters": {
-        "retryLimit": 0,
+        "retryLimit": 3,
         "retryBaseDelaySeconds": 30,
         "cooldownSeconds": 30,
         "disableOnAuthFailure": true,
@@ -1312,7 +1317,7 @@
   "meta": {
     "templateCredsSetupCompleted": false,
     "invoiceRouterFreeze": "1.0",
-    "invoiceRouterRelease": "2.0.0",
+    "invoiceRouterRelease": "2.1.0",
     "template": "template-001-odoo-complete-bulk-email",
     "spreadsheetPlaceholder": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
     "invoiceRouterWorkflow": "master-universal-provider-lifecycle"

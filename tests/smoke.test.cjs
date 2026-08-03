@@ -229,7 +229,7 @@ function odooEmailResumeResponses({ notificationStatus = 'sent', mailState = '',
 
 test('package registers exactly the frozen eight custom nodes', () => {
   assert.equal(pkg.name, 'n8n-nodes-invoicerouter');
-  assert.equal(pkg.version, '2.0.1');
+  assert.equal(pkg.version, '2.1.0');
   assert.equal(pkg.n8n.nodes.length, 8);
   assert.equal(pkg.invoiceRouterFreeze.targetNodeCount, 8);
   assert.equal(pkg.invoiceRouterFreeze.currentNodeCount, 8);
@@ -273,7 +273,7 @@ test('all frozen custom nodes use searchable InvoiceRouter display names', () =>
 test('installed package diagnostic validates the built package root', () => {
   const output = execFileSync(process.execPath, [path.join(root, 'scripts/diagnose-n8n-package.mjs'), root], { encoding: 'utf8' });
   assert.match(output, /Diagnostic result: PASS/);
-  assert.match(output, /n8n-nodes-invoicerouter@2\.0\.1/);
+  assert.match(output, /n8n-nodes-invoicerouter@2\.1\.0/);
 });
 
 test('all declared node artifacts and main declarations exist', () => {
@@ -1051,7 +1051,7 @@ test('Status Manager retry output can be prepared for automatic retry execution'
 test('v2.0 master workflow keeps recipient rows provider-free', () => {
   const workflow = JSON.parse(fs.readFileSync(path.join(root, 'workflows/InvoiceRouter-v2-master-universal.json'), 'utf8'));
   const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
-  assert.equal(workflow.meta.invoiceRouterRelease, '2.0.0');
+  assert.equal(workflow.meta.invoiceRouterRelease, '2.1.0');
   assert.equal(byName['Provider Selector'].parameters.conditionalRouting, false);
   assert.equal(byName['Provider Selector'].parameters.providerFilter, 'Odoo');
   assert.equal(byName['Email List'].parameters.emailField, 'Email');
@@ -1447,7 +1447,7 @@ test('provider template packs expose canonical manifest and result headers', () 
     const base = path.join(root, 'template/providers', provider);
     const manifest = JSON.parse(fs.readFileSync(path.join(base, 'provider.template.ygit'), 'utf8'));
     assert.equal(manifest.providerId, provider);
-    assert.equal(manifest.templateVersion, '2.0.0');
+    assert.equal(manifest.templateVersion, provider === 'odoo' ? '2.1.0' : '2.0.0');
     assert.equal(fs.readFileSync(path.join(base, 'invoice_results.csv'), 'utf8').trim(), canonical);
     assert.ok(fs.existsSync(path.join(base, manifest.files.lifecycleRecipe)));
   }
@@ -1618,7 +1618,7 @@ test('release documentation enforces forensic audit before publish and community
   assert.match(checklist, /one controlled recipient only/i);
 });
 
-test('v2.0.1 final release metadata and npm package contents stay synchronized', () => {
+test('v2.1.0 final release metadata and npm package contents stay synchronized', () => {
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   const vibProject = JSON.parse(fs.readFileSync(path.join(root, 'vibproject.ygit'), 'utf8'));
   const docsManifest = JSON.parse(fs.readFileSync(path.join(root, 'docs/docs.minifest.ygit'), 'utf8'));
@@ -1626,7 +1626,7 @@ test('v2.0.1 final release metadata and npm package contents stay synchronized',
   const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
   const releaseWorkflow = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
 
-  assert.equal(pkg.version, '2.0.1');
+  assert.equal(pkg.version, '2.1.0');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(vibProject.project.version, pkg.version);
@@ -1634,8 +1634,8 @@ test('v2.0.1 final release metadata and npm package contents stay synchronized',
   assert.equal(docsManifest.versions.current, pkg.version);
   assert.equal(docsManifest.versions.latest, pkg.version);
   assert.ok(docsManifest.versions.available.includes(pkg.version));
-  assert.match(readme, /Package version:\*\* `2\.0\.1`/);
-  assert.match(changelog, /## 2\.0\.1 - 2026-08-02/);
+  assert.match(readme, /Package version:\*\* `2\.1\.0`/);
+  assert.match(changelog, /## 2\.1\.0 - 2026-08-03/);
   assert.ok(pkg.files.includes('docs/troubleshooting'));
   assert.match(releaseWorkflow, /Validate tag version/);
   assert.match(releaseWorkflow, /npm publish --access public --provenance/);
@@ -1644,4 +1644,322 @@ test('v2.0.1 final release metadata and npm package contents stay synchronized',
     const manifest = JSON.parse(fs.readFileSync(path.join(root, `template/providers/${provider}/provider.template.ygit`), 'utf8'));
     assert.equal(manifest.invoiceRouterVersion, pkg.version);
   }
+});
+
+test('v2.1 Email List custom fixed name and stable job identity are additive', async () => {
+  const { execute: loadEmails } = load('nodes/04_EmailList/EmailList.execute.js');
+  const rows = [{ json: { Email: 'fixed.name@example.com', status: '', Name: 'Ignored Name', Campaign_ID: 'campaign-001' } }];
+  const params = {
+    batchId: 'odoo-production-pool', emailField: 'Email', nameField: 'Name', addressField: 'Address', statusField: 'status',
+    jobIdField: 'Job_ID', campaignIdField: 'Campaign_ID', defaultCampaignId: 'default-campaign',
+    nameGeneration: 'customFixed', fixedCustomerName: 'Valued Customer', invalidPolicy: 'error', preserveCustomColumns: false, preventReuse: false,
+  };
+  const first = await loadEmails.call(context([rows], params));
+  const second = await loadEmails.call(context([rows], params));
+  assert.equal(first[0][0].json.recipient.name, 'Valued Customer');
+  assert.equal(first[0][0].json.job.status, 'PENDING');
+  assert.equal(first[0][0].json.job.campaignId, 'campaign-001');
+  assert.match(first[0][0].json.job.jobId, /^JOB-/);
+  assert.equal(first[0][0].json.job.jobId, second[0][0].json.job.jobId);
+});
+
+test('v2.1 Email List blocks blank fixed customer name', async () => {
+  const { execute: loadEmails } = load('nodes/04_EmailList/EmailList.execute.js');
+  await assert.rejects(() => loadEmails.call(context([[{ json: { Email: 'customer@example.com' } }]], {
+    batchId: 'fixed-name-error', nameGeneration: 'customFixed', fixedCustomerName: '', preventReuse: false,
+  })), /Fixed Customer Name is required/);
+});
+
+test('v2.1 Provider Loader reads failover group and managed account status', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const rows = [{ json: {
+    Enabled: true, Provider: 'Odoo', Account: 'Primary Odoo', Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://example.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'secret', Database: 'example', Failover_Group: 'company-a', status: 'READY', Total_Sent: 12,
+  } }];
+  const loaded = await loadProviders.call(context([rows], { batchId: 'provider-status', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true }));
+  const profile = loaded[0][0].json.providers[0];
+  assert.equal(profile.failoverGroup, 'company-a');
+  assert.equal(profile.managedStatus, 'READY');
+  assert.equal(profile.totalSent, 12);
+});
+
+test('v2.1 Provider Selector excludes attempted account during failover', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const providerInput = ['Account A', 'Account B'].map((account) => ({ json: {
+    Enabled: true, Provider: 'Odoo', Account: account, Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://example.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'secret', Database: 'example', Failover_Group: 'company-a', status: 'READY',
+  } }));
+  const loaderContext = context([providerInput], { batchId: 'selector-failover', __executionId: 'exec-selector', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true });
+  const loaded = await loadProviders.call(loaderContext);
+  const attempted = loaded[0][0].json.providers[0].id;
+  const work = [{ json: { recipient: { email: 'customer@example.com' }, runtime: loaded[0][0].json.runtime, failoverState: { failoverGroup: 'company-a', attemptedProfileIds: [attempted] }, job: { jobId: 'JOB-1' } } }];
+  const { execute: selectProvider } = load('nodes/02_ProviderSelector/ProviderSelector.execute.js');
+  const selected = await selectProvider.call(context([loaded[0], work], {
+    strategy: 'firstAvailable', processingMode: 'sequential', providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live',
+    queueWhenUnavailable: true, conditionalRouting: false, routingRulesJson: '[]', requireConditionalMatch: false, unmatchedRouteBehavior: 'block',
+    lockTimeoutSeconds: 300, maxRequestsPerMinute: 60, circuitBreakerThreshold: 5, __executionId: 'exec-selector',
+  }));
+  assert.notEqual(selected[0][0].json.providerAllocation.id, attempted);
+  assert.equal(selected[0][0].json.providerAllocation.accountName, 'Account B');
+});
+
+test('v2.1 campaignJob idempotency remains stable across pre-side-effect account failover', async () => {
+  const makeProvider = (account) => [{ json: {
+    Enabled: true, Provider: 'Custom', Account: account, Environment: 'Live', Action: 'Custom Request', Method: 'POST',
+    'Base URL': 'https://api.example.test', Endpoint: '/invoices', 'Auth Type': 'Bearer', 'API Key': 'secret-token',
+    'Header Name': 'Authorization', 'Header Value': 'Bearer {{API_KEY}}', Failover_Group: 'company-a',
+  } }];
+  const recipients = [{ json: { Email: 'stable@example.com', Campaign_ID: 'campaign-stable' } }];
+  const first = await runPipeline({ providers: makeProvider('Account A'), recipients, requestParams: { idempotencyKeyMode: 'campaignJob' } });
+  const second = await runPipeline({ providers: makeProvider('Account B'), recipients, requestParams: { idempotencyKeyMode: 'campaignJob' } });
+  assert.equal(first.built[0][0].json.readyRequest.idempotency.value, second.built[0][0].json.readyRequest.idempotency.value);
+  assert.notEqual(first.built[0][0].json.readyRequest.profileId, second.built[0][0].json.readyRequest.profileId);
+});
+
+test('v2.1 Status Checker classifies invalid Odoo database as non-retryable configuration', async () => {
+  const { execute: checkStatus } = load('nodes/07_StatusChecker/StatusChecker.execute.js');
+  const item = { json: {
+    readyRequest: { requestId: 'REQ-DB', providerId: 'odoo', profileId: 'odoo-a', accountId: 'a', recipient: { email: 'customer@example.com' } },
+    rawExecution: { requestId: 'REQ-DB', providerId: 'odoo', profileId: 'odoo-a', accountId: 'a', transportStatus: 'ERROR', httpStatus: 0,
+      error: { message: 'FATAL: database "missing" does not exist' }, responseBody: null, responseHeaders: {}, latencyMs: 10, responseSizeBytes: 0 },
+  } };
+  const checked = await checkStatus.call(context([[item]], { includeParsedMetadata: true, unknownSuccessStatus: 'CREATED' }));
+  const status = checked[0][0].json.standardStatus;
+  assert.equal(status.errorType, 'CONFIGURATION_ERROR');
+  assert.equal(status.retryDecision.retryable, false);
+  assert.equal(status.canFailover, false);
+});
+
+test('v2.1 Status Manager emits hard-account failover and provider disable writebacks before side effects', async () => {
+  const { execute: manageStatus } = load('nodes/08_StatusManager/StatusManager.execute.js');
+  const item = { json: {
+    job: { jobId: 'JOB-AUTH', campaignId: 'campaign-a', attemptCount: 0 },
+    recipient: { email: 'customer@example.com' }, invoiceTemplate: { invoiceId: '#INV#' },
+    readyRequest: { failoverGroup: 'company-a', job: { jobId: 'JOB-AUTH', campaignId: 'campaign-a' } },
+    standardStatus: { requestId: 'REQ-AUTH', providerId: 'odoo', profileId: 'odoo-account-a', accountId: 'account-a', accountName: 'Account A',
+      recipientEmail: 'customer@example.com', result: 'ERROR', transportStatus: 'ERROR', invoiceStatus: 'FAILED', errorType: 'AUTHENTICATION_ERROR',
+      errorCategory: 'authentication', errorMessage: 'Invalid credentials', httpStatus: 401, sideEffectStage: 'none', providerInvoiceId: '',
+      retryDecision: { retryable: false, safeToRetry: false, source: 'test', reason: 'auth failed', sideEffectStage: 'none' }, runtime: { scopeKey: 'workflow-test:account-failover' } },
+  } };
+  const managed = await manageStatus.call(context([[item]], { retryLimit: 3, retryBaseDelaySeconds: 1, retryMaxDelaySeconds: 10, respectRetryAfterHeader: true,
+    cooldownSeconds: 30, disableOnAuthFailure: true, alertOnFailure: true, includeEvents: true, includeExecutionLog: true,
+    persistExecutionLog: false, executionLogRetention: 50, includeStatusWriteback: true, writebackTarget: 'invoice_results', writebackKeyMode: 'requestId' }));
+  const management = managed[0][0].json.management;
+  assert.equal(management.failoverScheduled, true);
+  assert.equal(management.retryScheduled, false);
+  assert.equal(management.providerStatusWriteback.values.Enabled, false);
+  assert.equal(management.providerStatusWriteback.values.status, 'AUTH_FAILED');
+  assert.equal(management.recipientStatusWriteback.values.status, 'FAILOVER');
+  assert.equal(management.retryQueueWriteback.values.Queue_Status, 'FAILOVER_READY');
+  assert.ok(management.failoverRequest);
+});
+
+test('v2.1 canonical Odoo production workflow uses one-item loop and managed Sheet writebacks', () => {
+  const workflow = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/n8n-import-workflow-live-bulk.json'), 'utf8'));
+  const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
+  assert.equal(workflow.meta.invoiceRouterRelease, '2.1.0');
+  assert.equal(workflow.name, 'InvoiceRouter Odoo Production Bulk v2.1.0');
+  assert.equal(byName['Loop Over Recipient Jobs'].parameters.batchSize, 1);
+  assert.equal(byName['Provider Loader'].parameters.batchId, 'odoo-production-pool');
+  assert.equal(byName['Request Builder'].parameters.idempotencyKeyMode, 'campaignJob');
+  assert.equal(byName['Status Manager'].parameters.retryLimit, 3);
+  for (const name of ['Google Sheets - Recipient Status', 'Google Sheets - Provider Status', 'Google Sheets - Retry Queue', 'Google Sheets - Account Report', 'Google Sheets - Campaign Report']) assert.ok(byName[name]);
+  assert.deepEqual(workflow.connections['Finalize Current Job'].main[0].map((entry) => entry.node), ['Loop Over Recipient Jobs']);
+  assert.deepEqual(workflow.connections['Wait Before Failover'].main[0].map((entry) => entry.node), ['Provider Selector']);
+});
+
+test('v2.1 Odoo workbook CSV contract includes recipient, provider, queue, and report schemas', () => {
+  const emailHeader = fs.readFileSync(path.join(root, 'template/providers/odoo/email_list.csv'), 'utf8').split(/\r?\n/)[0];
+  const providerHeader = fs.readFileSync(path.join(root, 'template/providers/odoo/provider.csv'), 'utf8').split(/\r?\n/)[0];
+  assert.equal(emailHeader.split(',').slice(0, 4).join(','), 'Email,status,Name,Address');
+  for (const field of ['Job_ID', 'Campaign_ID', 'Attempt_Count', 'Last_Account', 'Last_Error']) assert.match(emailHeader, new RegExp(field));
+  for (const field of ['Failover_Group', 'status', 'Auto_Disabled', 'Cooldown_Until', 'Total_Sent']) assert.match(providerHeader, new RegExp(field));
+  for (const file of ['retry_queue.csv', 'account_report.csv', 'campaign_report.csv']) assert.ok(fs.existsSync(path.join(root, 'template/providers/odoo', file)));
+});
+
+test('v2.1 Odoo read-only preflight authenticates, checks currency and permissions, and keeps secrets redacted', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const rows = [{ json: {
+    Enabled: true, Provider: 'Odoo', Account: 'Preflight Good', Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://good.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'very-secret-password', Database: 'good', Failover_Group: 'company-a', status: 'READY',
+  } }];
+  const responses = [{ result: 7 }, { result: 1 }, ...Array.from({ length: 6 }, () => ({ result: true }))];
+  const ctx = context([rows], {
+    batchId: 'preflight-good', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
+    enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'excludeAndReport',
+  }, responses);
+  const loaded = await loadProviders.call(ctx);
+  assert.equal(ctx.calls.length, 8);
+  assert.equal(loaded[0][0].json.total, 1);
+  assert.equal(loaded[0][0].json.preflightResults[0].status, 'READY');
+  assert.equal(loaded[0][0].json.preflightResults[0].passed, true);
+  assert.doesNotMatch(JSON.stringify(loaded), /very-secret-password/);
+});
+
+test('v2.1 Odoo preflight excludes currency-incompatible account without permanently disabling it', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const rows = [{ json: {
+    Enabled: true, Provider: 'Odoo', Account: 'Missing USD', Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://currency.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'secret', Database: 'currency', Failover_Group: 'company-a', status: 'READY',
+  } }];
+  const loaded = await loadProviders.call(context([rows], {
+    batchId: 'preflight-currency', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
+    enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'excludeAndReport',
+  }, [{ result: 7 }, { result: 0 }]));
+  assert.equal(loaded[0][0].json.total, 0);
+  assert.equal(loaded[0][0].json.preflightResults[0].status, 'CURRENCY_INCOMPATIBLE');
+  assert.equal(loaded[0][0].json.preflightResults[0].Enabled, true);
+  assert.equal(loaded[0][0].json.preflightResults[0].Auto_Disabled, false);
+});
+
+test('v2.1 Odoo preflight marks invalid database as evidence-based auto-disable', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const rows = [{ json: {
+    Enabled: true, Provider: 'Odoo', Account: 'Invalid DB', Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://invalid.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'secret', Database: 'missing', Failover_Group: 'company-a', status: 'READY',
+  } }];
+  const loaded = await loadProviders.call(context([rows], {
+    batchId: 'preflight-db', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
+    enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'excludeAndReport',
+  }, [{ error: { message: 'Odoo Server Error', data: { message: 'database "missing" does not exist' } } }]));
+  const result = loaded[0][0].json.preflightResults[0];
+  assert.equal(loaded[0][0].json.total, 0);
+  assert.equal(result.status, 'DATABASE_INVALID');
+  assert.equal(result.Enabled, false);
+  assert.equal(result.Auto_Disabled, true);
+});
+
+test('v2.1 Email List skips terminal recipient rows and preserves durable retry state', async () => {
+  const { execute: loadEmails } = load('nodes/04_EmailList/EmailList.execute.js');
+  const rows = [
+    { json: { Email: 'sent@example.com', status: 'SENT', Job_ID: 'JOB-SENT', Campaign_ID: 'campaign-durable' } },
+    { json: { Email: 'retry@example.com', status: 'RETRYING', Job_ID: 'JOB-RETRY', Campaign_ID: 'campaign-durable', Attempt_Count: 2,
+      invoiceRouterState: { retryCount: 2, failoverState: { requiredProfileId: 'profile-a' }, lifecycleResume: { source: 'status-manager', stage: 'invoice.send_email' } } } },
+  ];
+  const loaded = await loadEmails.call(context([rows], {
+    batchId: 'durable-email-state', statusField: 'status', jobIdField: 'Job_ID', campaignIdField: 'Campaign_ID',
+    nameGeneration: 'formatted', invalidPolicy: 'error', preserveCustomColumns: true, preventReuse: false,
+  }));
+  assert.equal(loaded[0].length, 1);
+  assert.equal(loaded[0][0].json.job.jobId, 'JOB-RETRY');
+  assert.equal(loaded[0][0].json.retryCount, 2);
+  assert.equal(loaded[0][0].json.failoverState.requiredProfileId, 'profile-a');
+  assert.equal(loaded[0][0].json.lifecycleResume.stage, 'invoice.send_email');
+  assert.ok(loaded[0][0].json.skippedRecipients.some((row) => row.email === 'sent@example.com'));
+});
+
+test('v2.1 Provider Selector required profile keeps post/send resume on the original account', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const rows = ['Account A', 'Account B'].map((account) => ({ json: {
+    Enabled: true, Provider: 'Odoo', Account: account, Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://resume.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'secret', Database: 'resume', Failover_Group: 'company-a', status: 'READY',
+  } }));
+  const loaded = await loadProviders.call(context([rows], {
+    batchId: 'required-profile', __executionId: 'required-profile-exec', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
+  }));
+  const required = loaded[0][0].json.providers[0].id;
+  const work = [{ json: {
+    recipient: { email: 'resume@example.com' }, runtime: loaded[0][0].json.runtime,
+    failoverState: { failoverGroup: 'company-a', attemptedProfileIds: [required], requiredProfileId: required },
+    lifecycleResume: { source: 'status-manager', stage: 'invoice.send_email', providerInvoiceId: '501' },
+    job: { jobId: 'JOB-RESUME' },
+  } }];
+  const { execute: selectProvider } = load('nodes/02_ProviderSelector/ProviderSelector.execute.js');
+  const selected = await selectProvider.call(context([loaded[0], work], {
+    strategy: 'firstAvailable', processingMode: 'sequential', providerFilter: 'odoo', actionFilter: 'create-invoice', environmentFilter: 'live',
+    queueWhenUnavailable: true, conditionalRouting: false, routingRulesJson: '[]', requireConditionalMatch: false,
+    unmatchedRouteBehavior: 'block', lockTimeoutSeconds: 300, maxRequestsPerMinute: 60, circuitBreakerThreshold: 5,
+    __executionId: 'required-profile-exec',
+  }));
+  assert.equal(selected[0][0].json.providerAllocation.id, required);
+  assert.equal(selected[0][0].json.providerAllocation.accountName, 'Account A');
+});
+
+test('v2.1 retry exhaustion schedules a fresh-account failover only before provider side effects', async () => {
+  const { execute: manageStatus } = load('nodes/08_StatusManager/StatusManager.execute.js');
+  const item = { json: {
+    retryCount: 3,
+    job: { jobId: 'JOB-EXHAUST', campaignId: 'campaign-exhaust', attemptCount: 3 },
+    recipient: { email: 'exhaust@example.com' },
+    readyRequest: { failoverGroup: 'company-a', job: { jobId: 'JOB-EXHAUST', campaignId: 'campaign-exhaust' } },
+    failoverState: { failoverGroup: 'company-a', originalProfileId: 'profile-a', currentProfileId: 'profile-a', attemptedProfileIds: ['profile-a'], failoverCount: 0 },
+    standardStatus: {
+      requestId: 'REQ-EXHAUST', providerId: 'odoo', profileId: 'profile-a', accountId: 'account-a', accountName: 'Account A',
+      recipientEmail: 'exhaust@example.com', result: 'ERROR', transportStatus: 'ERROR', invoiceStatus: 'FAILED', errorType: 'NETWORK_ERROR',
+      errorCategory: 'transport', errorMessage: 'Connection reset before provider response', httpStatus: 0, sideEffectStage: 'none', providerInvoiceId: '',
+      retryDecision: { retryable: true, safeToRetry: true, source: 'transport', reason: 'pre-side-effect connection reset', sideEffectStage: 'none' },
+      runtime: { scopeKey: 'workflow-test:retry-exhaustion' },
+    },
+  } };
+  const managed = await manageStatus.call(context([[item]], {
+    retryLimit: 3, retryBaseDelaySeconds: 1, retryMaxDelaySeconds: 10, respectRetryAfterHeader: true, cooldownSeconds: 30,
+    disableOnAuthFailure: true, alertOnFailure: true, includeEvents: true, includeExecutionLog: true, persistExecutionLog: false,
+    executionLogRetention: 50, includeStatusWriteback: true, writebackTarget: 'invoice_results', writebackKeyMode: 'requestId',
+  }));
+  const management = managed[0][0].json.management;
+  assert.equal(management.retryScheduled, false);
+  assert.equal(management.failoverScheduled, true);
+  assert.equal(management.failoverRequest.retryCount, 0);
+  assert.equal(management.failoverRequest.failoverState.requiredProfileId, '');
+  assert.deepEqual(management.failoverRequest.failoverState.attemptedProfileIds, ['profile-a']);
+});
+
+test('v2.1 account report aggregates by campaign and profile', async () => {
+  const { execute: manageStatus } = load('nodes/08_StatusManager/StatusManager.execute.js');
+  const makeItem = (requestId, email) => ({ json: {
+    job: { jobId: `JOB-${requestId}`, campaignId: 'campaign-aggregate', attemptCount: 0, accountReportSeed: {} },
+    recipient: { email }, readyRequest: { failoverGroup: 'company-a' },
+    standardStatus: {
+      requestId, providerId: 'odoo', profileId: 'profile-aggregate', accountId: 'account-a', accountName: 'Account A',
+      recipientEmail: email, result: 'SUCCESS', transportStatus: 'COMPLETED', invoiceStatus: 'SENT', providerInvoiceId: `INV-${requestId}`,
+      emailSendRequested: true, emailSendStatus: 'SENT', errorType: '', errorCategory: '', errorMessage: '', httpStatus: 200,
+      sideEffectStage: 'email.sent', retryDecision: { retryable: false, safeToRetry: false, source: 'success' },
+      runtime: { scopeKey: 'workflow-test:aggregate-scope' },
+    },
+  } });
+  const params = { retryLimit: 3, retryBaseDelaySeconds: 1, retryMaxDelaySeconds: 10, respectRetryAfterHeader: true, cooldownSeconds: 30,
+    disableOnAuthFailure: true, alertOnFailure: true, includeEvents: true, includeExecutionLog: true, persistExecutionLog: false,
+    executionLogRetention: 50, includeStatusWriteback: true, writebackTarget: 'invoice_results', writebackKeyMode: 'requestId' };
+  const first = await manageStatus.call(context([[makeItem('ONE', 'one@example.com')]], params));
+  const second = await manageStatus.call(context([[makeItem('TWO', 'two@example.com')]], params));
+  assert.equal(first[0][0].json.management.accountReportEvent.Allocated, 1);
+  assert.equal(second[0][0].json.management.accountReportEvent.Allocated, 2);
+  assert.equal(second[0][0].json.management.accountReportEvent.Email_Sent, 2);
+  assert.equal(second[0][0].json.management.accountReportEvent.Succeeded, 2);
+});
+
+test('v2.1 canonical Odoo workflow includes preflight, durable readback, provider attachment, processing state, and writeback-only retries', () => {
+  const workflow = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/n8n-import-workflow-live-bulk.json'), 'utf8'));
+  const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
+  assert.equal(byName['Provider Loader'].parameters.enableOdooPreflight, true);
+  assert.equal(byName['Provider Loader'].parameters.preflightCurrency, 'USD');
+  for (const name of ['Google Sheets - Retry Queue Input','Google Sheets - Account Report Input','Build Durable Work Items','Attach Provider Library','Prepare Processing Status','Google Sheets - Recipient Processing']) assert.ok(byName[name], name);
+  for (const name of ['Google Sheets - Status Writeback','Google Sheets - Recipient Status','Google Sheets - Provider Status','Google Sheets - Retry Queue','Google Sheets - Account Report','Google Sheets - Campaign Report','Google Sheets - Recipient Processing','Google Sheets - Preflight Provider Status']) {
+    assert.equal(byName[name].retryOnFail, true, `${name} retryOnFail`);
+    assert.equal(byName[name].maxTries, 3, `${name} maxTries`);
+    assert.equal(byName[name].waitBetweenTries, 2000, `${name} waitBetweenTries`);
+  }
+  const source = JSON.stringify(workflow);
+  assert.doesNotMatch(source, /Per-account Max RPM|Per-account Daily Limit|Max_Concurrent/i);
+});
+
+test('v2.1 Apps Script repairs the complete managed workbook without destructive replacement', () => {
+  const script = fs.readFileSync(path.join(root, 'template/providers/odoo/google-sheets/auto-fix-invoice-results-headers.gs'), 'utf8');
+  assert.match(script, /function fixInvoiceRouterV210Workbook\(/);
+  for (const tab of ['provider','email_list','invoice_results','retry_queue','account_report','campaign_report']) assert.ok(script.includes(`\"${tab}\":`), tab);
+  assert.match(script, /setValues\(\[missing\]\)/);
+  assert.doesNotMatch(script, /deleteSheet|clearContents|clear\(/);
+});
+
+test('v2.1 Odoo templates do not advertise unsupported per-message email body override', () => {
+  const extensions = new Set(['.csv','.json','.md','.ygit','.gs']);
+  const directory = path.join(root, 'template/providers/odoo');
+  const files = fs.readdirSync(directory).filter((name) => extensions.has(path.extname(name).toLowerCase()));
+  for (const file of files) assert.doesNotMatch(fs.readFileSync(path.join(directory, file), 'utf8'), /odooEmailBody/);
 });

@@ -1,5 +1,5 @@
 {
-  "name": "InvoiceRouter v2.0.0 - Odoo Complete Bulk Email Template - Live Real Send",
+  "name": "InvoiceRouter Odoo Production Bulk v2.1.0",
   "nodes": [
     {
       "parameters": {},
@@ -44,11 +44,15 @@
     },
     {
       "parameters": {
-        "batchId": "={{$execution.id}}",
+        "batchId": "odoo-production-pool",
         "sourceName": "provider",
         "duplicatePolicy": "error",
         "includeDisabled": false,
-        "strictValidation": true
+        "strictValidation": true,
+        "enableOdooPreflight": true,
+        "preflightCurrency": "USD",
+        "preflightCheckPermissions": true,
+        "preflightFailurePolicy": "excludeAndReport"
       },
       "id": "provider-loader",
       "name": "Provider Loader",
@@ -79,8 +83,8 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
       "position": [
-        -1040,
-        400
+        -560,
+        -160
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -91,22 +95,27 @@
     },
     {
       "parameters": {
-        "batchId": "={{$execution.id}}",
+        "batchId": "odoo-production-pool",
         "emailField": "Email",
         "nameField": "Name",
         "nameGeneration": "formatted",
         "invalidPolicy": "skip",
         "preserveCustomColumns": false,
-        "preventReuse": true,
-        "addressField": "Address"
+        "preventReuse": false,
+        "addressField": "Address",
+        "statusField": "status",
+        "jobIdField": "Job_ID",
+        "campaignIdField": "Campaign_ID",
+        "defaultCampaignId": "default-campaign",
+        "fixedCustomerName": ""
       },
       "id": "email-list",
       "name": "Email List",
       "type": "n8n-nodes-invoicerouter.emailList",
       "typeVersion": 1,
       "position": [
-        -800,
-        400
+        -320,
+        -160
       ]
     },
     {
@@ -131,8 +140,8 @@
       "type": "n8n-nodes-invoicerouter.invoiceTemplate",
       "typeVersion": 1,
       "position": [
-        -800,
-        120
+        -80,
+        -160
       ]
     },
     {
@@ -159,8 +168,8 @@
       "type": "n8n-nodes-invoicerouter.providerSelector",
       "typeVersion": 1,
       "position": [
-        -520,
-        -20
+        420,
+        80
       ]
     },
     {
@@ -173,7 +182,7 @@
         "allowHttp": false,
         "sendGuardMode": "strict",
         "strictProviderValidation": true,
-        "idempotencyKeyMode": "providerInvoiceRecipient",
+        "idempotencyKeyMode": "campaignJob",
         "idempotencyScope": "workflow"
       },
       "id": "request-builder",
@@ -181,8 +190,8 @@
       "type": "n8n-nodes-invoicerouter.requestBuilder",
       "typeVersion": 1,
       "position": [
-        -200,
-        120
+        660,
+        80
       ]
     },
     {
@@ -215,8 +224,8 @@
       "type": "n8n-nodes-invoicerouter.invoiceSender",
       "typeVersion": 1,
       "position": [
-        60,
-        120
+        900,
+        80
       ]
     },
     {
@@ -229,13 +238,13 @@
       "type": "n8n-nodes-invoicerouter.statusChecker",
       "typeVersion": 1,
       "position": [
-        320,
-        120
+        1140,
+        80
       ]
     },
     {
       "parameters": {
-        "retryLimit": 0,
+        "retryLimit": 3,
         "retryBaseDelaySeconds": 30,
         "cooldownSeconds": 30,
         "disableOnAuthFailure": true,
@@ -255,13 +264,13 @@
       "type": "n8n-nodes-invoicerouter.statusManager",
       "typeVersion": 1,
       "position": [
-        580,
-        120
+        1380,
+        80
       ]
     },
     {
       "parameters": {
-        "content": "## Odoo Complete Bulk Email Template\\n\\nDefault import is dry-run safe. Use the Odoo Google Sheets template, replace spreadsheet ID/credential, run dry-run first, then sandbox real send, then live canary, then live bulk.",
+        "content": "## InvoiceRouter Odoo Production Bulk v2.1.0\n\nOne workflow and one workbook support single-account canary, pilot bulk, and production bulk. Enable only tested provider rows. email_list Status updates per job. Safe retry remains on the original account after side effects; pre-side-effect failure may fail over to another Enabled account in the same Failover_Group.",
         "height": 460,
         "width": 560
       },
@@ -276,15 +285,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => { if (value === undefined || value === null || value === '') return ''; if (typeof value === 'boolean') return String(value); return String(['true', '1', 'yes', 'on', 'requested'].includes(String(value).trim().toLowerCase())); };\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_customer_id: text(values.providerCustomerId),\n      customer_status: text(values.customerStatus),\n      post_status: text(values.postStatus),\n      email_send_requested: boolText(values.emailSendRequested),\n      email_send_status: text(values.emailSendStatus),\n      email_send_method: text(values.emailSendMethod),\n      email_error_message: text(values.emailErrorMessage),\n      email_evidence: jsonText(values.emailEvidence),\n      lifecycle_outcome: text(values.lifecycleOutcome),\n      lifecycle_failed_step: text(values.lifecycleFailedStep),\n      lifecycle_checkpoint: jsonText(values.lifecycleCheckpoint),\n      retry_resume_stage: text(values.retryResumeStage),\n      retry_resume: jsonText(values.retryResume),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      lifecycle_mode: text(values.lifecycleMode),\n      lifecycle_steps: text(values.lifecycleSteps),\n      provider_recipe_id: text(values.providerRecipeId),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
+        "jsCode": "const text = (value) => value === undefined || value === null ? '' : String(value);\nconst boolText = (value) => { if (value === undefined || value === null || value === '') return ''; if (typeof value === 'boolean') return String(value); return String(['true', '1', 'yes', 'on', 'requested'].includes(String(value).trim().toLowerCase())); };\nconst jsonText = (value) => value === undefined || value === null ? '' : JSON.stringify(value);\n\nreturn items.map((item) => {\n  const management = item.json.management ?? {};\n  const writeback = management.statusWriteback ?? {};\n  const values = writeback.values ?? {};\n  const standardStatus = item.json.standardStatus ?? {};\n  const key = writeback.key ?? values.idempotencyKey ?? values.requestId ?? standardStatus.requestId ?? '';\n  const managedAt = values.managedAt ?? management.managedAt ?? new Date().toISOString();\n\n  return {\n    json: {\n      writeback_key: text(key),\n      writeback_action: text(writeback.action ?? 'UPSERT'),\n      writeback_target: text(writeback.target ?? 'invoice_results'),\n      key_mode: text(writeback.keyMode ?? ''),\n      request_id: text(values.requestId),\n      transaction_id: text(values.transactionId),\n      idempotency_key: text(values.idempotencyKey),\n      job_id: text(values.jobId),\n      campaign_id: text(values.campaignId),\n      provider_id: text(values.providerId),\n      profile_id: text(values.profileId),\n      account_id: text(values.accountId),\n      action_id: text(values.actionId),\n      worker_id: text(values.workerId),\n      recipient_email: text(values.recipientEmail),\n      workflow_state: text(values.workflowState),\n      result: text(values.result),\n      invoice_status: text(values.invoiceStatus),\n      provider_status: text(values.providerStatus),\n      transport_status: text(values.transportStatus),\n      provider_customer_id: text(values.providerCustomerId),\n      customer_status: text(values.customerStatus),\n      post_status: text(values.postStatus),\n      email_send_requested: boolText(values.emailSendRequested),\n      email_send_status: text(values.emailSendStatus),\n      email_send_method: text(values.emailSendMethod),\n      email_error_message: text(values.emailErrorMessage),\n      email_evidence: jsonText(values.emailEvidence),\n      lifecycle_outcome: text(values.lifecycleOutcome),\n      lifecycle_failed_step: text(values.lifecycleFailedStep),\n      lifecycle_checkpoint: jsonText(values.lifecycleCheckpoint),\n      retry_resume_stage: text(values.retryResumeStage),\n      retry_resume: jsonText(values.retryResume),\n      provider_invoice_id: text(values.providerInvoiceId),\n      invoice_number: text(values.invoiceNumber),\n      invoice_url: text(values.invoiceUrl),\n      pdf_url: text(values.pdfUrl),\n      http_status: text(values.httpStatus),\n      error_type: text(values.errorType),\n      error_category: text(values.errorCategory),\n      error_severity: text(values.errorSeverity),\n      error_code: text(values.errorCode),\n      error_message: text(values.errorMessage),\n      retry_scheduled: boolText(values.retryScheduled),\n      failover_scheduled: boolText(management.failoverScheduled),\n      recipient_status: text(management.workflowResult?.recipientStatus),\n      provider_operational_status: text(management.workflowResult?.providerOperationalStatus),\n      retry_count: text(values.retryCount),\n      retry_delay_seconds: text(values.retryDelaySeconds),\n      retry_decision_source: text(values.retryDecisionSource),\n      retry_decision_reason: text(values.retryDecisionReason),\n      retry_after_seconds: text(values.retryAfterSeconds),\n      retry_delay_hint_seconds: text(values.retryDelayHintSeconds),\n      next_retry_at: text(values.nextRetryAt),\n      lifecycle_mode: text(values.lifecycleMode),\n      lifecycle_steps: text(values.lifecycleSteps),\n      provider_recipe_id: text(values.providerRecipeId),\n      preset_self_check_mode: text(values.presetSelfCheckMode),\n      preset_self_check_approved: boolText(values.presetSelfCheckApproved),\n      preset_self_check: jsonText(values.presetSelfCheck),\n      activation_mode: text(values.activationMode),\n      activation_approved: boolText(values.activationApproved),\n      activation_safety: jsonText(values.activationSafety),\n      bulk_run_id: text(values.bulkRunId),\n      bulk_item_number: text(values.bulkItemNumber),\n      bulk_total_items: text(values.bulkTotalItems),\n      bulk_decision: text(values.bulkDecision),\n      bulk_safety: jsonText(values.bulkSafety),\n      bulk_summary: jsonText(management.bulkSummary),\n      retryable_by_policy: boolText(values.retryableByPolicy),\n      non_retryable_by_policy: boolText(values.nonRetryableByPolicy),\n      duplicate_prevention: jsonText(values.duplicatePrevention),\n      checked_at: text(values.checkedAt),\n      managed_at: text(managedAt),\n      updated_at: text(managedAt),\n    },\n    pairedItem: item.pairedItem,\n  };\n});"
       },
       "id": "prepare-status-writeback-row",
       "name": "Prepare Status Writeback Row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        840,
-        120
+        1640,
+        -360
       ]
     },
     {
@@ -372,7 +381,12 @@
             "lifecycle_failed_step": "={{ $json.lifecycle_failed_step }}",
             "lifecycle_checkpoint": "={{ $json.lifecycle_checkpoint }}",
             "retry_resume_stage": "={{ $json.retry_resume_stage }}",
-            "retry_resume": "={{ $json.retry_resume }}"
+            "retry_resume": "={{ $json.retry_resume }}",
+            "job_id": "={{ $json.job_id }}",
+            "campaign_id": "={{ $json.campaign_id }}",
+            "failover_scheduled": "={{ $json.failover_scheduled }}",
+            "recipient_status": "={{ $json.recipient_status }}",
+            "provider_operational_status": "={{ $json.provider_operational_status }}"
           },
           "matchingColumns": [
             "writeback_key"
@@ -1077,6 +1091,56 @@
               "type": "string",
               "canBeUsedToMatch": false,
               "removed": false
+            },
+            {
+              "id": "job_id",
+              "displayName": "job_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "campaign_id",
+              "displayName": "campaign_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "failover_scheduled",
+              "displayName": "failover_scheduled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "recipient_status",
+              "displayName": "recipient_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "provider_operational_status",
+              "displayName": "provider_operational_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
             }
           ],
           "attemptToConvertTypes": false,
@@ -1089,27 +1153,31 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.6,
       "position": [
-        1120,
-        120
+        1880,
+        -360
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const retryItems = [];\nfor (const item of items) {\n  const management = item.json.management || {};\n  if (management.retryScheduled !== true || !management.retryQueueEntry) continue;\n  const delaySeconds = Math.max(1, Number(management.retryDelaySeconds || management.retryQueueEntry.delaySeconds || 1));\n  retryItems.push({\n    json: {\n      ...item.json,\n      readyRequest: management.retryRequest || item.json.readyRequest,\n      retryCount: Number(management.retryCount || 0),\n      retryDelaySeconds: delaySeconds,\n      retryQueueEntry: management.retryQueueEntry,\n      retryLoop: {\n        enabled: true,\n        source: 'Status Manager',\n        nextRetryCount: Number(management.retryCount || 0),\n        delaySeconds,\n        scheduledAt: management.retryQueueEntry.scheduledAt || '',\n        reason: management.retryQueueEntry.reason || '',\n        lifecycleResume: management.retryResume || management.retryQueueEntry.lifecycleResume || null,\n      },\n    },\n    pairedItem: item.pairedItem,\n  });\n}\nreturn retryItems;"
+        "jsCode": "const retryItems=[];\nfor (const item of items) {\n  const management=item.json.management||{};\n  if (management.retryScheduled!==true || !management.retryRequest) continue;\n  const delaySeconds=Math.max(1,Number(management.retryDelaySeconds||1));\n  retryItems.push({json:{...item.json,readyRequest:management.retryRequest,retryCount:Number(management.retryCount||0),retryDelaySeconds:delaySeconds,retryQueueEntry:management.retryQueueEntry},pairedItem:item.pairedItem});\n}\nreturn retryItems;"
       },
       "id": "prepare-retry-request",
       "name": "Prepare Retry Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        840,
-        360
+        1640,
+        -620
       ]
     },
     {
@@ -1123,8 +1191,1716 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
       "position": [
-        1120,
+        1880,
+        -620
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "loop-over-recipient-jobs",
+      "name": "Loop Over Recipient Jobs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        180,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out=[];\nfor (const item of items) {\n  const wb=item.json.management?.recipientStatusWriteback;\n  if (!wb?.values?.Job_ID) continue;\n  out.push({json:{...wb.values},pairedItem:item.pairedItem});\n}\nreturn out;"
+      },
+      "id": "prepare-recipient-status",
+      "name": "Prepare Recipient Status Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "email_list",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{ $json[\"Email\"] }}",
+            "Name": "={{ $json[\"Name\"] }}",
+            "Address": "={{ $json[\"Address\"] }}",
+            "Job_ID": "={{ $json[\"Job_ID\"] }}",
+            "Campaign_ID": "={{ $json[\"Campaign_ID\"] }}",
+            "Attempt_Count": "={{ $json[\"Attempt_Count\"] }}",
+            "Last_Account": "={{ $json[\"Last_Account\"] }}",
+            "Last_Error": "={{ $json[\"Last_Error\"] }}",
+            "Updated_At": "={{ $json[\"Updated_At\"] }}",
+            "status": "={{ $json[\"Status\"] }}"
+          },
+          "matchingColumns": [
+            "Job_ID"
+          ],
+          "schema": [
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Campaign_ID",
+              "displayName": "Campaign_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Attempt_Count",
+              "displayName": "Attempt_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Account",
+              "displayName": "Last_Account",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error",
+              "displayName": "Last_Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Updated_At",
+              "displayName": "Updated_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "recipient-status-sheet",
+      "name": "Google Sheets - Recipient Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1880,
+        -120
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const out=[];\nfor (const item of items) {\n  const wb=item.json.management?.providerStatusWriteback;\n  if (!wb?.values?.Account) continue;\n  out.push({json:{...wb.values},pairedItem:item.pairedItem});\n}\nreturn out;"
+      },
+      "id": "prepare-provider-status",
+      "name": "Prepare Provider Status Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "provider",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Account": "={{ $json[\"Account\"] }}",
+            "Enabled": "={{ $json[\"Enabled\"] }}",
+            "Status_Reason": "={{ $json[\"Status_Reason\"] }}",
+            "Auto_Disabled": "={{ $json[\"Auto_Disabled\"] }}",
+            "Consecutive_Failures": "={{ $json[\"Consecutive_Failures\"] }}",
+            "Retry_Count": "={{ $json[\"Retry_Count\"] }}",
+            "Cooldown_Until": "={{ $json[\"Cooldown_Until\"] }}",
+            "Last_Error_Type": "={{ $json[\"Last_Error_Type\"] }}",
+            "Last_Error": "={{ $json[\"Last_Error\"] }}",
+            "Last_Used_At": "={{ $json[\"Last_Used_At\"] }}",
+            "Total_Allocated": "={{ $json[\"Total_Allocated\"] }}",
+            "Total_Sent": "={{ $json[\"Total_Sent\"] }}",
+            "Total_Failed": "={{ $json[\"Total_Failed\"] }}",
+            "Updated_At": "={{ $json[\"Updated_At\"] }}",
+            "status": "={{ $json[\"Status\"] }}"
+          },
+          "matchingColumns": [
+            "Account"
+          ],
+          "schema": [
+            {
+              "id": "Account",
+              "displayName": "Account",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Enabled",
+              "displayName": "Enabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Status_Reason",
+              "displayName": "Status_Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Auto_Disabled",
+              "displayName": "Auto_Disabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Consecutive_Failures",
+              "displayName": "Consecutive_Failures",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Retry_Count",
+              "displayName": "Retry_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Cooldown_Until",
+              "displayName": "Cooldown_Until",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error_Type",
+              "displayName": "Last_Error_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error",
+              "displayName": "Last_Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Used_At",
+              "displayName": "Last_Used_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Total_Allocated",
+              "displayName": "Total_Allocated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Total_Sent",
+              "displayName": "Total_Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Total_Failed",
+              "displayName": "Total_Failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Updated_At",
+              "displayName": "Updated_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "provider-status-sheet",
+      "name": "Google Sheets - Provider Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1880,
+        120
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const out=[];\nfor (const item of items) {\n  const wb=item.json.management?.retryQueueWriteback;\n  if (!wb?.values?.Job_ID) continue;\n  out.push({json:{...wb.values},pairedItem:item.pairedItem});\n}\nreturn out;"
+      },
+      "id": "prepare-retry-queue",
+      "name": "Prepare Retry Queue Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
         360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "retry_queue",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Job_ID": "={{ $json[\"Job_ID\"] }}",
+            "Campaign_ID": "={{ $json[\"Campaign_ID\"] }}",
+            "Recipient_Email": "={{ $json[\"Recipient_Email\"] }}",
+            "Original_Profile_ID": "={{ $json[\"Original_Profile_ID\"] }}",
+            "Current_Profile_ID": "={{ $json[\"Current_Profile_ID\"] }}",
+            "Attempted_Profile_IDs": "={{ $json[\"Attempted_Profile_IDs\"] }}",
+            "Failover_Group": "={{ $json[\"Failover_Group\"] }}",
+            "Side_Effect_Stage": "={{ $json[\"Side_Effect_Stage\"] }}",
+            "Required_Profile_ID": "={{ $json[\"Required_Profile_ID\"] }}",
+            "Provider_Invoice_ID": "={{ $json[\"Provider_Invoice_ID\"] }}",
+            "Lifecycle_Checkpoint": "={{ $json[\"Lifecycle_Checkpoint\"] }}",
+            "Resume_Stage": "={{ $json[\"Resume_Stage\"] }}",
+            "Retry_Count": "={{ $json[\"Retry_Count\"] }}",
+            "Failover_Count": "={{ $json[\"Failover_Count\"] }}",
+            "Next_Retry_At": "={{ $json[\"Next_Retry_At\"] }}",
+            "Last_Error_Type": "={{ $json[\"Last_Error_Type\"] }}",
+            "Last_Error": "={{ $json[\"Last_Error\"] }}",
+            "Queue_Status": "={{ $json[\"Queue_Status\"] }}",
+            "Updated_At": "={{ $json[\"Updated_At\"] }}"
+          },
+          "matchingColumns": [
+            "Job_ID"
+          ],
+          "schema": [
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Campaign_ID",
+              "displayName": "Campaign_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Recipient_Email",
+              "displayName": "Recipient_Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Original_Profile_ID",
+              "displayName": "Original_Profile_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Current_Profile_ID",
+              "displayName": "Current_Profile_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Attempted_Profile_IDs",
+              "displayName": "Attempted_Profile_IDs",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failover_Group",
+              "displayName": "Failover_Group",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Side_Effect_Stage",
+              "displayName": "Side_Effect_Stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Required_Profile_ID",
+              "displayName": "Required_Profile_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Provider_Invoice_ID",
+              "displayName": "Provider_Invoice_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Lifecycle_Checkpoint",
+              "displayName": "Lifecycle_Checkpoint",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Resume_Stage",
+              "displayName": "Resume_Stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Retry_Count",
+              "displayName": "Retry_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failover_Count",
+              "displayName": "Failover_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Next_Retry_At",
+              "displayName": "Next_Retry_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error_Type",
+              "displayName": "Last_Error_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error",
+              "displayName": "Last_Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Queue_Status",
+              "displayName": "Queue_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Updated_At",
+              "displayName": "Updated_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "retry-queue-sheet",
+      "name": "Google Sheets - Retry Queue",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1880,
+        360
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.flatMap((item)=>{\n  const row=item.json.management?.accountReportEvent;\n  return row?.Report_Key ? [{json:{...row},pairedItem:item.pairedItem}] : [];\n});"
+      },
+      "id": "prepare-account-report",
+      "name": "Prepare Account Report Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "account_report",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Report_Key": "={{ $json[\"Report_Key\"] }}",
+            "Campaign_ID": "={{ $json[\"Campaign_ID\"] }}",
+            "Provider": "={{ $json[\"Provider\"] }}",
+            "Account_ID": "={{ $json[\"Account_ID\"] }}",
+            "Account_Name": "={{ $json[\"Account_Name\"] }}",
+            "Profile_ID": "={{ $json[\"Profile_ID\"] }}",
+            "Current_Status": "={{ $json[\"Current_Status\"] }}",
+            "Enabled": "={{ $json[\"Enabled\"] }}",
+            "Allocated": "={{ $json[\"Allocated\"] }}",
+            "Attempted": "={{ $json[\"Attempted\"] }}",
+            "Succeeded": "={{ $json[\"Succeeded\"] }}",
+            "Email_Sent": "={{ $json[\"Email_Sent\"] }}",
+            "Email_Queued": "={{ $json[\"Email_Queued\"] }}",
+            "Failed": "={{ $json[\"Failed\"] }}",
+            "Retried": "={{ $json[\"Retried\"] }}",
+            "Failover_Count": "={{ $json[\"Failover_Count\"] }}",
+            "Failover_From": "={{ $json[\"Failover_From\"] }}",
+            "Failover_To": "={{ $json[\"Failover_To\"] }}",
+            "Auto_Disabled": "={{ $json[\"Auto_Disabled\"] }}",
+            "Disabled_Reason": "={{ $json[\"Disabled_Reason\"] }}",
+            "Last_Error_Type": "={{ $json[\"Last_Error_Type\"] }}",
+            "Last_Error": "={{ $json[\"Last_Error\"] }}",
+            "Last_Used_At": "={{ $json[\"Last_Used_At\"] }}",
+            "Updated_At": "={{ $json[\"Updated_At\"] }}"
+          },
+          "matchingColumns": [
+            "Report_Key"
+          ],
+          "schema": [
+            {
+              "id": "Report_Key",
+              "displayName": "Report_Key",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Campaign_ID",
+              "displayName": "Campaign_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Provider",
+              "displayName": "Provider",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Account_ID",
+              "displayName": "Account_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Account_Name",
+              "displayName": "Account_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Profile_ID",
+              "displayName": "Profile_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Current_Status",
+              "displayName": "Current_Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Enabled",
+              "displayName": "Enabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Allocated",
+              "displayName": "Allocated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Attempted",
+              "displayName": "Attempted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Succeeded",
+              "displayName": "Succeeded",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Email_Sent",
+              "displayName": "Email_Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Email_Queued",
+              "displayName": "Email_Queued",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failed",
+              "displayName": "Failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Retried",
+              "displayName": "Retried",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failover_Count",
+              "displayName": "Failover_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failover_From",
+              "displayName": "Failover_From",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failover_To",
+              "displayName": "Failover_To",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Auto_Disabled",
+              "displayName": "Auto_Disabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Disabled_Reason",
+              "displayName": "Disabled_Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error_Type",
+              "displayName": "Last_Error_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error",
+              "displayName": "Last_Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Used_At",
+              "displayName": "Last_Used_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Updated_At",
+              "displayName": "Updated_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "account-report-sheet",
+      "name": "Google Sheets - Account Report",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1880,
+        600
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.flatMap((item)=>{\n  const row=item.json.management?.campaignReportEvent;\n  return row?.Report_Key ? [{json:{...row},pairedItem:item.pairedItem}] : [];\n});"
+      },
+      "id": "prepare-campaign-report",
+      "name": "Prepare Campaign Report Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        840
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "campaign_report",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Report_Key": "={{ $json[\"Report_Key\"] }}",
+            "Campaign_ID": "={{ $json[\"Campaign_ID\"] }}",
+            "Job_ID": "={{ $json[\"Job_ID\"] }}",
+            "Recipient_Email": "={{ $json[\"Recipient_Email\"] }}",
+            "Status": "={{ $json[\"Status\"] }}",
+            "Pending": "={{ $json[\"Pending\"] }}",
+            "Sent": "={{ $json[\"Sent\"] }}",
+            "Queued": "={{ $json[\"Queued\"] }}",
+            "Failed": "={{ $json[\"Failed\"] }}",
+            "Manual_Review": "={{ $json[\"Manual_Review\"] }}",
+            "Duplicate": "={{ $json[\"Duplicate\"] }}",
+            "Retrying": "={{ $json[\"Retrying\"] }}",
+            "Failover": "={{ $json[\"Failover\"] }}",
+            "Account_ID": "={{ $json[\"Account_ID\"] }}",
+            "Updated_At": "={{ $json[\"Updated_At\"] }}"
+          },
+          "matchingColumns": [
+            "Report_Key"
+          ],
+          "schema": [
+            {
+              "id": "Report_Key",
+              "displayName": "Report_Key",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Campaign_ID",
+              "displayName": "Campaign_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Recipient_Email",
+              "displayName": "Recipient_Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Pending",
+              "displayName": "Pending",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Sent",
+              "displayName": "Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Queued",
+              "displayName": "Queued",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failed",
+              "displayName": "Failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Manual_Review",
+              "displayName": "Manual_Review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Duplicate",
+              "displayName": "Duplicate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Retrying",
+              "displayName": "Retrying",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Failover",
+              "displayName": "Failover",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Account_ID",
+              "displayName": "Account_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Updated_At",
+              "displayName": "Updated_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "campaign-report-sheet",
+      "name": "Google Sheets - Campaign Report",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1880,
+        840
+      ],
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const out=[];\nfor (const item of items) {\n  const management=item.json.management||{};\n  if (management.failoverScheduled!==true || !management.failoverRequest) continue;\n  out.push({json:{...management.failoverRequest,retryCount:Number(management.retryCount||0)},pairedItem:item.pairedItem});\n}\nreturn out;"
+      },
+      "id": "prepare-failover-request",
+      "name": "Prepare Failover Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        -820
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "wait-before-failover",
+      "name": "Wait Before Failover",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1880,
+        -820
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.filter((item)=>item.json.management?.retryScheduled!==true && item.json.management?.failoverScheduled!==true);"
+      },
+      "id": "finalize-current-job",
+      "name": "Finalize Current Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map((item)=>({json:{...item.json,campaignComplete:true,completedAt:new Date().toISOString()}}));"
+      },
+      "id": "campaign-complete",
+      "name": "Campaign Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "retry_queue",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "retry-queue-input",
+      "name": "Google Sheets - Retry Queue Input",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -820,
+        520
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "account_report",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "account-report-input",
+      "name": "Google Sheets - Account Report Input",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -600,
+        520
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const emailRows=$items(\"Google Sheets - Email List\").map((item)=>item.json||{});\nconst queueRows=$items(\"Google Sheets - Retry Queue Input\").map((item)=>item.json||{});\nconst accountRows=items.map((item)=>item.json||{});\nconst queueByJob=new Map(queueRows.filter((row)=>row.Job_ID).map((row)=>[String(row.Job_ID),row]));\nconst accountReportSeeds={};\nfor (const row of accountRows) {\n  const campaign=String(row.Campaign_ID||'default-campaign'); const profile=String(row.Profile_ID||'');\n  if (!profile) continue;\n  accountReportSeeds[campaign]=accountReportSeeds[campaign]||{}; accountReportSeeds[campaign][profile]={...row};\n}\nconst terminal=new Set(['SENT','QUEUED','FAILED','MANUAL_REVIEW','DUPLICATE','BLOCKED']);\nconst parseObject=(value)=>{ if (!value) return {}; if (typeof value==='object') return value; try { const parsed=JSON.parse(String(value)); return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{}; } catch { return {}; } };\nconst parseArray=(value)=>{ if (Array.isArray(value)) return value.map(String).filter(Boolean); if (!value) return []; try { const parsed=JSON.parse(String(value)); return Array.isArray(parsed)?parsed.map(String).filter(Boolean):[]; } catch { return String(value).split(',').map((v)=>v.trim()).filter(Boolean); } };\nconst now=Date.now();\nconst out=[];\nfor (const row of emailRows) {\n  const status=String(row.status||row.Status||'').trim().toUpperCase();\n  if (terminal.has(status)) continue;\n  const jobId=String(row.Job_ID||'').trim();\n  const campaignId=String(row.Campaign_ID||'default-campaign').trim()||'default-campaign';\n  const accountReportSeed=accountReportSeeds[campaignId]||{};\n  const queue=jobId?queueByJob.get(jobId):undefined;\n  const queueStatus=String(queue?.Queue_Status||'').trim().toUpperCase();\n  if (queueStatus==='COMPLETED'||queueStatus==='MANUAL_REVIEW'||queueStatus==='FAILED_FINAL') continue;\n  const nextRetryAt=Date.parse(String(queue?.Next_Retry_At||''));\n  if (queueStatus==='RETRY_WAIT'&&Number.isFinite(nextRetryAt)&&nextRetryAt>now) continue;\n  const checkpoint=parseObject(queue?.Lifecycle_Checkpoint);\n  const resumeStage=String(queue?.Resume_Stage||'').trim();\n  const providerInvoiceId=String(queue?.Provider_Invoice_ID||'').trim();\n  const currentProfileId=String(queue?.Current_Profile_ID||'').trim();\n  const sideEffectStage=String(queue?.Side_Effect_Stage||checkpoint.postStatus&&'invoice.created'||(providerInvoiceId?'invoice.created':'none'));\n  const requiredProfileId=String(queue?.Required_Profile_ID||(queueStatus==='RETRY_WAIT'?currentProfileId:'')).trim();\n  const failoverState={\n    schemaVersion:'1.0', failoverGroup:String(queue?.Failover_Group||''), originalProfileId:String(queue?.Original_Profile_ID||currentProfileId),\n    currentProfileId, attemptedProfileIds:parseArray(queue?.Attempted_Profile_IDs), failoverCount:Number(queue?.Failover_Count||0),\n    requiredProfileId:queueStatus==='FAILOVER_READY'?'':requiredProfileId, queueStatus, sideEffectStage,\n  };\n  const lifecycleResume=resumeStage&&providerInvoiceId?{\n    schemaVersion:'1.0', source:'status-manager', approved:true, stage:resumeStage,\n    profileId:currentProfileId, providerInvoiceId, checkpoint,\n  }:null;\n  out.push({json:{...row,invoiceRouterState:{retryCount:Number(queue?.Retry_Count||0),failoverState,lifecycleResume,accountReportSeed}},pairedItem:{item:out.length}});\n}\nreturn out;"
+      },
+      "id": "build-durable-work-items",
+      "name": "Build Durable Work Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const providerLibrary=$items(\"Provider Loader\")[0]?.json||{};\nreturn items.map((item)=>({json:{...item.json,providerLibrary},pairedItem:item.pairedItem}));"
+      },
+      "id": "attach-provider-library",
+      "name": "Attach Provider Library",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -570,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.flatMap((item)=>{\n  const recipient=item.json.recipient||{}; const job=item.json.job||{};\n  if (!job.jobId) return [];\n  return [{json:{Email:recipient.email||'',status:'PROCESSING',Name:recipient.name||'',Address:recipient.address||'',Job_ID:job.jobId,Campaign_ID:job.campaignId||'',Attempt_Count:Number(job.attemptCount||0),Last_Account:job.lastAccountId||'',Last_Error:'',Updated_At:new Date().toISOString()},pairedItem:item.pairedItem}];\n});"
+      },
+      "id": "prepare-processing-status",
+      "name": "Prepare Processing Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -290,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "email_list",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{ $json[\"Email\"] }}",
+            "status": "={{ $json[\"status\"] }}",
+            "Name": "={{ $json[\"Name\"] }}",
+            "Address": "={{ $json[\"Address\"] }}",
+            "Job_ID": "={{ $json[\"Job_ID\"] }}",
+            "Campaign_ID": "={{ $json[\"Campaign_ID\"] }}",
+            "Attempt_Count": "={{ $json[\"Attempt_Count\"] }}",
+            "Last_Account": "={{ $json[\"Last_Account\"] }}",
+            "Last_Error": "={{ $json[\"Last_Error\"] }}",
+            "Updated_At": "={{ $json[\"Updated_At\"] }}"
+          },
+          "matchingColumns": [
+            "Job_ID"
+          ],
+          "schema": [
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Campaign_ID",
+              "displayName": "Campaign_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Attempt_Count",
+              "displayName": "Attempt_Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Account",
+              "displayName": "Last_Account",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error",
+              "displayName": "Last_Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Updated_At",
+              "displayName": "Updated_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "recipient-processing-sheet",
+      "name": "Google Sheets - Recipient Processing",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -60,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const results=Array.isArray(items[0]?.json?.preflightResults)?items[0].json.preflightResults:[];\nreturn results.filter((row)=>row?.Account).map((row)=>({json:{Account:row.Account,Enabled:row.Enabled,status:row.status||'READY',Status_Reason:row.Status_Reason||'',Auto_Disabled:row.Auto_Disabled===true,Last_Error_Type:row.Last_Error_Type||'',Last_Error:row.Last_Error||'',Updated_At:row.Updated_At||new Date().toISOString()}}));"
+      },
+      "id": "prepare-preflight-provider-status",
+      "name": "Prepare Preflight Provider Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -570,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "provider",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Account": "={{ $json[\"Account\"] }}",
+            "Enabled": "={{ $json[\"Enabled\"] }}",
+            "status": "={{ $json[\"status\"] }}",
+            "Status_Reason": "={{ $json[\"Status_Reason\"] }}",
+            "Auto_Disabled": "={{ $json[\"Auto_Disabled\"] }}",
+            "Last_Error_Type": "={{ $json[\"Last_Error_Type\"] }}",
+            "Last_Error": "={{ $json[\"Last_Error\"] }}",
+            "Updated_At": "={{ $json[\"Updated_At\"] }}"
+          },
+          "matchingColumns": [
+            "Account"
+          ],
+          "schema": [
+            {
+              "id": "Account",
+              "displayName": "Account",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Enabled",
+              "displayName": "Enabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Status_Reason",
+              "displayName": "Status_Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Auto_Disabled",
+              "displayName": "Auto_Disabled",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error_Type",
+              "displayName": "Last_Error_Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Last_Error",
+              "displayName": "Last_Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "Updated_At",
+              "displayName": "Updated_At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "preflight-provider-status-sheet",
+      "name": "Google Sheets - Preflight Provider Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -320,
+        -360
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{control:true}}];"
+      },
+      "id": "prepare-managed-sheet-reads",
+      "name": "Prepare Managed Sheet Reads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{control:true}}];"
+      },
+      "id": "prepare-account-report-read",
+      "name": "Prepare Account Report Read",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -710,
+        620
       ]
     }
   ],
@@ -1134,16 +2910,6 @@
         [
           {
             "node": "Google Sheets - Provider Accounts",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Google Sheets - Email List",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Invoice Template",
             "type": "main",
             "index": 0
           }
@@ -1165,7 +2931,12 @@
       "main": [
         [
           {
-            "node": "Provider Selector",
+            "node": "Google Sheets - Email List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Preflight Provider Status",
             "type": "main",
             "index": 0
           }
@@ -1176,7 +2947,7 @@
       "main": [
         [
           {
-            "node": "Email List",
+            "node": "Prepare Managed Sheet Reads",
             "type": "main",
             "index": 0
           }
@@ -1187,14 +2958,43 @@
       "main": [
         [
           {
+            "node": "Invoice Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Template": {
+      "main": [
+        [
+          {
+            "node": "Attach Provider Library",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Recipient Jobs": {
+      "main": [
+        [
+          {
+            "node": "Campaign Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Provider Selector",
             "type": "main",
             "index": 1
           },
           {
-            "node": "Request Builder",
+            "node": "Prepare Processing Status",
             "type": "main",
-            "index": 2
+            "index": 0
           }
         ]
       ]
@@ -1206,17 +3006,6 @@
             "node": "Request Builder",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Invoice Template": {
-      "main": [
-        [
-          {
-            "node": "Request Builder",
-            "type": "main",
-            "index": 1
           }
         ]
       ]
@@ -1263,7 +3052,42 @@
             "index": 0
           },
           {
+            "node": "Prepare Recipient Status Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Provider Status Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Retry Queue Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Account Report Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Campaign Report Event",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Prepare Retry Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Failover Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Finalize Current Job",
             "type": "main",
             "index": 0
           }
@@ -1275,6 +3099,61 @@
         [
           {
             "node": "Google Sheets - Status Writeback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Recipient Status Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Recipient Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Provider Status Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Provider Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Retry Queue Row": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Retry Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Account Report Event": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Account Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Campaign Report Event": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Campaign Report",
             "type": "main",
             "index": 0
           }
@@ -1302,6 +3181,127 @@
           }
         ]
       ]
+    },
+    "Prepare Failover Request": {
+      "main": [
+        [
+          {
+            "node": "Wait Before Failover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Failover": {
+      "main": [
+        [
+          {
+            "node": "Provider Selector",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Finalize Current Job": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Recipient Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Retry Queue Input": {
+      "main": [
+        [
+          {
+            "node": "Prepare Account Report Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Account Report Input": {
+      "main": [
+        [
+          {
+            "node": "Build Durable Work Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Durable Work Items": {
+      "main": [
+        [
+          {
+            "node": "Email List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Provider Library": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Recipient Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Processing Status": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Recipient Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Preflight Provider Status": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Preflight Provider Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Managed Sheet Reads": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Retry Queue Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Account Report Read": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Account Report Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -1310,14 +3310,14 @@
     "executionOrder": "v1",
     "saveManualExecutions": false
   },
-  "versionId": "invoice-router-v1-production-freeze",
+  "versionId": "87e10bc7-8aa9-4130-8572-8f44a5fc17e0",
   "meta": {
     "templateCredsSetupCompleted": false,
     "invoiceRouterFreeze": "1.0",
-    "invoiceRouterRelease": "2.0.0",
-    "template": "template-001-odoo-complete-bulk-email",
+    "invoiceRouterRelease": "2.1.0",
+    "template": "template-001-odoo-production-bulk-reliability",
     "spreadsheetPlaceholder": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
-    "invoiceRouterWorkflow": "master-universal-provider-lifecycle"
+    "invoiceRouterWorkflow": "odoo-production-bulk-reliability"
   },
   "tags": [
     {

@@ -35,10 +35,12 @@ if (providerIds.length === 0) errors.push('template/providers must contain at le
 for (const providerId of providerIds) {
   const base = `${providersRoot}/${providerId}`;
   for (const file of requiredFiles) if (!(await exists(`${base}/${file}`))) errors.push(`${base}/${file} is missing`);
+  if (providerId === 'odoo') for (const file of ['retry_queue.csv', 'account_report.csv', 'campaign_report.csv']) if (!(await exists(`${base}/${file}`))) errors.push(`${base}/${file} is missing`);
   if (await exists(`${base}/provider.template.ygit`)) {
     const manifest = JSON.parse(await readFile(`${base}/provider.template.ygit`, 'utf8'));
     if (manifest.providerId !== providerId) errors.push(`${base}/provider.template.ygit providerId must be ${providerId}`);
-    if (manifest.templateVersion !== '2.0.0') errors.push(`${base}/provider.template.ygit templateVersion must be 2.0.0`);
+    const expectedTemplateVersion = providerId === 'odoo' ? '2.1.0' : '2.0.0';
+    if (manifest.templateVersion !== expectedTemplateVersion) errors.push(`${base}/provider.template.ygit templateVersion must be ${expectedTemplateVersion}`);
     for (const field of ['provider', 'emailList', 'invoiceResults', 'lifecycleRecipe', 'readme']) {
       if (!manifest.files?.[field]) errors.push(`${base}/provider.template.ygit is missing files.${field}`);
     }

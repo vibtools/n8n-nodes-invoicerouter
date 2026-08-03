@@ -1,0 +1,1 @@
+Job_ID,Campaign_ID,Recipient_Email,Original_Profile_ID,Current_Profile_ID,Attempted_Profile_IDs,Failover_Group,Side_Effect_Stage,Required_Profile_ID,Provider_Invoice_ID,Lifecycle_Checkpoint,Resume_Stage,Retry_Count,Failover_Count,Next_Retry_At,Last_Error_Type,Last_Error,Queue_Status,Updated_At

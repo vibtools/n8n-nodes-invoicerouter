@@ -4,8 +4,8 @@
   "templateId": "template-001-odoo-complete-bulk-email",
   "providerId": "odoo",
   "displayName": "Odoo Complete Bulk Email Sending System",
-  "templateVersion": "2.0.0",
-  "invoiceRouterVersion": "2.0.1",
+  "templateVersion": "2.1.0",
+  "invoiceRouterVersion": "2.1.0",
   "supportTier": "tier-1-candidate-live-core-proven-email-proof-required",
   "files": {
     "workbook": "InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx",
@@ -24,7 +24,10 @@
     "workflowLiveCanary": "n8n-import-workflow-live-canary.json",
     "workflowLiveBulk": "n8n-import-workflow-live-bulk.json",
     "workbookSandbox": "google-sheets-template-sandbox.xlsx",
-    "workbookLive": "google-sheets-template-live.xlsx"
+    "workbookLive": "google-sheets-template-live.xlsx",
+    "retryQueue": "retry_queue.csv",
+    "accountReport": "account_report.csv",
+    "campaignReport": "campaign_report.csv"
   },
   "sheetContract": {
     "providerSheet": "provider",

@@ -5,3 +5,5 @@ Use the provider-specific guides below before changing workflow behavior or retr
 - [Odoo invoice email troubleshooting](odoo-email-sending.md)
 
 Always retain the request ID, provider invoice ID, lifecycle checkpoint, email evidence, and status-writeback row during investigation.
+
+- [Bulk retry and account status](bulk-retry-account-status.md)

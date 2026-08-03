@@ -19,6 +19,7 @@ export const description: INodeTypeDescription = {
       { name: 'Existing Request ID', value: 'requestId', description: 'Use the resolved invoice ID/request ID exactly as the idempotency value.' },
       { name: 'Provider + Invoice', value: 'providerInvoiceOnly', description: 'Use provider, profile, action, environment, and invoice ID to create a stable duplicate-prevention key.' },
       { name: 'Provider + Invoice + Recipient', value: 'providerInvoiceRecipient', description: 'Use provider, profile, action, environment, invoice ID, and recipient email to create a stable duplicate-prevention key.' },
+      { name: 'Campaign + Job', value: 'campaignJob', description: 'Use provider, failover group, campaign ID, job ID, and action. Safe for restart and pre-side-effect account failover.' },
     ], description: 'Controls the idempotency value passed to Invoice Sender and the provider API header.' },
     { displayName: 'Idempotency Scope', name: 'idempotencyScope', type: 'options', default: 'workflow', options: [
       { name: 'Workflow', value: 'workflow', description: 'Prevent duplicates across all executions of this workflow while stored history is retained.' },

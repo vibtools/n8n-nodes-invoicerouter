@@ -108,6 +108,24 @@ function baseClassification(input: {
   if (input.success) return successClassification();
 
   const combined = `${input.message} ${flattenText(input.body)}`.toLowerCase();
+  if (/database .*does not exist|unknown database|database not found/.test(combined)) {
+    return {
+      errorType: 'CONFIGURATION_ERROR', category: 'configuration', severity: 'critical', alertSeverity: 'critical',
+      retryable: false, safeToRetry: false, source: 'provider_message', reason: 'The configured Odoo database does not exist.',
+    };
+  }
+  if (/currency .*was not found|currency .*not found|journal .*not found|missing.*journal|tax .*not found|account .*not found/.test(combined)) {
+    return {
+      errorType: 'CONFIGURATION_ERROR', category: 'configuration', severity: 'medium', alertSeverity: 'warning',
+      retryable: false, safeToRetry: false, source: 'provider_message', reason: 'Required provider accounting configuration is missing.',
+    };
+  }
+  if (/quota exhausted|quota has been exhausted|monthly limit reached|daily limit reached|usage limit reached|credit balance exhausted/.test(combined)) {
+    return {
+      errorType: 'QUOTA_EXHAUSTED_ERROR', category: 'quota', severity: 'high', alertSeverity: 'high',
+      retryable: false, safeToRetry: false, source: 'provider_message', reason: 'Provider explicitly reported that the account quota or usage allowance is exhausted.',
+    };
+  }
   if (input.transport === 'TIMEOUT' || /timeout|timed out|deadline exceeded/.test(combined)) {
     return {
       errorType: 'TIMEOUT_ERROR', category: 'transport', severity: 'medium', alertSeverity: 'warning',
@@ -126,7 +144,7 @@ function baseClassification(input: {
       retryable: false, safeToRetry: false, source: 'http_or_message', reason: 'Provider rejected authorization or permissions.',
     };
   }
-  if (input.httpStatus === 429 || /rate.?limit|too many requests|quota exceeded/.test(combined)) {
+  if (input.httpStatus === 429 || /rate.?limit|too many requests|temporar(?:y|ily) throttled/.test(combined)) {
     return {
       errorType: 'RATE_LIMIT_ERROR', category: 'rate_limit', severity: 'medium', alertSeverity: 'warning',
       retryable: true, safeToRetry: true, source: 'http_or_message', reason: 'Provider rate limit was reached.',
@@ -326,13 +344,19 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       }
     }
 
+    const checkpointInvoiceId = toStringValue(checkpoint.providerInvoiceId ?? checkpoint.invoiceId);
+    const checkpointPostStatus = toStringValue(checkpoint.postStatus ?? postStatus).toUpperCase();
+    const sideEffectStage = checkpointPostStatus === 'POSTED' || checkpointPostStatus === 'SENT'
+      ? 'invoice.posted'
+      : checkpointInvoiceId ? 'invoice.created' : 'none';
+    const canFailover = sideEffectStage === 'none' && classification.retryable === true && classification.safeToRetry !== false;
     const retryAfter = retryAfterSeconds(headers);
     const retryDelayHint = classification.safeToRetry && retryAfter > 0 ? retryAfter : 0;
     const retryDecision: IDataObject = {
       retryable: classification.retryable, safeToRetry: classification.safeToRetry, source: classification.source,
       reason: classification.reason, retryAfterSeconds: retryAfter, retryDelayHintSeconds: retryDelayHint,
       errorType: classification.errorType, errorCategory: classification.category, httpStatus,
-      resumeStage: retryResumeStage, lifecycleCheckpoint: checkpoint,
+      resumeStage: retryResumeStage, lifecycleCheckpoint: checkpoint, sideEffectStage, canFailover,
     };
     const unknownSuccessStatus = toStringValue(this.getNodeParameter('unknownSuccessStatus', itemIndex, 'CREATED'), 'CREATED').toUpperCase();
     const fallbackInvoiceStatus = duplicateTransport ? 'DUPLICATE' : blockedTransport ? 'BLOCKED' : neutralTransport ? 'PENDING'
@@ -353,14 +377,14 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     };
     const includeParsedMetadata = Boolean(this.getNodeParameter('includeParsedMetadata', itemIndex, true));
     const standardStatus: IDataObject = {
-      schemaVersion: '1.0', requestId: raw.requestId, providerId: raw.providerId, profileId: raw.profileId, accountId: raw.accountId,
+      schemaVersion: '1.0', requestId: raw.requestId, providerId: raw.providerId, profileId: raw.profileId, accountId: raw.accountId, accountName: request.accountName, accountStats: request.accountStats,
       workerId: raw.workerId, actionId: raw.actionId, transportStatus: transport, result: semanticResult, invoiceStatus,
       providerStatus: toStringValue(providerStatus), providerInvoiceId: parsedMetadata.invoiceId, invoiceNumber: parsedMetadata.invoiceNumber,
       providerCustomerId: parsedMetadata.providerCustomerId, customerStatus: parsedMetadata.customerStatus,
       postStatus: parsedMetadata.postStatus, emailSendRequested: parsedMetadata.emailSendRequested,
       emailSendStatus: parsedMetadata.emailSendStatus, emailSendMethod: parsedMetadata.emailSendMethod,
       emailErrorMessage: parsedMetadata.emailErrorMessage, emailEvidence: evidence,
-      lifecycleOutcome, lifecycleFailedStep, lifecycleCheckpoint: checkpoint, retryResumeStage,
+      lifecycleOutcome, lifecycleFailedStep, lifecycleCheckpoint: checkpoint, retryResumeStage, sideEffectStage, canFailover,
       partialSuccess: semanticResult === 'PARTIAL_SUCCESS', httpStatus,
       errorType: classification.errorType, errorCategory: classification.category, errorSeverity: classification.severity,
       alertSeverity: classification.alertSeverity, errorCode: toStringValue(firstByPath(body, paths.errorCode, 'error.code')),
@@ -383,7 +407,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       retryDecision, errorClassification: classification,
       responsePolicy: raw.responsePolicy ?? request.responsePolicy ?? null,
       requestMapping: raw.requestMapping ?? request.requestMapping ?? null,
-      lifecycleResume: raw.lifecycleResume ?? request.lifecycleResume ?? null,
+      lifecycleResume: raw.lifecycleResume ?? request.lifecycleResume ?? null, job: request.job ?? null, failoverState: request.failoverState ?? null,
       sendGuard: raw.guard ?? request.sendGuard ?? null, startedAt: raw.startedAt, finishedAt: raw.finishedAt,
       parsedMetadata: includeParsedMetadata ? parsedMetadata : undefined,
       runtime: raw.runtime, checkedAt: nowIso(),
