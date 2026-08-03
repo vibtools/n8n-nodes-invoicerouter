@@ -66,8 +66,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
   const templateItems = this.getInputData(1);
   const recipientItems = this.getInputData(2);
   if (allocationItems.length === 0) throw new Error('Provider Selector input is empty. Connect Provider Selector to input 1.');
-  if (templateItems.length === 0) throw new Error('Invoice Template input is empty. Connect Invoice Template to input 2.');
-  if (recipientItems.length === 0) throw new Error('Email List input is empty. Connect Email List to input 3.');
+  const embeddedMode = templateItems.length === 0 || recipientItems.length === 0;
 
   const strictWarnings = Boolean(this.getNodeParameter('strictProviderWarnings', 0, false));
   const strictProviderValidation = Boolean(this.getNodeParameter('strictProviderValidation', 0, false));
@@ -81,10 +80,11 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
   const allowHttp = Boolean(this.getNodeParameter('allowHttp', 0, false));
   const output: INodeExecutionData[] = [];
 
-  recipientItems.forEach((recipientItem, itemIndex) => {
+  const jobs = embeddedMode ? allocationItems : recipientItems;
+  jobs.forEach((recipientItem, itemIndex) => {
     const allocationItem = itemAt(allocationItems, itemIndex);
     const templateItem = itemAt(templateItems, itemIndex);
-    const recipient = safeRecord(recipientItem.json.recipient, 'Recipient');
+    const recipient = safeRecord(recipientItem.json.recipient ?? allocationItem?.json.recipient, 'Recipient');
     const allocation = safeRecord(allocationItem?.json.providerAllocation, 'Provider allocation');
     const allocationStatus = toStringValue(allocation.status).toUpperCase();
     if (allocationStatus === 'QUEUED') {
@@ -95,7 +95,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       output.push(blockedBuild(recipientItem.json, allocationStatus, toStringValue(allocation.reason, 'Provider allocation was blocked before request preparation.'), allocation, itemIndex));
       return;
     }
-    const template = safeRecord(templateItem?.json.invoiceTemplate, 'Invoice template');
+    const template = safeRecord(templateItem?.json.invoiceTemplate ?? allocationItem?.json.invoiceTemplate, 'Invoice template');
     const providerId = normalizeProviderId(allocation.providerId ?? allocation.providerName);
     const profileId = toStringValue(allocation.id);
     const accountId = toStringValue(allocation.accountId);
@@ -132,19 +132,28 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const query: IDataObject = { ...build.query, ...(replaceTags(extraQuery, tags) as IDataObject) };
     const routing = isRecord(allocation.routing) ? allocation.routing : { enabled: false };
     const environment = toStringValue(allocation.environment, 'live');
+    const job = isRecord(recipientItem.json.job) ? recipientItem.json.job : isRecord(allocationItem?.json.job) ? allocationItem.json.job : {};
+    const campaignId = toStringValue(job.campaignId, 'default-campaign');
+    const jobId = toStringValue(job.jobId, requestId);
+    const failoverGroup = toStringValue(allocation.failoverGroup ?? job.failoverGroup, accountId);
     const idempotencyComponents: IDataObject = {
       providerId, profileId, accountId, actionId: toStringValue(allocation.actionId), environment,
       invoiceId: requestId, recipientEmail: toStringValue(recipient.email), transactionId: toStringValue(invoice.transactionId, tags.TRX),
+      campaignId, jobId, failoverGroup,
     };
     const stableParts = [providerId, profileId, toStringValue(allocation.actionId), environment, requestId, toStringValue(recipient.email)]
       .map((value) => slug(value) || 'unassigned');
     const invoiceOnlyParts = [providerId, profileId, toStringValue(allocation.actionId), environment, requestId]
       .map((value) => slug(value) || 'unassigned');
+    const campaignParts = [providerId, failoverGroup, campaignId, jobId, toStringValue(allocation.actionId)]
+      .map((value) => slug(value) || 'unassigned');
     const idempotencyValue = idempotencyKeyMode === 'providerInvoiceRecipient'
       ? stableParts.join(':')
       : idempotencyKeyMode === 'providerInvoiceOnly'
         ? invoiceOnlyParts.join(':')
-        : requestId;
+        : idempotencyKeyMode === 'campaignJob'
+          ? campaignParts.join(':')
+          : requestId;
     const sendGuard = buildSendGuard({
       providerId, profileId, accountId, requestId, idempotencyValue, url,
       credentialRef: toStringValue(allocation.credentialRef), allowHttp, routing, providerValidationErrors: build.errors,
@@ -153,19 +162,22 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     if (sendGuardMode === 'strict' && sendGuard.approved !== true) throw new Error(`Send guard rejected request ${requestId}.`);
     const readyRequest: IDataObject = {
       schemaVersion: '1.0', requestId, transactionId: toStringValue(invoice.transactionId, tags.TRX),
-      providerId, profileId, accountId, workerId, actionId: toStringValue(allocation.actionId), actionName: toStringValue(allocation.actionName),
+      providerId, profileId, accountId, accountName: toStringValue(allocation.accountName), failoverGroup,
+      accountStats: isRecord(allocation.accountStats) ? allocation.accountStats : { totalAllocated: allocation.totalAllocated, totalSent: allocation.totalSent, totalFailed: allocation.totalFailed }, workerId, actionId: toStringValue(allocation.actionId), actionName: toStringValue(allocation.actionName),
       method: effectiveMethod, baseUrl, endpoint, url, headers, query, body,
       contentType: effectiveContentType, timeoutMs: allocation.timeoutMs ?? 60_000,
       credentialRef: toStringValue(allocation.credentialRef), authType: toStringValue(allocation.authType),
       idempotency: { header: effectiveIdempotencyHeader, value: idempotencyValue, requestId, mode: idempotencyKeyMode, scope: idempotencyScope, components: idempotencyComponents },
       responsePaths: build.responsePaths, requestMapping, responsePolicy,
-      invoice, recipient, warnings: build.warnings, providerValidation: { errors: build.errors, warnings: build.warnings }, sendGuard,
+      invoice, recipient, job, lifecycleResume: recipientItem.json.lifecycleResume ?? allocationItem?.json.lifecycleResume ?? null,
+      failoverState: recipientItem.json.failoverState ?? allocationItem?.json.failoverState ?? null,
+      warnings: build.warnings, providerValidation: { errors: build.errors, warnings: build.warnings }, sendGuard,
       runtime: { scopeKey: toStringValue(allocation.scopeKey ?? (isRecord(allocationItem?.json.runtime) ? allocationItem?.json.runtime.scopeKey : '')), lock: isRecord(allocation.runtime) ? allocation.runtime.lock : null },
       preparedAt: new Date().toISOString(),
     };
     output.push({
-      json: { readyRequest, requestBuild: { success: true, providerId, profileId, accountId, requestId, warningCount: build.warnings.length, providerValidationErrorCount: build.errors.length, sendGuardApproved: sendGuard.approved, responseKind: requestMapping.responseKind } },
-      pairedItem: [{ item: Math.min(itemIndex, allocationItems.length - 1), input: 0 }, { item: Math.min(itemIndex, templateItems.length - 1), input: 1 }, { item: itemIndex, input: 2 }],
+      json: { ...recipientItem.json, readyRequest, requestBuild: { success: true, providerId, profileId, accountId, requestId, warningCount: build.warnings.length, providerValidationErrorCount: build.errors.length, sendGuardApproved: sendGuard.approved, responseKind: requestMapping.responseKind } },
+      pairedItem: embeddedMode ? { item: Math.min(itemIndex, allocationItems.length - 1), input: 0 } : [{ item: Math.min(itemIndex, allocationItems.length - 1), input: 0 }, { item: Math.min(itemIndex, templateItems.length - 1), input: 1 }, { item: itemIndex, input: 2 }],
     });
   });
   return [output];

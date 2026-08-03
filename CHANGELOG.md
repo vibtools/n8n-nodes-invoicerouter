@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.1.0 - 2026-08-03 — Bulk reliability, durable reporting, and safe account failover
+
+### Runtime and workflow
+
+- Added one-item just-in-time provider allocation in the canonical Odoo production workflow.
+- Added `campaignJob` idempotency based on provider, failover group, campaign, job, and action.
+- Added side-effect-aware same-account retry for post-only and send-only lifecycle resume.
+- Added pre-side-effect account failover with attempted-profile exclusion and failover-group isolation.
+- Added structured configuration and quota error classification so invalid database/currency errors are not treated as generic network failures.
+- Added evidence-based provider status, cooldown, and automatic disable decisions.
+- Added fixed custom customer-name generation in Email List without changing existing name modes.
+
+### Google Sheets and operations
+
+- Added real-time `email_list.status`, stable `Job_ID`, `Campaign_ID`, attempts, last account, and last error fields.
+- Added managed provider status, disable reason, cooldown, error, and cumulative counter columns.
+- Added `retry_queue`, `account_report`, and `campaign_report` tabs/templates.
+- Added writeback-only operational payloads that never route a Sheets failure back into Invoice Sender.
+- Updated the Odoo production workflow and workbook identity to v2.1.0 while preserving compatibility workflows and the frozen eight-node topology.
+
+Per-account configured RPM, concurrency, and daily limits are intentionally excluded. Existing global bulk safety controls remain.
+
 ## 2.0.1 - 2026-08-02 — Real email, truthful lifecycle, and release synchronization
 
 ### Runtime corrections

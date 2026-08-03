@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-invoicerouter",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Master eight-node n8n InvoiceRouter for universal provider lifecycles, declarative provider recipes, simple bulk email lists, guarded create/post/send execution, template packs, and status writeback.",
   "keywords": [
     "n8n",
@@ -83,6 +83,7 @@
     "docs/developer",
     "docs/troubleshooting",
     "docs/freeze/v1.0/V2_0_0_MASTER_UNIVERSAL_PROVIDER_LIFECYCLE.md",
+    "docs/freeze/v1.0/V2_1_0_BULK_RELIABILITY.md",
     "config",
     "data",
     "template",

@@ -1,5 +1,21 @@
 # InvoiceRouter for n8n
 
+## v2.1.0 Bulk Reliability and Multi-Account Failover
+
+InvoiceRouter `2.1.0` keeps the frozen eight custom nodes and adds one-item just-in-time allocation, stable campaign/job idempotency, side-effect-aware retry, pre-side-effect failover within an Odoo `Failover_Group`, real-time `email_list.status`, provider account status/counters, durable retry-queue payloads, and account/campaign reporting.
+
+The canonical Odoo template now supports the same simple operator flow for canary and bulk:
+
+```text
+Add provider accounts -> add email rows -> connect one workbook -> execute
+```
+
+Use one enabled account and one recipient for account testing. Enable all individually verified accounts for pilot and production bulk. Post/send retries remain locked to the original account after a provider invoice exists.
+
+Before a campaign starts, the canonical workflow performs read-only Odoo authentication, active-currency, and model-access preflight for every enabled account. Managed Google Sheets writes retry three times without returning to the invoice transport path.
+
+See [`docs/user/odoo-production-bulk-reliability.md`](docs/user/odoo-production-bulk-reliability.md) and [`docs/developer/bulk-retry-failover-contract.md`](docs/developer/bulk-retry-failover-contract.md).
+
 ## v2.0.1 Production Email Correctness Hotfix
 
 InvoiceRouter `2.0.1` executes the standard headless Odoo invoice-send wizard, reports email state from provider-side evidence, preserves queued/failed/unverified outcomes, and resumes post/email retries against the existing provider invoice. The frozen eight-node architecture and v2 master workflow topology are unchanged.
@@ -14,8 +30,8 @@ InvoiceRouter is the Vib Tools eight-node n8n community package for guarded prov
 
 InvoiceRouter is an eight-node n8n community-node package for loading many provider accounts from Google Sheets, assigning accounts safely, personalizing invoice data, executing provider requests, standardizing results, and creating retry/metrics/alert/audit events.
 
-**Package version:** `2.0.1`  
-**Architecture:** Version 2.0 master lifecycle over the frozen 8-node topology  
+**Package version:** `2.1.0`
+**Architecture:** Version 2.0 master lifecycle over the frozen 8-node topology
 **Implementation:** 8/8 custom nodes registered; final publication remains blocked until the complete-project forensic audit passes
 
 
@@ -60,7 +76,7 @@ See [`docs/freeze/v1.0/V1_5_0_BUILD_INSTALL_LIVE_TEST_RUNBOOK.md`](docs/freeze/v
 
 ## n8n registry/UI install compatibility
 
-Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.0.1`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
+Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.1.0`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
 
 The n8n editor display names are now prefixed for searchability:
 

@@ -33,6 +33,7 @@ interface RuntimeAccount {
   lastUsedAt: number;
   activeRequests: number;
   requestTimes: number[];
+  allocatedCount: number;
   successCount: number;
   failureCount: number;
   consecutiveFailures: number;
@@ -54,6 +55,7 @@ const pools = new Map<string, Pool>();
 const vault = new Map<string, SecretMaterial>();
 const usedRecipients = new Map<string, Set<string>>();
 const sendReservations = new Map<string, Map<string, IDataObject>>();
+const campaignAccountStats = new Map<string, Map<string, IDataObject>>();
 
 export function executionIdentity(context: IExecuteFunctions, batchId = 'default'): {
   workflowId: string;
@@ -77,26 +79,33 @@ export function registerProviderProfiles(scopeKey: string, profiles: IDataObject
     if (!id) continue;
     seen.add(id);
     const enabled = profile.enabled !== false;
+    const managedStatus = toStringValue(profile.managedStatus).toUpperCase();
+    const hardDisabled = profile.autoDisabled === true || ['DISABLED_AUTO', 'AUTH_FAILED', 'AUTHORIZATION_FAILED', 'DATABASE_INVALID', 'QUOTA_EXHAUSTED'].includes(managedStatus);
+    const configuredCooldown = Date.parse(toStringValue(profile.cooldownUntil));
+    const cooldownUntil = Number.isFinite(configuredCooldown) && configuredCooldown > Date.now() ? configuredCooldown : 0;
+    const initialState: AccountState = !enabled || hardDisabled ? 'DISABLED' : cooldownUntil > 0 || ['COOLDOWN', 'RATE_LIMITED'].includes(managedStatus) ? 'COOLDOWN' : 'AVAILABLE';
     const existing = pool.accounts.get(id);
     const account: RuntimeAccount = existing ?? {
       profile: cloneJson(profile),
-      state: enabled ? 'AVAILABLE' : 'DISABLED',
-      cooldownUntil: 0,
+      state: initialState,
+      cooldownUntil,
       lastUsedAt: 0,
       activeRequests: 0,
       requestTimes: [],
-      successCount: 0,
-      failureCount: 0,
-      consecutiveFailures: 0,
-      retryCount: 0,
+      allocatedCount: Math.max(0, toFiniteNumber(profile.totalAllocated, 0)),
+      successCount: Math.max(0, toFiniteNumber(profile.totalSent, 0)),
+      failureCount: Math.max(0, toFiniteNumber(profile.totalFailed, 0)),
+      consecutiveFailures: Math.max(0, toFiniteNumber(profile.consecutiveFailures, 0)),
+      retryCount: Math.max(0, toFiniteNumber(profile.retryCount, 0)),
       latencyTotal: 0,
       healthScore: 100,
       weight: Math.max(1, toFiniteNumber(profile.weight, 1)),
       priority: toFiniteNumber(profile.priority, 0),
     };
     account.profile = cloneJson(profile);
-    if (!enabled) account.state = 'DISABLED';
-    else if (account.state === 'DISABLED') account.state = 'AVAILABLE';
+    if (!enabled || hardDisabled) account.state = 'DISABLED';
+    else if (cooldownUntil > 0) { account.state = 'COOLDOWN'; account.cooldownUntil = cooldownUntil; }
+    else if (account.state === 'DISABLED' || ['RESET', 'READY'].includes(managedStatus)) account.state = 'AVAILABLE';
     pool.accounts.set(id, account);
     const secret = secrets.get(id);
     if (secret) vault.set(`${scopeKey}::${id}`, secret);
@@ -139,12 +148,18 @@ export interface AllocationOptions {
   maxRequestsPerMinute: number;
   circuitBreakerThreshold: number;
   holdLock: boolean;
+  excludeProfileIds?: string[];
+  failoverGroup?: string;
+  requiredProfileId?: string;
 }
 
 export function allocateProvider(scopeKey: string, options: AllocationOptions): IDataObject | undefined {
   const pool = pools.get(scopeKey);
   if (!pool) return undefined;
   const now = Date.now();
+  const excluded = new Set((options.excludeProfileIds ?? []).map((value) => value.trim()).filter(Boolean));
+  const requestedGroup = toStringValue(options.failoverGroup).trim().toLowerCase();
+  const requiredProfileId = toStringValue(options.requiredProfileId).trim();
   const candidates = [...pool.accounts.values()].filter((account) => {
     recover(account, now, options.lockTimeoutMs);
     account.requestTimes = account.requestTimes.filter((time) => now - time < 60_000);
@@ -152,7 +167,11 @@ export function allocateProvider(scopeKey: string, options: AllocationOptions): 
       account.state = 'COOLDOWN';
       account.cooldownUntil = Math.max(account.cooldownUntil, now + 60_000);
     }
-    return account.state === 'AVAILABLE' && account.requestTimes.length < options.maxRequestsPerMinute && matches(account, options.filters);
+    const profileId = toStringValue(account.profile.id);
+    const accountGroup = toStringValue(account.profile.failoverGroup).trim().toLowerCase();
+    return account.state === 'AVAILABLE' && account.requestTimes.length < options.maxRequestsPerMinute
+      && (!requiredProfileId || profileId === requiredProfileId)
+      && !excluded.has(profileId) && (!requestedGroup || accountGroup === requestedGroup) && matches(account, options.filters);
   });
   if (candidates.length === 0) return undefined;
 
@@ -180,6 +199,7 @@ export function allocateProvider(scopeKey: string, options: AllocationOptions): 
     lockedAt: now,
   };
   selected.lastUsedAt = now;
+  selected.allocatedCount += 1;
   selected.activeRequests += 1;
   selected.requestTimes.push(now);
 
@@ -192,6 +212,9 @@ export function allocateProvider(scopeKey: string, options: AllocationOptions): 
       healthScore: Math.round(selected.healthScore * 100) / 100,
       retryCount: selected.retryCount,
       cooldownUntil: selected.cooldownUntil ? new Date(selected.cooldownUntil).toISOString() : null,
+      failoverGroup: toStringValue(selected.profile.failoverGroup),
+      accountStats: { totalAllocated: selected.allocatedCount, totalSent: selected.successCount, totalFailed: selected.failureCount },
+      totalAllocated: selected.allocatedCount, totalSent: selected.successCount, totalFailed: selected.failureCount,
       lock: {
         workflowId: options.workflowId,
         executionId: options.executionId,
@@ -224,6 +247,7 @@ export interface ProviderFeedback {
   retryCount?: number;
   cooldownSeconds?: number;
   recommendation?: string;
+  statusReason?: string;
 }
 
 function calculateHealth(account: RuntimeAccount): number {
@@ -236,12 +260,21 @@ function calculateHealth(account: RuntimeAccount): number {
   return Math.max(0, Math.min(100, successRate * 100 - latencyPenalty - failurePenalty));
 }
 
-export function applyProviderFeedback(scopeKey: string, feedback: ProviderFeedback): void {
+function accountStatsSnapshot(account: RuntimeAccount): IDataObject {
+  return {
+    totalAllocated: account.allocatedCount, totalSent: account.successCount, totalFailed: account.failureCount,
+    consecutiveFailures: account.consecutiveFailures, retryCount: account.retryCount,
+    healthScore: Math.round(account.healthScore * 100) / 100, state: account.state,
+    cooldownUntil: account.cooldownUntil ? new Date(account.cooldownUntil).toISOString() : null,
+  };
+}
+
+export function applyProviderFeedback(scopeKey: string, feedback: ProviderFeedback): IDataObject | undefined {
   const pool = pools.get(scopeKey);
   const account = pool?.accounts.get(feedback.profileId);
-  if (!pool || !account) return;
+  if (!pool || !account) return undefined;
   const feedbackId = toStringValue(feedback.feedbackId).trim();
-  if (feedbackId && pool.processedFeedbackIds.has(feedbackId)) return;
+  if (feedbackId && pool.processedFeedbackIds.has(feedbackId)) return accountStatsSnapshot(account);
   if (feedbackId) {
     pool.processedFeedbackIds.add(feedbackId);
     if (pool.processedFeedbackIds.size > 500) {
@@ -272,6 +305,31 @@ export function applyProviderFeedback(scopeKey: string, feedback: ProviderFeedba
     }
   }
   account.healthScore = calculateHealth(account);
+  return accountStatsSnapshot(account);
+}
+
+export function updateCampaignAccountStats(input: {
+  scopeKey: string; campaignId: string; profileId: string; seed?: IDataObject; event: IDataObject;
+}): IDataObject {
+  const campaignId = input.campaignId.trim() || 'default-campaign';
+  const key = `${input.scopeKey}:${campaignId}`;
+  const map = campaignAccountStats.get(key) ?? new Map<string, IDataObject>();
+  const seed = isRecord(input.seed) ? input.seed : {};
+  const existing = map.get(input.profileId) ?? {
+    Allocated: Math.max(0, toFiniteNumber(seed.Allocated, 0)), Attempted: Math.max(0, toFiniteNumber(seed.Attempted, 0)),
+    Succeeded: Math.max(0, toFiniteNumber(seed.Succeeded, 0)), Email_Sent: Math.max(0, toFiniteNumber(seed.Email_Sent, 0)),
+    Email_Queued: Math.max(0, toFiniteNumber(seed.Email_Queued, 0)), Failed: Math.max(0, toFiniteNumber(seed.Failed, 0)),
+    Retried: Math.max(0, toFiniteNumber(seed.Retried, 0)), Failover_Count: Math.max(0, toFiniteNumber(seed.Failover_Count, 0)),
+  };
+  for (const field of ['Allocated','Attempted','Succeeded','Email_Sent','Email_Queued','Failed','Retried','Failover_Count']) {
+    existing[field] = Math.max(0, toFiniteNumber(existing[field], 0)) + Math.max(0, toFiniteNumber(input.event[field], 0));
+  }
+  for (const field of ['Failover_From','Failover_To','Auto_Disabled','Disabled_Reason','Last_Error_Type','Last_Error','Current_Status','Enabled','Last_Used_At','Updated_At']) {
+    if (input.event[field] !== undefined && input.event[field] !== '') existing[field] = input.event[field];
+  }
+  map.set(input.profileId, existing);
+  campaignAccountStats.set(key, map);
+  return cloneJson(existing);
 }
 
 export function reserveRecipient(scopeKey: string, email: string): boolean {
@@ -288,9 +346,16 @@ export function publicPoolSnapshot(scopeKey: string): IDataObject[] {
   if (!pool) return [];
   return [...pool.accounts.values()].map((account) => ({
     id: toStringValue(account.profile.id),
+    accountId: toStringValue(account.profile.accountId),
+    accountName: toStringValue(account.profile.accountName),
+    failoverGroup: toStringValue(account.profile.failoverGroup),
     state: account.state,
     healthScore: Math.round(account.healthScore * 100) / 100,
     retryCount: account.retryCount,
+    totalAllocated: account.allocatedCount,
+    successCount: account.successCount,
+    failureCount: account.failureCount,
+    consecutiveFailures: account.consecutiveFailures,
     activeRequests: account.activeRequests,
     cooldownUntil: account.cooldownUntil ? new Date(account.cooldownUntil).toISOString() : null,
     lock: account.lock

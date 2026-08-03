@@ -65,9 +65,11 @@ function blockedAllocation(job: INodeExecutionData, itemIndex: number, workerId:
 export async function execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
   const providerItems = this.getInputData(0);
   const workItems = this.getInputData(1);
-  const library = providerItems.find((item) => Array.isArray(item.json.providers))?.json ?? providerItems[0]?.json ?? {};
+  const embeddedLibrary = workItems.find((item) => isRecord(item.json.providerLibrary))?.json.providerLibrary;
+  const library = providerItems.find((item) => Array.isArray(item.json.providers))?.json ?? providerItems[0]?.json ?? (isRecord(embeddedLibrary) ? embeddedLibrary : {});
+  const workRuntime = workItems.length > 0 && isRecord(workItems[0].json.runtime) ? workItems[0].json.runtime : {};
   const batchId = toStringValue(library.batch_id, 'default');
-  const runtime = isRecord(library.runtime) ? library.runtime : {};
+  const runtime = isRecord(library.runtime) && Object.keys(library.runtime).length > 0 ? library.runtime : workRuntime;
   const identity = executionIdentity(this, batchId);
   const scopeKey = toStringValue(runtime.scopeKey, identity.scopeKey);
   const strategy = toStringValue(this.getNodeParameter('strategy', 0, 'firstAvailable')) as AllocationStrategy;
@@ -101,7 +103,12 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
   const jobs = workItems.length > 0 ? workItems : [{ json: {} }];
   const output: INodeExecutionData[] = [];
   jobs.forEach((job, itemIndex) => {
-    const workerId = toStringValue(job.json.worker_id, `worker-${itemIndex + 1}`);
+    const jobRecord = isRecord(job.json.job) ? job.json.job : {};
+    const failoverState = isRecord(job.json.failoverState) ? job.json.failoverState : isRecord(jobRecord.failoverState) ? jobRecord.failoverState : {};
+    const attemptedProfileIds = Array.isArray(failoverState.attemptedProfileIds) ? failoverState.attemptedProfileIds.map((value) => toStringValue(value)).filter(Boolean) : [];
+    const failoverGroup = toStringValue(failoverState.failoverGroup ?? jobRecord.failoverGroup).trim();
+    const requiredProfileId = toStringValue(failoverState.requiredProfileId).trim();
+    const workerId = toStringValue(job.json.worker_id ?? jobRecord.jobId, `worker-${itemIndex + 1}`);
     const route = conditionalRouting ? resolveConditionalRoute(job.json, routingRules, routeProviderPath, routeActionPath, routeEnvironmentPath) : { providerId: '', actionId: '', environment: '', source: 'disabled', matched: false, ruleName: '' };
     const itemFilters: IDataObject = {
       providerId: route.providerId || filters.providerId,
@@ -125,14 +132,15 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const allocation = allocateProvider(scopeKey, {
       strategy, filters: itemFilters, workerId, workflowId: identity.workflowId, executionId: identity.executionId,
       lockTimeoutMs, maxRequestsPerMinute, circuitBreakerThreshold, holdLock: processingMode === 'parallel',
+      excludeProfileIds: requiredProfileId ? [] : attemptedProfileIds, failoverGroup, requiredProfileId,
     });
     if (!allocation) {
       if (!queueWhenUnavailable) throw new Error(`No eligible provider account is available for worker ${workerId}.`);
-      output.push({ json: { ...job.json, providerAllocation: { status: 'QUEUED', workerId, scopeKey, routing }, providerPool: publicPoolSnapshot(scopeKey) }, pairedItem: { item: itemIndex, input: 1 } });
+      output.push({ json: { ...job.json, providerAllocation: { status: 'QUEUED', workerId, scopeKey, routing, attemptedProfileIds, failoverGroup, requiredProfileId }, providerPool: publicPoolSnapshot(scopeKey) }, pairedItem: { item: itemIndex, input: 1 } });
       return;
     }
     output.push({
-      json: { ...job.json, providerAllocation: { ...allocation, status: 'ALLOCATED', workerId, scopeKey, routing }, providerPool: publicPoolSnapshot(scopeKey) },
+      json: { ...job.json, providerAllocation: { ...allocation, status: 'ALLOCATED', workerId, scopeKey, routing, attemptedProfileIds, failoverGroup, requiredProfileId }, providerPool: publicPoolSnapshot(scopeKey) },
       pairedItem: { item: itemIndex, input: workItems.length > 0 ? 1 : 0 },
     });
   });

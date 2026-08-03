@@ -1,6 +1,6 @@
 # InvoiceRouter Template 001 — Odoo Complete Bulk Email Sending System
 
-This provider template is for InvoiceRouter v2.0.0 and the built-in Odoo JSON-RPC adapter.
+This provider template is for InvoiceRouter v2.1.0 and the built-in Odoo JSON-RPC adapter.
 
 ## What this template does
 

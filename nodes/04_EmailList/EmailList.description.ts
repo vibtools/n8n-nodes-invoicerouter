@@ -11,7 +11,14 @@ export const description: INodeTypeDescription = {
     { displayName: 'Address Field', name: 'addressField', type: 'string', default: 'Address', description: 'Optional recipient address column. Leave cells blank when address is not needed.' },
     { displayName: 'Name Generation', name: 'nameGeneration', type: 'options', default: 'formatted', options: [
       { name: 'Username', value: 'username' }, { name: 'Formatted Username', value: 'formatted' }, { name: 'First Word', value: 'firstWord' },
+      { name: 'Custom Fixed Name', value: 'customFixed', description: 'Use one configured customer name for every invoice in this run.' },
     ] },
+    { displayName: 'Fixed Customer Name', name: 'fixedCustomerName', type: 'string', default: '', required: true,
+      displayOptions: { show: { nameGeneration: ['customFixed'] } }, description: 'Used for every recipient when Name Generation is Custom Fixed Name.' },
+    { displayName: 'Status Field', name: 'statusField', type: 'string', default: 'status', description: 'Managed email_list status column.' },
+    { displayName: 'Job ID Field', name: 'jobIdField', type: 'string', default: 'Job_ID', description: 'Durable job identifier column. Blank values are generated deterministically.' },
+    { displayName: 'Campaign ID Field', name: 'campaignIdField', type: 'string', default: 'Campaign_ID', description: 'Campaign identifier column used for restart-safe idempotency.' },
+    { displayName: 'Default Campaign ID', name: 'defaultCampaignId', type: 'string', default: 'default-campaign', description: 'Used when Campaign_ID is blank.' },
     { displayName: 'Invalid Row Policy', name: 'invalidPolicy', type: 'options', default: 'skip', options: [
       { name: 'Skip and Report', value: 'skip' }, { name: 'Stop with Error', value: 'error' },
     ] },

@@ -29,7 +29,7 @@ Endpoint = /jsonrpc
 Username = your Odoo username/email
 Password = your Odoo password or API key
 Database = exact Odoo database name
-Extra Config JSON = {"invoiceLifecycle":"createPostAndSendEmail","odooPostInvoice":true,"odooSendInvoiceEmail":true,"odooEmailForceSend":true,"odooEmailBody":"Your invoice has been created and posted."}
+Extra Config JSON = {"invoiceLifecycle":"createPostAndSendEmail","odooPostInvoice":true,"odooSendInvoiceEmail":true,"odooEmailForceSend":true}
 ```
 
 Keep one provider environment active during canary testing.

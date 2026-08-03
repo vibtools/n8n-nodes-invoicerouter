@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.ygit.dev/vpms/v2/vibproject.schema.json",
   "schemaVersion": 2,
-  "manifestVersion": "2.0.1",
+  "manifestVersion": "2.1.0",
   "project": {
     "id": "n8n-nodes-invoicerouter",
     "name": "n8n-nodes-invoicerouter",
@@ -9,7 +9,7 @@
     "displayName": "InvoiceRouter",
     "description": "Vib Tools n8n community node package for guarded multi-provider invoice automation.",
     "summary": "InvoiceRouter provides a master universal provider lifecycle engine, simple bulk email inputs, provider-account Google Sheet setup, guarded create/post/send execution, and status writeback.",
-    "version": "2.0.1",
+    "version": "2.1.0",
     "status": "stable",
     "visibility": "public",
     "category": "n8n-community-node",
@@ -77,7 +77,7 @@
   },
   "release": {
     "versioning": "Semantic Versioning",
-    "latestVersion": "2.0.1",
+    "latestVersion": "2.1.0",
     "releaseNotes": "CHANGELOG.md"
   }
 }
