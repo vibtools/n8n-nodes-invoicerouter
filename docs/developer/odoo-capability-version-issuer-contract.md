@@ -34,12 +34,12 @@ Provider Loader preserves the Google Sheets virtual `row_number` in every prefli
 
 ## Legal issuer
 
-Every enabled Odoo row must provide a stable, non-placeholder `Issuer_Key`. Provider Loader resolves `Company_ID` and `Company_Name` from the authenticated Odoo user and company record. Within one `Failover_Group`, issuer keys and authenticated company identity must match. A mismatch blocks the group before Provider Selector without permanently changing the operator's `Enabled` value.
+`Issuer_Key` is optional. Provider Loader resolves `Company_ID` and `Company_Name` from the authenticated Odoo user and company record and compares available evidence within each `Failover_Group`. Missing or different values produce diagnostic `WARNING` metadata only. They do not remove profiles, alter the operator's `Enabled` value, block Provider Selector, or block Invoice Sender.
 
 ## Additive provider evidence
 
 ```text
-Issuer_Key
+Issuer_Key (optional)
 Company_ID
 Company_Name
 Odoo_Server_Version

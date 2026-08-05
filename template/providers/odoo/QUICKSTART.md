@@ -81,7 +81,7 @@ Use one pending `Campaign_ID` per execution. Configure every `Campaign Report In
 
 ## Phase 04 provider fields
 
-Before the first preflight, set `Issuer_Key` for every Odoo row. Use the same value only for accounts that represent the same legal invoice issuer. Leave `Company_ID`, `Company_Name`, version, capability, and compatibility fields for preflight writeback, unless you intentionally configure expected company evidence.
+`Issuer_Key` is optional. You may leave it blank or use it as an operator label. Leave `Company_ID`, `Company_Name`, version, capability, and compatibility fields for preflight writeback, unless you intentionally configure expected company evidence. Issuer/company differences are diagnostic and do not block sending.
 
 ## Phase 06 report fields
 

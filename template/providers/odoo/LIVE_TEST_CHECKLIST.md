@@ -80,11 +80,11 @@ Stop the run and investigate when:
 - literal/blank lifecycle fields appear in writeback;
 - critical authentication, authorization, validation, or environment errors occur.
 
-## Capability and issuer gate
+## Capability and issuer diagnostics
 
 - [ ] Every enabled Odoo account reports its server version and passes capability validation.
 - [ ] `Capability_Status=CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN` was reviewed.
-- [ ] Every enabled account has a non-placeholder `Issuer_Key`.
+- [ ] `Issuer_Key` is blank or populated according to operator preference; it is not required.
 - [ ] All accounts in each failover group resolve to the same `Company_ID`/`Company_Name`.
 - [ ] `Issuer_Compatibility=VERIFIED` before canary/failover.
 - [ ] Create/post/send permission was proven by the controlled canary, not inferred from preflight.
@@ -97,7 +97,7 @@ Stop the run and investigate when:
 - [ ] Restart reconstruction matches `email_list`, `invoice_results`, and `retry_queue` evidence.
 - [ ] An intentionally stale report candidate is rejected without overwriting the newer row.
 - [ ] An already-applied stale repair payload is skipped and its repair envelope can complete.
-- [ ] `ISSUER_MISMATCH` evidence appears in `account_report` with `Campaign_ID=PREFLIGHT` and no provider side effect.
+- [ ] Any issuer/company difference appears as `Issuer_Compatibility=WARNING` and does not remove the account from the eligible pool.
 
 ## Phase 07 final release evidence
 

@@ -102,7 +102,7 @@ const canonicalHash = sha256(workflowBytes);
 const customNodes = workflow.nodes.filter((node) => String(node.type).startsWith('n8n-nodes-invoicerouter.'));
 const workflowEdges = countEdges(workflow);
 
-requireValue(pkg.version === '2.1.2', 'Package version must remain 2.1.2.');
+requireValue(pkg.version === '2.1.3', 'Package version must remain 2.1.3.');
 requireValue(customNodes.length === 8, `Canonical workflow must contain 8 custom nodes; found ${customNodes.length}.`);
 requireValue(workflow.nodes.length === EXPECTED_WORKFLOW_NODES && workflowEdges === EXPECTED_WORKFLOW_EDGES, `Canonical workflow topology must remain ${EXPECTED_WORKFLOW_NODES} nodes / ${EXPECTED_WORKFLOW_EDGES} edges; found ${workflow.nodes.length} / ${workflowEdges}.`);
 requireValue(Buffer.compare(workflowBytes, liveBytes) === 0, 'Canonical and live-bulk workflows must remain byte-identical.');
@@ -230,7 +230,7 @@ if (staticOnly) {
   const output = resolve(root, 'evidence/phase07/final-release-gate.json');
   await mkdir(dirname(output), { recursive: true });
   const result = {
-    schemaVersion: '1.2', gate: 'InvoiceRouter-v2.1.2-final-release', status: 'PASS',
+    schemaVersion: '1.2', gate: 'InvoiceRouter-v2.1.3-final-release', status: 'PASS',
     packageVersion: pkg.version, n8nVersion: TARGET_N8N_VERSION,
     canonicalWorkflowSha256: canonicalHash, engineFixtureSha256: sha256(engineFixtureBytes),
     customNodeCount: 8, workflowNodes: EXPECTED_WORKFLOW_NODES, workflowEdges: EXPECTED_WORKFLOW_EDGES,
@@ -240,6 +240,6 @@ if (staticOnly) {
     completedAt: new Date().toISOString(),
   };
   await writeFile(output, `${JSON.stringify(result, null, 2)}\n`);
-  console.log('InvoiceRouter v2.1.2 Phase 07 FINAL RELEASE FORENSIC GATE PASS.');
+  console.log('InvoiceRouter v2.1.3 Phase 07 FINAL RELEASE FORENSIC GATE PASS.');
   console.log(`Evidence: ${output}`);
 }

@@ -258,7 +258,7 @@ function odooPreflightResponses(majorVersion = 19, companyId = 1, companyName = 
 
 test('package registers exactly the frozen eight custom nodes', () => {
   assert.equal(pkg.name, 'n8n-nodes-invoicerouter');
-  assert.equal(pkg.version, '2.1.2');
+  assert.equal(pkg.version, '2.1.3');
   assert.equal(pkg.n8n.nodes.length, 8);
   assert.equal(pkg.invoiceRouterFreeze.targetNodeCount, 8);
   assert.equal(pkg.invoiceRouterFreeze.currentNodeCount, 8);
@@ -302,7 +302,7 @@ test('all frozen custom nodes use searchable InvoiceRouter display names', () =>
 test('installed package diagnostic validates the built package root', () => {
   const output = execFileSync(process.execPath, [path.join(root, 'scripts/diagnose-n8n-package.mjs'), root], { encoding: 'utf8' });
   assert.match(output, /Diagnostic result: PASS/);
-  assert.match(output, /n8n-nodes-invoicerouter@2\.1\.2/);
+  assert.match(output, /n8n-nodes-invoicerouter@2\.1\.3/);
 });
 
 test('all declared node artifacts and main declarations exist', () => {
@@ -1650,7 +1650,7 @@ test('release documentation enforces forensic audit before publish and community
   assert.match(checklist, /one controlled recipient only/i);
 });
 
-test('v2.1.2 release metadata and npm package contents stay synchronized', () => {
+test('v2.1.3 release metadata and npm package contents stay synchronized', () => {
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   const vibProject = JSON.parse(fs.readFileSync(path.join(root, 'vibproject.ygit'), 'utf8'));
   const docsManifest = JSON.parse(fs.readFileSync(path.join(root, 'docs/docs.minifest.ygit'), 'utf8'));
@@ -1658,7 +1658,7 @@ test('v2.1.2 release metadata and npm package contents stay synchronized', () =>
   const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
   const releaseWorkflow = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
 
-  assert.equal(pkg.version, '2.1.2');
+  assert.equal(pkg.version, '2.1.3');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(vibProject.project.version, pkg.version);
@@ -1666,8 +1666,8 @@ test('v2.1.2 release metadata and npm package contents stay synchronized', () =>
   assert.equal(docsManifest.versions.current, pkg.version);
   assert.equal(docsManifest.versions.latest, pkg.version);
   assert.ok(docsManifest.versions.available.includes(pkg.version));
-  assert.match(readme, /Package version:\*\* `2\.1\.2`/);
-  assert.match(changelog, /## 2\.1\.2 - 2026-08-05/);
+  assert.match(readme, /Package version:\*\* `2\.1\.3`/);
+  assert.match(changelog, /## 2\.1\.3 - 2026-08-05/);
   assert.ok(pkg.files.includes('docs/troubleshooting'));
   assert.match(releaseWorkflow, /Validate tag version/);
   assert.match(releaseWorkflow, /npm publish --access public --provenance/);
@@ -2324,7 +2324,7 @@ test('v2.1.1 package includes the corrective freeze document and versioned raw-U
   const relative = 'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json';
   assert.ok(fs.existsSync(path.join(root, relative)));
   const readme = fs.readFileSync(path.join(root, 'template/providers/odoo/README.md'), 'utf8');
-  assert.match(readme, /raw\.githubusercontent\.com\/vibtools\/n8n-nodes-invoicerouter\/v2\.1\.2\/template\/providers\/odoo\/n8n-import-workflow-production-v2\.1\.1\.json/);
+  assert.match(readme, /raw\.githubusercontent\.com\/vibtools\/n8n-nodes-invoicerouter\/v2\.1\.3\/template\/providers\/odoo\/n8n-import-workflow-production-v2\.1\.1\.json/);
 });
 
 test('v2.1.1 Odoo invoice-create transport ambiguity reconciles one stable-reference invoice without a duplicate create', async () => {
@@ -2622,20 +2622,58 @@ test('v2.1.1 Phase 04 Odoo Online saas version strings are parsed without blocki
   assert.equal(loaded[0][0].json.preflightResults[0].Odoo_Server_Version, 'saas~19.4+e');
 });
 
-test('v2.1.1 Phase 04 issuer mismatch blocks the entire Odoo failover group', async () => {
+test('v2.1.3 Phase 04 keeps Issuer_Key optional for Odoo failover groups', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const rows = [{ json: {
+    row_number: 2,
+    Enabled: true, Provider: 'Odoo', Account: 'Optional Issuer Key', Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://optional.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'secret', Database: 'optional', Failover_Group: 'optional-group', Issuer_Key: '', status: 'ISSUER_MISMATCH',
+    Status_Reason: 'Old issuer mismatch state', Last_Error_Type: 'CONFIGURATION_ERROR', Last_Error: 'Old issuer mismatch state',
+  } }];
+  const loaded = await loadProviders.call(context([rows], {
+    batchId: 'phase04-optional-issuer-key', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
+    enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'excludeAndReport',
+  }, odooPreflightResponses(19, 1, 'Optional Company')));
+  const output = loaded[0][0].json;
+  assert.equal(output.total, 1);
+  assert.equal(output.providers[0].issuerCompatibility.status, 'VERIFIED');
+  assert.equal(output.providers[0].issuerCompatibility.compatible, true);
+  assert.equal(output.preflightResults[0].status, 'READY');
+  assert.equal(output.preflightResults[0].Issuer_Compatibility, 'VERIFIED');
+  assert.equal(output.preflightResults[0].Last_Error_Type, '');
+  assert.equal(output.preflightResults[0].Last_Error, '');
+  assert.equal(output.warnings.some((warning) => /excluded|missing a non-placeholder Issuer_Key/i.test(warning)), false);
+});
+
+test('v2.1.3 Phase 04 reports issuer and company differences as non-blocking diagnostics', async () => {
   const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
   const rows = [
     { json: { Enabled: true, Provider: 'Odoo', Account: 'Issuer A One', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://a1.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'a@example.com', Password: 'secret', Database: 'a1', Failover_Group: 'issuer-a', Issuer_Key: 'issuer-a', status: 'READY' } },
-    { json: { Enabled: true, Provider: 'Odoo', Account: 'Issuer A Two', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://a2.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'b@example.com', Password: 'secret', Database: 'a2', Failover_Group: 'issuer-a', Issuer_Key: 'issuer-a', status: 'READY' } },
+    { json: { Enabled: true, Provider: 'Odoo', Account: 'Issuer A Two', Environment: 'live', Action: 'Create Invoice', Method: 'POST', 'Base URL': 'https://a2.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'b@example.com', Password: 'secret', Database: 'a2', Failover_Group: 'issuer-a', Issuer_Key: 'issuer-b', status: 'READY' } },
   ];
   const responses = [...odooPreflightResponses(19, 1, 'Issuer A Ltd'), ...odooPreflightResponses(19, 2, 'Different Issuer Ltd')];
   const loaded = await loadProviders.call(context([rows], {
-    batchId: 'phase04-issuer-mismatch', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
-    enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'excludeAndReport',
+    batchId: 'phase04-issuer-warning', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
+    enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'error',
   }, responses));
-  assert.equal(loaded[0][0].json.total, 0);
-  assert.equal(loaded[0][0].json.preflightResults.every((row) => row.status === 'ISSUER_MISMATCH'), true);
-  assert.equal(loaded[0][0].json.preflightResults.every((row) => row.Enabled === true && row.Auto_Disabled === false), true);
+  const output = loaded[0][0].json;
+  assert.equal(output.total, 2);
+  assert.equal(output.providers.every((profile) => profile.issuerCompatibility.status === 'WARNING'), true);
+  assert.equal(output.providers.every((profile) => profile.issuerCompatibility.compatible === true), true);
+  assert.equal(output.preflightResults.every((row) => row.status === 'READY'), true);
+  assert.equal(output.preflightResults.every((row) => row.Issuer_Compatibility === 'WARNING'), true);
+  assert.equal(output.preflightResults.every((row) => row.passed === true), true);
+  assert.equal(output.warnings.some((warning) => /issuer diagnostic warning/i.test(warning)), true);
+  assert.equal(output.warnings.some((warning) => /was excluded/i.test(warning)), false);
+});
+
+test('v2.1.3 runtime and sender contain no issuer compatibility hard gate', () => {
+  const runtimeSource = fs.readFileSync(path.join(root, 'shared/runtime/RuntimeStore.ts'), 'utf8');
+  const senderSource = fs.readFileSync(path.join(root, 'nodes/06_InvoiceSender/InvoiceSender.execute.ts'), 'utf8');
+  assert.doesNotMatch(runtimeSource, /issuerAllowed|issuerCompatibility\.compatible !== false/);
+  assert.doesNotMatch(senderSource, /issuer\.guard|legal-issuer compatibility is not verified/);
+  assert.match(senderSource, /diagnostic only and never blocks Odoo transport/);
 });
 
 test('v2.1.1 Phase 04 canonical workflow writes capability and issuer evidence to provider sheet', () => {

@@ -171,10 +171,8 @@ export function allocateProvider(scopeKey: string, options: AllocationOptions): 
     const profileId = toStringValue(account.profile.id);
     const accountGroup = toStringValue(account.profile.failoverGroup).trim().toLowerCase();
     const capabilities = isRecord(account.profile.preflightCapabilities) ? account.profile.preflightCapabilities : {};
-    const issuerCompatibility = isRecord(account.profile.issuerCompatibility) ? account.profile.issuerCompatibility : {};
     const providerId = toStringValue(account.profile.providerId).trim().toLowerCase();
     const compatibilityAllowed = providerId !== 'odoo' || capabilities.supported !== false;
-    const issuerAllowed = providerId !== 'odoo' || issuerCompatibility.compatible !== false;
     const activeCurrencies = Array.isArray(capabilities.activeCurrencies)
       ? capabilities.activeCurrencies.map((value) => toStringValue(value).trim().toUpperCase()).filter(Boolean) : [];
     const requestedCurrency = toStringValue(options.requiredCurrency).trim().toUpperCase();
@@ -182,7 +180,7 @@ export function allocateProvider(scopeKey: string, options: AllocationOptions): 
     return account.state === 'AVAILABLE' && account.requestTimes.length < options.maxRequestsPerMinute
       && (!requiredProfileId || profileId === requiredProfileId)
       && !excluded.has(profileId) && (!requestedGroup || accountGroup === requestedGroup)
-      && compatibilityAllowed && issuerAllowed && currencyCompatible && matches(account, options.filters);
+      && compatibilityAllowed && currencyCompatible && matches(account, options.filters);
   });
   if (candidates.length === 0) return undefined;
 

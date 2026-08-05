@@ -5,7 +5,7 @@
   "providerId": "odoo",
   "displayName": "Odoo Complete Bulk Email Sending System",
   "templateVersion": "2.1.1",
-  "invoiceRouterVersion": "2.1.2",
+  "invoiceRouterVersion": "2.1.3",
   "supportTier": "tier-1-candidate-live-core-proven-email-proof-required",
   "files": {
     "workbook": "InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx",
@@ -49,7 +49,7 @@
     "SEND_REAL_INVOICES",
     "SEND_BULK_REAL_INVOICES"
   ],
-  "notes": "Template assets are public starter files. v2.1.1 includes URL-importable production workflow, durable campaign control, truthful Odoo evidence, capability-driven Odoo profiles, and legal-issuer failover validation. Live create/post/send and inbox delivery still require user-environment proof.",
+  "notes": "Template assets are public starter files. v2.1.3 keeps the URL-importable production workflow, durable campaign control, truthful Odoo evidence, capability-driven Odoo profiles, and non-blocking issuer/company diagnostics. Live create/post/send and inbox delivery still require user-environment proof.",
   "modeSupport": {
     "sandbox": true,
     "live": true,
@@ -66,11 +66,13 @@
     "versionAllowlistEnforced": false
   },
   "legalIssuer": {
-    "requiredField": "Issuer_Key",
+    "optionalField": "Issuer_Key",
     "preflightEvidence": [
       "Company_ID",
       "Company_Name"
     ],
-    "mismatchPolicy": "block_entire_failover_group"
+    "mismatchPolicy": "warn_only",
+    "blocksProviderSelection": false,
+    "blocksInvoiceSending": false
   }
 }

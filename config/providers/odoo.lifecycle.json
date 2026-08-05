@@ -11,8 +11,7 @@
   "requiredAccountFields": [
     "Database",
     "Username",
-    "Password",
-    "Issuer_Key"
+    "Password"
   ],
   "steps": [
     "customer.search_by_email",
@@ -28,5 +27,18 @@
       19
     ],
     "versionAllowlistEnforced": false
+  },
+  "issuerCompatibility": {
+    "requiredForFailoverGroups": false,
+    "optionalFields": [
+      "Issuer_Key"
+    ],
+    "preflightEvidence": [
+      "Company_ID",
+      "Company_Name"
+    ],
+    "mismatchPolicy": "warn_only",
+    "blocksProviderSelection": false,
+    "blocksInvoiceSending": false
   }
 }

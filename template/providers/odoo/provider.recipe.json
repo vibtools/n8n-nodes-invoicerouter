@@ -21,8 +21,7 @@
     "Endpoint",
     "Username",
     "Password",
-    "Database",
-    "Issuer_Key"
+    "Database"
   ],
   "requiredRecipientFields": [
     "Email"
@@ -100,14 +99,16 @@
     "versionAllowlistEnforced": false
   },
   "issuerCompatibility": {
-    "requiredForFailoverGroups": true,
-    "requiredFields": [
+    "requiredForFailoverGroups": false,
+    "optionalFields": [
       "Issuer_Key"
     ],
     "preflightEvidence": [
       "Company_ID",
       "Company_Name"
     ],
-    "mismatchPolicy": "block_entire_failover_group"
+    "mismatchPolicy": "warn_only",
+    "blocksProviderSelection": false,
+    "blocksInvoiceSending": false
   }
 }

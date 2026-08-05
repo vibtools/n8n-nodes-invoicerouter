@@ -99,13 +99,7 @@ type LifecycleResumeStage = 'invoice.create' | 'invoice.post' | 'invoice.send_em
 
 function odooCapabilityForRequest(request: IDataObject): OdooCapabilityProfile {
   const compatibility = isRecord(request.odooCompatibility) ? request.odooCompatibility : {};
-  const issuerCompatibility = isRecord(request.issuerCompatibility) ? request.issuerCompatibility : {};
-  if (issuerCompatibility.compatible === false || toStringValue(issuerCompatibility.status).toUpperCase() === 'ISSUER_MISMATCH') {
-    throw new OdooOperationError('Odoo legal-issuer compatibility is not verified for this provider account.', {
-      provider: 'odoo', category: 'configuration', errorType: 'CONFIGURATION_ERROR', lifecycleStage: 'issuer.guard',
-      definitiveNoSideEffect: true, ambiguousSideEffect: false,
-    });
-  }
+  // Issuer/company metadata is diagnostic only and never blocks Odoo transport.
   // Odoo version is diagnostic metadata, not a runtime allowlist. The sender
   // uses the common capability surface verified by Provider Loader preflight.
   const declaredMajor = toFiniteNumber(compatibility.majorVersion ?? request.odooMajorVersion, 0);

@@ -5,7 +5,7 @@
   "targetN8nVersion": "2.31.6",
   "observedN8nVersion": "",
   "packageName": "n8n-nodes-invoicerouter",
-  "packageVersion": "2.1.2",
+  "packageVersion": "2.1.3",
   "fixture": "tests/fixtures/n8n/InvoiceRouter-Phase-07-Engine-Smoke.json",
   "fixtureSha256": "",
   "canonicalWorkflow": "template/providers/odoo/n8n-import-workflow-production-v2.1.1.json",

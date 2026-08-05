@@ -20,7 +20,7 @@ provider sheet credentials
 Use `n8n-import-workflow-production-v2.1.1.json` for new production setups. It is stored in this public `template/` folder so n8n can import it from the release raw URL:
 
 ```text
-https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.2/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.3/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
 ```
 
 The production workbook now includes `writeback_queue`; campaign reporting includes `Pause_Reason`, run lease, revision, and last-attempt fields. Job identity and provider allocation are persisted before transport, Sheet writes are ordered before the loop advances, and pending write bundles are repaired before new provider work. `n8n-import-workflow-live-bulk.json` remains an exact compatibility copy.
@@ -89,10 +89,10 @@ Use this order:
 
 The v2.1.0 workflow was superseded by the v2.1.1 corrective production template. `n8n-import-workflow-live-bulk.json` now mirrors the v2.1.1 canonical workflow for compatibility. The workbook includes provider status, recipient status, retry queue, account report, and campaign report tabs.
 
-## Odoo capability validation and legal issuer
+## Odoo capability validation and issuer diagnostics
 
-The production adapter uses a shared capability manifest without a fixed Odoo major-version allowlist. Odoo 18 and 19 retain documented metadata profiles. Set `Issuer_Key` on every enabled provider row. Accounts in one `Failover_Group` must resolve to the same authenticated Odoo company. Missing required capabilities and issuer mismatches are blocked before provider work.
+The production adapter uses a shared capability manifest without a fixed Odoo major-version allowlist. Odoo 18 and 19 retain documented metadata profiles. `Issuer_Key` is optional. Accounts in one `Failover_Group` may resolve to different issuer/company diagnostics without being removed from the runtime pool. Missing required capabilities still block the affected account; issuer/company differences only produce `WARNING` metadata.
 
 ## Phase 06 monotonic reporting
 
-`campaign_report` and `account_report` writes use `Base_Revision`, `Revision`, `Writer_Run_ID`, and `Aggregate_Source`. The workflow rereads the current report row before the main write and rejects stale writers, wrong campaign lease owners, and revision gaps. Startup campaign totals are rebuilt from `email_list`, `invoice_results`, and `retry_queue`; an older aggregate row is not treated as the source of truth. `ISSUER_MISMATCH` preflight evidence is written to `account_report` with `Campaign_ID=PREFLIGHT` and never enters provider selection.
+`campaign_report` and `account_report` writes use `Base_Revision`, `Revision`, `Writer_Run_ID`, and `Aggregate_Source`. The workflow rereads the current report row before the main write and rejects stale writers, wrong campaign lease owners, and revision gaps. Startup campaign totals are rebuilt from `email_list`, `invoice_results`, and `retry_queue`; an older aggregate row is not treated as the source of truth. Legacy `ISSUER_MISMATCH` preflight evidence remains readable for backward compatibility. New issuer/company differences use non-blocking `WARNING` metadata and accounts remain eligible when capability preflight passes.

@@ -75,12 +75,12 @@ The canonical Odoo workflow derives campaign state from `email_list`, `retry_que
 
 Before the recipient loop, the workflow upserts an `ACTIVE` lease, rereads `campaign_report`, and verifies the exact `Run_ID`, `Revision`, and future `Lock_Expires_At`. Provider Selector is unreachable until that verification succeeds. Completion rereads and releases the same lease. Google Sheets is not transactional, so the operational contract still forbids concurrent runs for the same campaign.
 
-## Legal-issuer failover gate
+## Issuer/company diagnostics
 
-Before an Odoo profile enters the runtime pool, Provider Loader resolves its Odoo version and authenticated company. Every enabled member of a `Failover_Group` must share the same non-placeholder `Issuer_Key` and normalized company identity. Any mismatch blocks the entire group; cross-company invoice failover is forbidden.
+Before an Odoo profile enters the runtime pool, Provider Loader resolves its Odoo version and authenticated company. `Issuer_Key` is optional. Differences in non-empty issuer keys, authenticated company identity, or configured expected company evidence are recorded as diagnostics but do not block the group. Provider eligibility remains governed by capability, managed state, currency, and the existing retry/failover safety controls.
 
 ## Phase 06 monotonic report contract
 
 Every campaign/account report mutation is revisioned. Normal writes reread the target report and require an exact base-to-next transition. Pending repair payloads that are older than or equal to the current revision are treated as already applied/stale and do not overwrite; payloads that skip a revision fail closed. Account failover counters restart from the highest durable account revision after a new run or worker process.
 
-Odoo profiles excluded by legal-issuer validation generate `PREFLIGHT` account-report rows with issuer/company evidence. These rows are diagnostic only and are not allocation candidates.
+Issuer/company diagnostics remain available in provider and account-report metadata. They are not exclusion events and do not create provider side effects by themselves.

@@ -4,10 +4,10 @@ Use `template/providers/odoo/n8n-import-workflow-production-v2.1.1.json` with th
 
 ## Raw URL import
 
-For the corrected `v2.1.2` package release, import this compatibility-named workflow URL in n8n:
+For the corrected `v2.1.3` package release, import this compatibility-named workflow URL in n8n:
 
 ```text
-https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.2/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.3/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
 ```
 
 ## Required workbook tabs
@@ -56,7 +56,7 @@ Do not manually retry an `UNVERIFIED` email. Reconcile the Odoo invoice, chatter
 
 ## Odoo version and issuer setup
 
-Odoo version is not hard-locked. Use an Odoo deployment that exposes the required InvoiceRouter JSON-RPC capability surface. Put the same stable `Issuer_Key` on every account that is legally allowed to issue interchangeable invoices in one failover group. After preflight, review `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Capability_Status`, and `Issuer_Compatibility`. Do not proceed when the group reports `ISSUER_MISMATCH` or a required capability validation failure. A READY capability result still requires a one-recipient canary because create/post/send permission is not proven by read-only preflight.
+Odoo version is not hard-locked. Use an Odoo deployment that exposes the required InvoiceRouter JSON-RPC capability surface. `Issuer_Key` is optional. After preflight, review `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Capability_Status`, and `Issuer_Compatibility`. `WARNING` is diagnostic only and does not block allocation or sending; a required capability validation failure still excludes that account. A READY capability result still requires a one-recipient canary because create/post/send permission is not proven by read-only preflight.
 
 ## Row and provider identity
 Do not edit generated `Row_ID` or `Profile_ID`. They are the durable matching keys used for recipient and provider updates. `writeback_queue` operation rows beginning with `OP:` must not be deleted while a run is active.
@@ -65,7 +65,7 @@ Do not edit generated `Row_ID` or `Profile_ID`. They are the durable matching ke
 
 Do not manually reduce or reuse `Revision`, `Base_Revision`, or `Writer_Run_ID`. The workflow reads the report row again immediately before writing. If another row has advanced the revision, the stale candidate is rejected rather than overwriting newer totals.
 
-`Aggregate_Source=DURABLE_SHEET_REBUILD` means campaign totals were reconstructed from managed recipient/result/retry evidence. `DURABLE_ACCOUNT_REPORT_PLUS_EVENT` means an account total resumed from its highest durable revision and added the current event. `ODOO_PREFLIGHT_ISSUER_EVIDENCE` rows use `Campaign_ID=PREFLIGHT`; they document blocked issuer groups and must not be counted as sent campaign work.
+`Aggregate_Source=DURABLE_SHEET_REBUILD` means campaign totals were reconstructed from managed recipient/result/retry evidence. `DURABLE_ACCOUNT_REPORT_PLUS_EVENT` means an account total resumed from its highest durable revision and added the current event. Legacy `ODOO_PREFLIGHT_ISSUER_EVIDENCE` rows may remain from older releases and must not be counted as sent campaign work. v2.1.3 does not create a blocking issuer mismatch; current diagnostics are written as provider/account metadata with `Issuer_Compatibility=WARNING`.
 
 ## Final Phase 07 approval
 

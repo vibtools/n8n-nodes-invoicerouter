@@ -29,4 +29,4 @@ Review the Provider Loader `preflightResults` output and the `provider` tab. Con
 
 ## Odoo failover group is blocked
 
-Inspect `Issuer_Key`, `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Capability_Status`, and `Issuer_Compatibility`. All enabled Odoo rows in the group must pass capability validation and resolve to one legal issuer/company. The group block is fail-closed and does not permanently disable the source rows.
+Inspect `Issuer_Key`, `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Capability_Status`, and `Issuer_Compatibility`. `Issuer_Key` and issuer/company consistency are diagnostic only. A `WARNING` does not block the group or disable rows; capability, authentication, currency, or managed-account failures still can.

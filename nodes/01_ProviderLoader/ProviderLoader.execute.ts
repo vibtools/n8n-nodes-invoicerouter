@@ -272,19 +272,42 @@ function capabilityCompany(profile: IDataObject): IDataObject {
   return isRecord(capabilities.company) ? capabilities.company : {};
 }
 
+function hasLegacyIssuerBlock(profile: IDataObject): boolean {
+  const evidence = [profile.managedStatus, profile.managedStatusReason, profile.lastErrorType, profile.lastError]
+    .map((value) => toStringValue(value).trim().toUpperCase())
+    .filter(Boolean)
+    .join(' ');
+  return evidence.includes('ISSUER_MISMATCH') || evidence.includes('ISSUER COMPATIBILITY BLOCKED');
+}
+
 function validateOdooIssuerGroups(
   profilesById: Map<string, IDataObject>,
-  secrets: Map<string, SecretMaterial>,
   preflightResults: IDataObject[],
   warnings: string[],
-  failurePolicy: string,
 ): void {
   const groups = new Map<string, IDataObject[]>();
   for (const profile of profilesById.values()) {
     if (toStringValue(profile.providerId) !== 'odoo') continue;
     const failoverGroup = toStringValue(profile.failoverGroup).trim();
     if (!failoverGroup) {
-      profile.issuerCompatibility = { status: 'NOT_APPLICABLE', compatible: true, checkedAt: nowIso() };
+      const legacyIssuerBlock = hasLegacyIssuerBlock(profile);
+      profile.issuerCompatibility = { status: 'NOT_APPLICABLE', compatible: true, blocking: false, checkedAt: nowIso() };
+      if (legacyIssuerBlock) {
+        profile.managedStatus = 'READY';
+        profile.managedStatusReason = '';
+        profile.lastErrorType = '';
+        profile.lastError = '';
+        profile.autoDisabled = false;
+      }
+      const result = preflightResults.find((entry) => toStringValue(entry.Profile_ID) === toStringValue(profile.id));
+      if (result) {
+        result.Issuer_Compatibility = 'NOT_APPLICABLE';
+        result.passed = true;
+        if (legacyIssuerBlock) {
+          result.Last_Error_Type = '';
+          result.Last_Error = '';
+        }
+      }
       continue;
     }
     const entries = groups.get(failoverGroup) ?? [];
@@ -303,8 +326,7 @@ function validateOdooIssuerGroups(
       const companyName = toStringValue(company.name).trim();
       const expectedCompanyId = toFiniteNumber(profile.expectedCompanyId, 0);
       const expectedCompanyName = toStringValue(profile.expectedCompanyName).trim();
-      if (!issuerKey) issues.push(`${toStringValue(profile.accountName)} is missing a non-placeholder Issuer_Key`);
-      else issuerKeys.add(normalizedIssuerValue(issuerKey));
+      if (issuerKey) issuerKeys.add(normalizedIssuerValue(issuerKey));
       if (companyId <= 0 || !companyName) issues.push(`${toStringValue(profile.accountName)} has no verified Odoo company identity`);
       if (companyName) companyNames.add(normalizedIssuerValue(companyName));
       if (expectedCompanyId > 0 && companyId > 0 && expectedCompanyId !== companyId) {
@@ -314,19 +336,21 @@ function validateOdooIssuerGroups(
         issues.push(`${toStringValue(profile.accountName)} expected Company_Name ${expectedCompanyName} but preflight returned ${companyName}`);
       }
     }
-    if (issuerKeys.size > 1) issues.push(`Failover_Group ${failoverGroup} contains different Issuer_Key values`);
+    if (issuerKeys.size > 1) issues.push(`Failover_Group ${failoverGroup} contains different non-empty Issuer_Key values`);
     if (companyNames.size > 1) issues.push(`Failover_Group ${failoverGroup} resolves to different Odoo company names`);
 
     const uniqueIssues = [...new Set(issues)];
-    const compatible = uniqueIssues.length === 0;
-    const sharedIssuerKey = configuredIssuerKey(profiles[0]?.issuerKey);
+    const diagnosticStatus = uniqueIssues.length === 0 ? 'VERIFIED' : 'WARNING';
+    const sharedIssuerKey = profiles.map((profile) => configuredIssuerKey(profile.issuerKey)).find(Boolean) ?? '';
     for (const profile of profiles) {
       const company = capabilityCompany(profile);
       const profileId = toStringValue(profile.id);
       const result = preflightResults.find((entry) => toStringValue(entry.Profile_ID) === profileId);
+      const legacyIssuerBlock = hasLegacyIssuerBlock(profile);
       profile.issuerCompatibility = {
-        status: compatible ? 'VERIFIED' : 'ISSUER_MISMATCH',
-        compatible,
+        status: diagnosticStatus,
+        compatible: true,
+        blocking: false,
         failoverGroup,
         issuerKey: sharedIssuerKey,
         companyId: toFiniteNumber(company.id, 0),
@@ -334,31 +358,31 @@ function validateOdooIssuerGroups(
         issues: uniqueIssues,
         checkedAt: nowIso(),
       };
+      if (legacyIssuerBlock) {
+        profile.managedStatus = 'READY';
+        profile.managedStatusReason = '';
+        profile.lastErrorType = '';
+        profile.lastError = '';
+        profile.autoDisabled = false;
+      }
       if (result) {
         result.Issuer_Key = configuredIssuerKey(profile.issuerKey);
         result.Company_ID = toFiniteNumber(company.id, 0) || '';
         result.Company_Name = toStringValue(company.name);
-        result.Issuer_Compatibility = compatible ? 'VERIFIED' : 'ISSUER_MISMATCH';
-        if (!compatible) {
-          const reason = `Odoo failover issuer compatibility blocked: ${uniqueIssues.join('; ')}.`;
-          result.status = 'ISSUER_MISMATCH';
-          result.Status_Reason = reason;
-          result.Last_Error_Type = 'CONFIGURATION_ERROR';
-          result.Last_Error = reason;
-          result.Auto_Disabled = false;
-          result.Enabled = true;
-          result.passed = false;
+        result.Issuer_Compatibility = diagnosticStatus;
+        result.passed = true;
+        if (legacyIssuerBlock) {
+          result.Last_Error_Type = '';
+          result.Last_Error = '';
+        }
+        if (uniqueIssues.length > 0) {
+          const diagnostic = `Issuer diagnostic warning: ${uniqueIssues.join('; ')}.`;
+          result.Status_Reason = [toStringValue(result.Status_Reason).trim(), diagnostic].filter(Boolean).join(' ');
         }
       }
-      if (!compatible) {
-        profilesById.delete(profileId);
-        secrets.delete(profileId);
-      }
     }
-    if (!compatible) {
-      const message = `Odoo Failover_Group ${failoverGroup} was excluded: ${uniqueIssues.join('; ')}.`;
-      warnings.push(message);
-      if (failurePolicy === 'error') throw new Error(message);
+    if (uniqueIssues.length > 0) {
+      warnings.push(`Odoo Failover_Group ${failoverGroup} issuer diagnostic warning: ${uniqueIssues.join('; ')}.`);
     }
   }
 }
@@ -511,7 +535,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     secrets.set(id, secret);
   }
 
-  validateOdooIssuerGroups(byId, secrets, preflightResults, warnings, preflightFailurePolicy);
+  validateOdooIssuerGroups(byId, preflightResults, warnings);
   const providers = [...byId.values()];
   registerProviderProfiles(identity.scopeKey, providers, secrets);
   return [[{

@@ -124,4 +124,4 @@ Keep one pending `Campaign_ID` in each execution. The production workflow recons
 
 ## Capability and issuer acceptance
 
-The built-in Odoo adapter is version-profiled for Odoo 18 and 19. Unsupported majors stop before authentication. Every enabled account requires `Issuer_Key`; accounts in the same failover group must resolve to the same Odoo company. Review the additive capability/company fields before enabling bulk failover.
+The built-in Odoo adapter keeps documented profiles for Odoo 18 and 19 while using capability-driven validation for other versions. `Issuer_Key` is optional, and accounts in the same failover group are not blocked when issuer/company diagnostics differ. Review the additive capability/company fields before bulk operation; only capability or managed-account failures exclude an account.

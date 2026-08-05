@@ -31,6 +31,6 @@ Use `google-sheets-template-live.xlsx` with `n8n-import-workflow-production-v2.1
 
 All production/canary/bulk uses of the v2.1.1 canonical workflow require one pending `Campaign_ID` per execution. Do not launch two executions for the same campaign. `campaign_report` lease verification blocks most overlaps, but Google Sheets is not a transactional lock service.
 
-## Version and issuer rule for every mode
+## Version and issuer behavior for every mode
 
-Dry-run, sandbox, canary, and live-bulk templates share the same capability and legal-issuer gate. Odoo version is diagnostic metadata; accounts enter the runtime pool when the required capability surface is validated. A failover group may contain only accounts for the same issuer/company.
+Dry-run, sandbox, canary, and live-bulk templates share the same capability validation. Odoo version is diagnostic metadata; accounts enter the runtime pool when the required capability surface is validated. `Issuer_Key` and company consistency are optional diagnostics and do not restrict failover-group membership.

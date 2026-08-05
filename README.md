@@ -1,5 +1,15 @@
 # InvoiceRouter for n8n
 
+## v2.1.3 Optional Issuer Diagnostics Hotfix
+
+InvoiceRouter `2.1.3` removes only the `Issuer_Key`/issuer-company hard block introduced in the v2.1.x preflight path. `Issuer_Key` is optional. Missing or different issuer/company evidence is reported as non-blocking `Issuer_Compatibility=WARNING`; it does not remove accounts from the provider pool and does not block Invoice Sender. Capability, authentication, database, currency, managed-account, lease, duplicate-safety, and send-confirmation gates remain unchanged.
+
+The canonical workflow filename remains `n8n-import-workflow-production-v2.1.1.json` for backward compatibility. Import the `v2.1.3` tagged bytes from:
+
+```text
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.3/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+```
+
 ## v2.1.2 Corrective Release Synchronization
 
 InvoiceRouter `2.1.2` publishes only the already approved corrective scope: capability-driven Odoo version handling, provider preflight writeback on the original Google Sheets row, safe recovery of pre-provider failed campaign leases, and account-count-agnostic provider loading. The frozen eight-node architecture, public APIs, dependencies, invoice lifecycle, email sending behavior, and canonical workflow filename remain unchanged.
@@ -45,7 +55,7 @@ InvoiceRouter now uses one canonical manifest, `shared/odoo/OdooCapabilityManife
 
 Preflight records the server version, resolved capability profile, authenticated company identity, and the explicit status `CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN`. Read-only field/model validation cannot prove create, post, or send permission; those side-effect permissions remain unproven until the controlled live canary.
 
-Every enabled Odoo account in a failover group must have a non-placeholder `Issuer_Key`. Provider Loader reads `res.users.company_id` and `res.company`, then verifies that enabled accounts in the same `Failover_Group` have the same normalized issuer key and company identity. Any mismatch blocks the entire group before Provider Selector without permanently changing the operator's `Enabled` value.
+`Issuer_Key` is optional. Provider Loader reads `res.users.company_id` and `res.company` and records issuer/company diagnostics for each `Failover_Group`. Missing or different issuer keys and differing company identity are reported as `Issuer_Compatibility=WARNING`; they do not remove accounts from the runtime pool and do not block Invoice Sender.
 
 Do not run two executions for the same `Campaign_ID` at the same time. The Sheet lease is a fail-closed operational guard, not a transactional database lock.
 
@@ -80,7 +90,7 @@ InvoiceRouter is the Vib Tools eight-node n8n community package for guarded prov
 
 InvoiceRouter is an eight-node n8n community-node package for loading many provider accounts from Google Sheets, assigning accounts safely, personalizing invoice data, executing provider requests, standardizing results, and creating retry/metrics/alert/audit events.
 
-**Package version:** `2.1.2`
+**Package version:** `2.1.3`
 **Architecture:** Version 2.0 master lifecycle over the frozen 8-node topology
 **Implementation:** 8/8 custom nodes registered; final publication remains blocked until the complete-project forensic audit passes
 
@@ -126,7 +136,7 @@ See [`docs/freeze/v1.0/V1_5_0_BUILD_INSTALL_LIVE_TEST_RUNBOOK.md`](docs/freeze/v
 
 ## n8n registry/UI install compatibility
 
-Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.1.2`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
+Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.1.3`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
 
 The n8n editor display names are now prefixed for searchability:
 
@@ -615,7 +625,7 @@ Every recipient has an immutable `Row_ID`; provider rows are updated by persiste
 
 `campaign_report` and `account_report` now use monotonic revisions. Every candidate row records `Base_Revision`, `Revision`, `Writer_Run_ID`, and `Aggregate_Source`; the workflow rereads the current Sheet row immediately before the write and rejects stale or out-of-sequence writers. The writeback-repair path skips payloads that are already applied or older than the current row and blocks revision gaps.
 
-Campaign totals are rebuilt from durable recipient/result/retry evidence at startup. A prior aggregate row supplies lease and pause metadata, not higher counters that can preserve an obsolete overcount. Account totals resume from the highest-revision durable account row and then add the current event. Odoo issuer mismatches are also persisted to `account_report` as `Campaign_ID=PREFLIGHT` rows with `Issuer_Key`, `Company_ID`, `Company_Name`, and `Issuer_Compatibility=ISSUER_MISMATCH`.
+Campaign totals are rebuilt from durable recipient/result/retry evidence at startup. A prior aggregate row supplies lease and pause metadata, not higher counters that can preserve an obsolete overcount. Account totals resume from the highest-revision durable account row and then add the current event. Odoo issuer/company metadata remains available in provider and account reporting fields. Diagnostic differences use `Issuer_Compatibility=WARNING` and are not treated as provider failures or sent campaign work.
 
 ## v2.1.1 Phase 07 final release gate
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.3 - 2026-08-05 — Optional issuer diagnostics hotfix
+
+- Removed only the `Issuer_Key` and issuer/company compatibility hard block from Provider Loader, RuntimeStore allocation, and Invoice Sender.
+- Kept `Issuer_Key`, `Company_ID`, `Company_Name`, and `Issuer_Compatibility` as backward-compatible diagnostic fields.
+- Missing or different issuer/company evidence now produces `Issuer_Compatibility=WARNING` without excluding accounts, disabling rows, or blocking invoice create/post/send.
+- Cleared legacy issuer mismatch error fields on the next successful preflight writeback.
+- Preserved the frozen eight-node architecture, canonical workflow topology and filename, public APIs, dependencies, capability checks, retry/failover logic, lease controls, duplicate safety, and email-sending lifecycle.
+
 ## 2.1.2 - 2026-08-05 — Corrective release synchronization
 
 - Published only the three approved corrections: capability-driven Odoo version handling, original-row provider preflight writeback, and safe recovery of pre-provider failed campaign leases.

@@ -75,13 +75,15 @@ for (const filename of ['provider.csv', 'provider.live.csv', 'provider.sandbox.c
 for (const filename of ['provider.lifecycle.json', 'provider.recipe.json']) {
   const source = `${providersRoot}/odoo/${filename}`;
   const contract = JSON.parse(await readFile(source, 'utf8'));
-  if (!contract.requiredAccountFields?.includes('Issuer_Key')) errors.push(`${source} must require Issuer_Key.`);
+  if (contract.requiredAccountFields?.includes('Issuer_Key')) errors.push(`${source} must keep Issuer_Key optional.`);
   if (JSON.stringify(contract.compatibility?.profiledOdooMajorVersions) !== JSON.stringify([18, 19])) errors.push(`${source} must retain documented Odoo 18 and 19 metadata profiles.`);
   if (contract.compatibility?.unknownVersionPolicy !== 'capability_driven') errors.push(`${source} must use capability-driven handling for unprofiled Odoo versions.`);
   if (contract.compatibility?.versionAllowlistEnforced !== false) errors.push(`${source} must not enforce a fixed Odoo version allowlist.`);
   if (contract.compatibility?.sideEffectPermission !== 'unproven_until_live_canary') errors.push(`${source} must keep side-effect permission unproven until live canary.`);
-  if (contract.issuerCompatibility?.requiredForFailoverGroups !== true) errors.push(`${source} must require legal-issuer compatibility for failover groups.`);
-  if (contract.issuerCompatibility?.mismatchPolicy !== 'block_entire_failover_group') errors.push(`${source} must block the whole failover group on issuer mismatch.`);
+  if (contract.issuerCompatibility?.requiredForFailoverGroups !== false) errors.push(`${source} must keep issuer compatibility optional for failover groups.`);
+  if (contract.issuerCompatibility?.mismatchPolicy !== 'warn_only') errors.push(`${source} must keep issuer mismatch diagnostic-only.`);
+  if (contract.issuerCompatibility?.blocksProviderSelection !== false) errors.push(`${source} must not block provider selection on issuer diagnostics.`);
+  if (contract.issuerCompatibility?.blocksInvoiceSending !== false) errors.push(`${source} must not block invoice sending on issuer diagnostics.`);
 }
 if (!(await exists('shared/odoo/OdooCapabilityManifest.ts'))) errors.push('shared/odoo/OdooCapabilityManifest.ts is missing.');
 else {

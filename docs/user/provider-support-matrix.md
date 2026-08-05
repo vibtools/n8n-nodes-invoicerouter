@@ -31,4 +31,4 @@ The built-in Odoo adapter uses case-insensitive exact partner-email matching and
 
 ## Odoo v2.1.1 Phase 04 boundary
 
-Odoo 18 and Odoo 19 retain documented metadata profiles. Runtime compatibility is capability-driven and does not enforce a fixed major-version allowlist. A successful read-only capability check does not prove create/post/send authorization. Multi-account failover is supported only when `Issuer_Key` and authenticated Odoo company identity match across the group.
+Odoo 18 and Odoo 19 retain documented metadata profiles. Runtime compatibility is capability-driven and does not enforce a fixed major-version allowlist. A successful read-only capability check does not prove create/post/send authorization. Multi-account failover does not require `Issuer_Key`. Issuer and authenticated company differences are exposed as non-blocking diagnostics; runtime eligibility is determined by enabled state, capability preflight, managed account state, currency, and existing safety controls.

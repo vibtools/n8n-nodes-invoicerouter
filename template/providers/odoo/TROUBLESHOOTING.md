@@ -85,9 +85,9 @@ Inspect `campaign_report.Run_State`, `Run_ID`, and `Lock_Expires_At`. Do not cle
 
 The v2.1.1 production workflow accepts one pending `Campaign_ID` per execution. Isolate the intended campaign rows and rerun; do not bypass the guard or merge unrelated campaigns under the default ID.
 
-## Capability or issuer error
+## Capability or issuer diagnostic
 
-A fixed-version `ODOO_VERSION_UNSUPPORTED` result is no longer expected. Review the specific missing model/field/method capability reported by preflight. For `ISSUER_MISMATCH`, make `Issuer_Key` and authenticated Odoo company identity consistent across the enabled failover group, or separate the accounts into different groups.
+A fixed-version `ODOO_VERSION_UNSUPPORTED` result is no longer expected. Review the specific missing model/field/method capability reported by preflight. `Issuer_Compatibility=WARNING` is informational only; `Issuer_Key` may be blank, and differing issuer/company evidence does not block provider selection or sending.
 
 ## Report stale writer or revision gap
 
