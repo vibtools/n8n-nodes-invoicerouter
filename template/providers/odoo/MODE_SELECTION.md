@@ -21,3 +21,16 @@ This provider pack now includes explicit mode-ready files. The original workflow
 5. Run live bulk only after live canary proof is correct in the provider dashboard, recipient inbox, and `invoice_results`.
 
 Do not use live bulk with placeholder credentials or unverified email recipients.
+
+## Production v2.1.1
+
+Use `google-sheets-template-live.xlsx` with `n8n-import-workflow-production-v2.1.1.json`. The same workflow supports one-account validation, pilot bulk, failover testing, and production bulk by changing enabled provider rows and campaign safety values.
+
+
+## Campaign concurrency rule
+
+All production/canary/bulk uses of the v2.1.1 canonical workflow require one pending `Campaign_ID` per execution. Do not launch two executions for the same campaign. `campaign_report` lease verification blocks most overlaps, but Google Sheets is not a transactional lock service.
+
+## Version and issuer rule for every mode
+
+Dry-run, sandbox, canary, and live-bulk templates share the same Odoo version and legal-issuer gate. Only Odoo 18/19 profiles enter the runtime pool. A failover group may contain only accounts for the same issuer/company.

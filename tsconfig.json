@@ -17,7 +17,8 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "removeComments": false
+    "removeComments": false,
+    "newLine": "lf"
   },
   "include": ["index.ts", "nodes/**/*.ts", "providers/**/*.ts", "shared/**/*.ts"],
   "exclude": ["dist", "node_modules", "release", "temp", "tests"]

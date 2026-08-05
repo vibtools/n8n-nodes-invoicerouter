@@ -24,5 +24,12 @@ export const description: INodeTypeDescription = {
     ] },
     { displayName: 'Preserve Custom Columns', name: 'preserveCustomColumns', type: 'boolean', default: false, description: 'Keep disabled for the v1.6 simple workflow. Enable only for advanced provider-specific routing fields.' },
     { displayName: 'Prevent Reuse in Batch', name: 'preventReuse', type: 'boolean', default: true },
+    { displayName: 'Enable Campaign Safety', name: 'enableCampaignSafety', type: 'boolean', default: false, description: 'Enforce campaign-wide item limits, failure pause, inter-send delay, and live bulk confirmation across one-item workflow loops.' },
+    { displayName: 'Max Invoices Per Execution', name: 'campaignMaxInvoices', type: 'number', default: 100, displayOptions: { show: { enableCampaignSafety: [true] } } },
+    { displayName: 'Max Failed Sends Before Pause', name: 'campaignMaxFailures', type: 'number', default: 5, displayOptions: { show: { enableCampaignSafety: [true] } } },
+    { displayName: 'Delay Between Sends (ms)', name: 'campaignDelayBetweenSendsMs', type: 'number', default: 500, displayOptions: { show: { enableCampaignSafety: [true] } } },
+    { displayName: 'Stop Campaign on Critical Error', name: 'campaignStopOnCriticalError', type: 'boolean', default: true, displayOptions: { show: { enableCampaignSafety: [true] } } },
+    { displayName: 'Require Live Bulk Confirmation', name: 'requireLiveBulkConfirmation', type: 'boolean', default: true, displayOptions: { show: { enableCampaignSafety: [true] } } },
+    { displayName: 'Live Bulk Confirmation', name: 'liveBulkConfirmation', type: 'string', default: '', placeholder: 'SEND_BULK_REAL_INVOICES', displayOptions: { show: { enableCampaignSafety: [true], requireLiveBulkConfirmation: [true] } }, description: 'Required only when more than one eligible recipient is processed. Enter SEND_BULK_REAL_INVOICES.' },
   ],
 };

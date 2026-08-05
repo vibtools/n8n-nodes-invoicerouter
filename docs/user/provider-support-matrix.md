@@ -16,11 +16,19 @@ InvoiceRouter distinguishes:
 
 - `QUEUED`: provider accepted or is processing the email;
 - `SENT`: provider-side terminal sent evidence exists;
-- `FAILED`: provider-side or execution failure exists;
-- `UNVERIFIED`: the send action completed, but sufficient provider evidence is unavailable.
+- `FAILED`: explicit provider failure evidence or a definitive pre-send/wizard failure exists;
+- `UNVERIFIED`: the send operation completed or may have executed, but sufficient current-attempt provider evidence is unavailable.
 
 `SENT` does not guarantee recipient inbox delivery. Inbox delivery must be verified during a controlled live canary.
 
 ## Production-proof rule
 
 Do not mark a provider or deployment production-proofed until dry-run, sandbox/test, status writeback, retry-resume, one-recipient live canary, provider evidence, PDF evidence, and inbox evidence have been captured for the target account and configuration.
+
+## Odoo identity and attachment boundary
+
+The built-in Odoo adapter uses case-insensitive exact partner-email matching and blocks duplicate contacts. Recipient comparison supports RFC display-name addresses. PDF support is considered evidenced only when the actual `ir.attachment` is a PDF bound to the current invoice, current send attempt, and expected invoice report attachment.
+
+## Odoo v2.1.1 Phase 04 boundary
+
+Odoo 18 and Odoo 19 are capability-profiled. Unknown major versions are unsupported and fail closed. A successful read-only capability check does not prove create/post/send authorization. Multi-account failover is supported only when `Issuer_Key` and authenticated Odoo company identity match across the group.

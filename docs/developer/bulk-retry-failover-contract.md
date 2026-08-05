@@ -68,3 +68,19 @@ management.failoverRequest
 ```
 
 The workflow writes these payloads with Google Sheets `appendOrUpdate`. Each managed write node has three write-only attempts. Writeback branches never feed Invoice Sender. `accountReportEvent` is accumulated by `Campaign_ID + Profile_ID`, while `campaignReportEvent` is keyed by `Campaign_ID + Job_ID`.
+
+## v2.1.1 Phase 02 durable campaign lease
+
+The canonical Odoo workflow derives campaign state from `email_list`, `retry_queue`, `invoice_results`, and `campaign_report` before building work items. One execution may contain only one pending `Campaign_ID`.
+
+Before the recipient loop, the workflow upserts an `ACTIVE` lease, rereads `campaign_report`, and verifies the exact `Run_ID`, `Revision`, and future `Lock_Expires_At`. Provider Selector is unreachable until that verification succeeds. Completion rereads and releases the same lease. Google Sheets is not transactional, so the operational contract still forbids concurrent runs for the same campaign.
+
+## Legal-issuer failover gate
+
+Before an Odoo profile enters the runtime pool, Provider Loader resolves its Odoo version and authenticated company. Every enabled member of a `Failover_Group` must share the same non-placeholder `Issuer_Key` and normalized company identity. Any mismatch blocks the entire group; cross-company invoice failover is forbidden.
+
+## Phase 06 monotonic report contract
+
+Every campaign/account report mutation is revisioned. Normal writes reread the target report and require an exact base-to-next transition. Pending repair payloads that are older than or equal to the current revision are treated as already applied/stale and do not overwrite; payloads that skip a revision fail closed. Account failover counters restart from the highest durable account revision after a new run or worker process.
+
+Odoo profiles excluded by legal-issuer validation generate `PREFLIGHT` account-report rows with issuer/company evidence. These rows are diagnostic only and are not allocation candidates.

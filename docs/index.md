@@ -18,3 +18,8 @@ Private planning and internal development notes belong under `project/`, which i
 
 - [Odoo production bulk reliability](user/odoo-production-bulk-reliability.md)
 - [Bulk retry and failover contract](developer/bulk-retry-failover-contract.md)
+
+- [Odoo production v2.1.1](user/odoo-production-v2.1.1.md)
+- [v2.1.1 corrective developer contract](developer/v2.1.1-production-corrective-contract.md)
+- [v2.1.1 Odoo troubleshooting](troubleshooting/v2.1.1-odoo-production.md)
+- [v2.1.1 final hardening progress](developer/v2.1.1-final-hardening-progress.md)

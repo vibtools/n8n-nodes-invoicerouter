@@ -32,6 +32,22 @@ jobs:
       - name: Verify frozen project
         run: npm run verify
 
+      - name: Verify Phase 07 static release prerequisites
+        run: npm run verify:phase07:static
+
+      - name: Verify n8n 2.31.6 workflow engine
+        run: npm run verify:phase07:engine
+        timeout-minutes: 20
+
+      - name: Upload Phase 07 engine evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoicerouter-phase07-engine-evidence
+          path: |
+            evidence/phase07/n8n-engine-smoke.json
+            evidence/phase07/n8n-engine-smoke.log
+          if-no-files-found: error
+
       - name: Create package preview
         run: npm pack
 

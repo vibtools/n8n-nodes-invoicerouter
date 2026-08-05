@@ -47,3 +47,25 @@ Do not move existing `nodes/`, `providers/`, or `shared/` files unless explicitl
 ## v2.1.0 Odoo managed workbook assets
 
 `template/providers/odoo/` now includes `retry_queue.csv`, `account_report.csv`, and `campaign_report.csv` beside the existing provider, recipient, and invoice-result templates. Existing source paths and custom-node directories are unchanged.
+
+## v2.1.1 Odoo corrective assets
+
+`template/providers/odoo/` additionally contains the URL-importable `n8n-import-workflow-production-v2.1.1.json`, `writeback_queue.csv`, synchronized production workbooks, and the non-destructive Google Apps Script schema repair helper. No existing source folder or custom-node path is renamed.
+
+## Phase 07 verification assets
+
+```text
+scripts/phase07-n8n-engine-smoke.mjs
+scripts/phase07-final-release-gate.mjs
+tests/helpers/phase07-runtime-worker.cjs
+tests/fixtures/n8n/InvoiceRouter-Phase-07-Engine-Smoke.json
+tests/fixtures/odoo/odoo-18-phase07-e2e.json
+tests/fixtures/odoo/odoo-19-phase07-e2e.json
+evidence/phase07/
+docs/developer/phase07-final-release-gate.md
+```
+
+
+## Final corrective audit assets
+
+The Phase 07 scripts also enforce complete canonical workflow import/export, `PROVIDER_PENDING` recovery, immediate provider-side-effect lease verification, and cryptographically bound release evidence. No custom-node folder or module was renamed.

@@ -1,5 +1,45 @@
 # InvoiceRouter for n8n
 
+## v2.1.1 Production Corrective Patch
+
+InvoiceRouter `2.1.1` preserves the frozen eight-node architecture and corrects the v2.1.0 production blockers found in live n8n/Odoo execution: embedded Request Builder input handling, version-aware Odoo preflight, truthful no-account queueing, campaign-wide safety, stable Odoo references, ambiguous side-effect reconciliation, ordered Google Sheets writebacks, durable writeback-only repair, and reconciled account/campaign reports.
+
+The canonical URL-importable Odoo workflow is stored at:
+
+```text
+template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+```
+
+After tag `v2.1.1`, its raw import URL is:
+
+```text
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.1/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+```
+
+
+### Phase 02 durable campaign control
+
+The v2.1.1 production workflow now reconstructs campaign state from `email_list`, `retry_queue`, `invoice_results`, and `campaign_report`; blocks mixed pending `Campaign_ID` values; acquires and rereads a `campaign_report` run lease before the provider loop; tracks a revision and last-attempt timestamp; and releases the lease after the loop. Process memory and workflow static data are caches only. The frozen eight custom nodes and package APIs remain unchanged.
+
+
+### Phase 03 Odoo truthfulness and evidence correction
+
+Current-attempt recipient evidence now has explicit precedence over an ambiguous `account.move.send.wizard.action_send_and_print` transport result: `SENT`, then `QUEUED`, then explicit failure. When the send RPC may have executed but no terminal evidence is available, the outcome is `UNVERIFIED`, never an automatic retry assumption. Odoo operation metadata remains available in `email_evidence.wizardErrorDetails`.
+
+Partner resolution uses case-insensitive exact email matching with a two-record ambiguity probe. Duplicate contacts fail closed before invoice creation. Recipient evidence accepts RFC display-name forms such as `Name <email@example.com>`. PDF proof is independently validated by reading `ir.attachment` and checking `application/pdf`, `account.move`, the invoice ID, current-attempt attachment binding, and `invoice_pdf_report_id`.
+
+
+## Phase 04 — Shared Odoo capability, version, and legal-issuer compatibility
+
+InvoiceRouter now uses one canonical manifest, `shared/odoo/OdooCapabilityManifest.ts`, for the Odoo fields and methods used by Provider Loader preflight, Invoice Sender, and regression tests. Supported server majors are **Odoo 18 and Odoo 19**. An unknown major version fails closed before authentication or any provider side effect.
+
+Preflight records the server version, resolved capability profile, authenticated company identity, and the explicit status `CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN`. Read-only field/model validation cannot prove create, post, or send permission; those side-effect permissions remain unproven until the controlled live canary.
+
+Every enabled Odoo account in a failover group must have a non-placeholder `Issuer_Key`. Provider Loader reads `res.users.company_id` and `res.company`, then verifies that enabled accounts in the same `Failover_Group` have the same normalized issuer key and company identity. Any mismatch blocks the entire group before Provider Selector without permanently changing the operator's `Enabled` value.
+
+Do not run two executions for the same `Campaign_ID` at the same time. The Sheet lease is a fail-closed operational guard, not a transactional database lock.
+
+
 ## v2.1.0 Bulk Reliability and Multi-Account Failover
 
 InvoiceRouter `2.1.0` keeps the frozen eight custom nodes and adds one-item just-in-time allocation, stable campaign/job idempotency, side-effect-aware retry, pre-side-effect failover within an Odoo `Failover_Group`, real-time `email_list.status`, provider account status/counters, durable retry-queue payloads, and account/campaign reporting.
@@ -30,7 +70,7 @@ InvoiceRouter is the Vib Tools eight-node n8n community package for guarded prov
 
 InvoiceRouter is an eight-node n8n community-node package for loading many provider accounts from Google Sheets, assigning accounts safely, personalizing invoice data, executing provider requests, standardizing results, and creating retry/metrics/alert/audit events.
 
-**Package version:** `2.1.0`
+**Package version:** `2.1.1`
 **Architecture:** Version 2.0 master lifecycle over the frozen 8-node topology
 **Implementation:** 8/8 custom nodes registered; final publication remains blocked until the complete-project forensic audit passes
 
@@ -76,7 +116,7 @@ See [`docs/freeze/v1.0/V1_5_0_BUILD_INSTALL_LIVE_TEST_RUNBOOK.md`](docs/freeze/v
 
 ## n8n registry/UI install compatibility
 
-Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.1.0`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
+Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.1.1`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
 
 The n8n editor display names are now prefixed for searchability:
 
@@ -522,7 +562,7 @@ Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice
 
 The built-in Odoo adapter no longer treats the interactive `account.move.action_send_and_print` opener as an email send. Headless execution creates `account.move.send.wizard`, executes `account.move.send.wizard.action_send_and_print`, and then inspects available Odoo message, notification, outgoing-mail, recipient, and PDF evidence.
 
-Provider evidence is attempt-bound: InvoiceRouter compares pre-send and post-send Odoo message IDs and accepts notification/mail states only for a new message created by the current wizard execution. Historical sent records are ignored, `pending` remains queued, and an unreadable baseline produces `UNVERIFIED` instead of false success.
+Provider evidence is attempt-bound: InvoiceRouter compares pre-send and post-send Odoo message IDs and accepts notification/mail states only for a new message created by the current wizard execution. Historical sent records are ignored, `pending` remains queued, and an unreadable baseline produces `UNVERIFIED` instead of false success. If the wizard transport times out, attempt-bound `SENT` or `QUEUED` evidence still wins; explicit failure evidence remains `FAILED`; ambiguous transport without terminal evidence is `UNVERIFIED`.
 
 Email status meanings are strict:
 
@@ -530,11 +570,14 @@ Email status meanings are strict:
 |---|---|
 | `SENT` | Provider-side terminal sent evidence exists. |
 | `QUEUED` | The provider accepted or is processing the email. |
-| `FAILED` | The send stage or provider evidence failed. |
-| `UNVERIFIED` | The wizard completed but sufficient provider evidence could not be read. |
+| `FAILED` | Odoo exposed explicit failure evidence or the send stage definitively failed before an ambiguous side effect. |
+| `UNVERIFIED` | Current-attempt terminal evidence is unavailable, including an ambiguous send transport that may have executed. |
 | `NOT_REQUESTED` | The selected lifecycle did not request email sending. |
 
 `SENT` is not a guarantee of recipient inbox delivery. Inbox delivery is a separate live-canary acceptance item. See [`docs/developer/odoo-email-evidence-contract.md`](docs/developer/odoo-email-evidence-contract.md).
+
+PDF evidence is a separate identity proof. `email_evidence.pdfEvidence.status=VALID` requires the current-attempt message to reference the same attachment as `invoice_pdf_report_id`, and the attachment must be `application/pdf` bound to the same `account.move` invoice. Invalid or unreadable PDF proof is reported without rewriting independently verified mail transport state.
+
 
 ## Duplicate-safe lifecycle retry
 
@@ -554,3 +597,42 @@ The required order for this release is:
 
 The release workflow packages the v2 master workflow, compatibility workflows, Odoo mode templates, common status assets, documentation, and the npm tarball into the install bundle.
 
+
+## v2.1.1 Phase 05 exactly-once Sheet envelope
+Every recipient has an immutable `Row_ID`; provider rows are updated by persisted `Profile_ID`. Before Invoice Sender runs, `writeback_queue` receives a `PROVIDER_PENDING` operation envelope keyed by `Operation_ID`. Provider result/checkpoint/evidence update the same envelope and terminal writeback marks it `COMPLETE`.
+
+## v2.1.1 Phase 06 monotonic reporting
+
+`campaign_report` and `account_report` now use monotonic revisions. Every candidate row records `Base_Revision`, `Revision`, `Writer_Run_ID`, and `Aggregate_Source`; the workflow rereads the current Sheet row immediately before the write and rejects stale or out-of-sequence writers. The writeback-repair path skips payloads that are already applied or older than the current row and blocks revision gaps.
+
+Campaign totals are rebuilt from durable recipient/result/retry evidence at startup. A prior aggregate row supplies lease and pause metadata, not higher counters that can preserve an obsolete overcount. Account totals resume from the highest-revision durable account row and then add the current event. Odoo issuer mismatches are also persisted to `account_report` as `Campaign_ID=PREFLIGHT` rows with `Issuer_Key`, `Company_ID`, `Company_Name`, and `Issuer_Compatibility=ISSUER_MISMATCH`.
+
+## v2.1.1 Phase 07 final release gate
+
+The final hardening gate pins workflow-engine smoke testing to `n8n@2.31.6`, exercises restart/other-worker runtime rehydration, validates boundary-aware short-secret redaction, and runs Odoo 18/19 fixture-driven lifecycle tests. Use `npm run verify:phase07:static` for source prerequisites and `npm run verify:phase07:engine` for the exact dry-run engine execution.
+
+Release remains fail-closed until sanitized, reviewed one-recipient canary and five-recipient/two-account pilot evidence pass `npm run verify:phase07:evidence`. Automated fixtures never claim inbox delivery or live provider approval.
+
+
+## v2.1.1 final corrective forensic gate
+
+The final audit found and corrected four release-critical gaps after the initial Phase 07 implementation:
+
+- the Windows engine harness no longer launches `npm.cmd`/`npx.cmd` directly; it invokes the npm CLI through the active Node executable;
+- the engine gate now imports and exports the complete 126-node/141-edge canonical workflow in addition to executing the dry-run eight-node fixture;
+- `PROVIDER_PENDING` is now a startup reconciliation input with the exact Request Builder stable reference, preventing blind create/send replay after a crash;
+- the campaign lease is reread and verified immediately before the operation envelope and Invoice Sender path.
+
+Canary and pilot evidence must match the engine evidence hash, engine-tested package tarball hash, and canonical workflow hash. Evidence also records sanitized artifact hashes, reviewer identity/timestamp, immutable Row_ID/Profile_ID checks, issuer-mismatch blocking, and revision behavior. A tag release validates npm credentials before GitHub Release creation.
+
+The automated separate-process test proves provider-pool and vault rehydration from a 66-second resume marker. It is not a substitute for a real n8n database wait/restart/worker test; that proof remains mandatory in the reviewed five-recipient pilot.
+
+### Final corrective audit: immutable recipient identity bootstrap
+
+The canonical Odoo workflow reads the virtual Google Sheets `row_number`, derives a deterministic `Row_ID`, and performs the first identity write with the Google Sheets `update` operation matched to that exact `row_number`. All later recipient status writes match only the persisted immutable `Row_ID`. This prevents a blank initial `Row_ID` from causing `appendOrUpdate` to append a duplicate recipient row.
+
+Phase 07 live evidence is reproducibly bound to the engine-tested package through deterministic `packageContentSha256` and `engineBindingSha256` values; timestamp-bearing evidence-file hashes are not used as cross-run identity.
+
+Phase 07 release artifacts also enforce LF text checkout through `.gitattributes` and LF TypeScript output through `compilerOptions.newLine`. This keeps deterministic package-content binding reproducible between Windows verification and Linux GitHub Actions.
+
+Phase 07 final evidence additionally verifies every referenced sanitized artifact file beneath `evidence/phase07/artifacts/` against its declared SHA-256; arbitrary digest placeholders cannot pass the release gate.

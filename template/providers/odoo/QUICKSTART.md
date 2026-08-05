@@ -74,3 +74,15 @@ Confirm all eight custom nodes load in n8n and the first execution remains `DRY_
 - `QUEUED`: wait and inspect Odoo mail processing.
 - `FAILED`: fix the recorded error and use approved retry.
 - `UNVERIFIED`: manual review; do not automatically retry.
+
+## Phase 02 campaign rule
+
+Use one pending `Campaign_ID` per execution. Configure every `Campaign Report Input/Lease` Google Sheets node to the same workbook and `campaign_report` tab. Do not run the same campaign concurrently.
+
+## Phase 04 provider fields
+
+Before the first preflight, set `Issuer_Key` for every Odoo row. Use the same value only for accounts that represent the same legal invoice issuer. Leave `Company_ID`, `Company_Name`, version, capability, and compatibility fields for preflight writeback, unless you intentionally configure expected company evidence.
+
+## Phase 06 report fields
+
+Do not manually decrement or reuse `Revision`, `Base_Revision`, or `Writer_Run_ID`. Keep all campaign/account report nodes pointed at the same managed workbook. A stale-writer or revision-gap error is a stop condition: reconcile the current Sheet row and pending `writeback_queue` envelope instead of forcing the older totals over the newer revision.

@@ -1,1 +1,1 @@
-Report_Key,Campaign_ID,Job_ID,Recipient_Email,Status,Pending,Sent,Queued,Failed,Manual_Review,Duplicate,Retrying,Failover,Account_ID,Updated_At
+Report_Key,Campaign_ID,Job_ID,Recipient_Email,Status,Pending,Sent,Queued,Failed,Manual_Review,Duplicate,Retrying,Failover,Account_ID,Updated_At,Pause_Reason,Run_State,Run_ID,Lock_Acquired_At,Lock_Expires_At,Revision,Last_Attempt_At,Base_Revision,Writer_Run_ID,Aggregate_Source

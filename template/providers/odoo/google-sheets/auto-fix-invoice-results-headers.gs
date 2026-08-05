@@ -1,4 +1,4 @@
-const INVOICE_ROUTER_V210_SCHEMAS = {
+const INVOICE_ROUTER_V211_SCHEMAS = {
   "invoice_results": [
     "writeback_key",
     "writeback_action",
@@ -107,6 +107,13 @@ const INVOICE_ROUTER_V210_SCHEMAS = {
     "Timeout",
     "Notes",
     "Failover_Group",
+    "Issuer_Key",
+    "Company_ID",
+    "Company_Name",
+    "Odoo_Server_Version",
+    "Odoo_Major_Version",
+    "Capability_Status",
+    "Issuer_Compatibility",
     "status",
     "Status_Reason",
     "Auto_Disabled",
@@ -166,7 +173,16 @@ const INVOICE_ROUTER_V210_SCHEMAS = {
     "Last_Error_Type",
     "Last_Error",
     "Last_Used_At",
-    "Updated_At"
+    "Updated_At",
+    "Issuer_Key",
+    "Company_ID",
+    "Company_Name",
+    "Issuer_Compatibility",
+    "Issuer_Mismatch",
+    "Base_Revision",
+    "Revision",
+    "Writer_Run_ID",
+    "Aggregate_Source"
   ],
   "campaign_report": [
     "Report_Key",
@@ -183,6 +199,26 @@ const INVOICE_ROUTER_V210_SCHEMAS = {
     "Retrying",
     "Failover",
     "Account_ID",
+    "Updated_At",
+    "Pause_Reason",
+    "Run_State",
+    "Run_ID",
+    "Lock_Acquired_At",
+    "Lock_Expires_At",
+    "Revision",
+    "Last_Attempt_At",
+    "Base_Revision",
+    "Writer_Run_ID",
+    "Aggregate_Source"
+  ],
+  "writeback_queue": [
+    "Repair_ID",
+    "Campaign_ID",
+    "Job_ID",
+    "Payload_JSON",
+    "Queue_Status",
+    "Last_Error",
+    "Created_At",
     "Updated_At"
   ]
 };
@@ -210,9 +246,9 @@ function ensureInvoiceRouterSheetHeaders_(spreadsheet, sheetName, requiredHeader
   return { sheetName, added: missing };
 }
 
-function fixInvoiceRouterV210Workbook() {
+function fixInvoiceRouterV211Workbook() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const results = Object.entries(INVOICE_ROUTER_V210_SCHEMAS).map(([sheetName, requiredHeaders]) =>
+  const results = Object.entries(INVOICE_ROUTER_V211_SCHEMAS).map(([sheetName, requiredHeaders]) =>
     ensureInvoiceRouterSheetHeaders_(spreadsheet, sheetName, requiredHeaders),
   );
   Logger.log(JSON.stringify(results));
@@ -220,6 +256,14 @@ function fixInvoiceRouterV210Workbook() {
 
 function fixInvoiceRouterInvoiceResultsHeaders() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const result = ensureInvoiceRouterSheetHeaders_(spreadsheet, 'invoice_results', INVOICE_ROUTER_V210_SCHEMAS.invoice_results);
+  const result = ensureInvoiceRouterSheetHeaders_(spreadsheet, 'invoice_results', INVOICE_ROUTER_V211_SCHEMAS.invoice_results);
   Logger.log(JSON.stringify(result));
 }
+
+
+// Backward-compatible alias retained for users who saved the v2.1.0 function name.
+function fixInvoiceRouterV210Workbook() {
+  return fixInvoiceRouterV211Workbook();
+}
+
+// Phase 05 additive identity/envelope columns: Row_ID, Profile_ID, Operation_ID, Stable_Reference, Lifecycle_Action, Operation_State, Checkpoint_JSON, Evidence_JSON.

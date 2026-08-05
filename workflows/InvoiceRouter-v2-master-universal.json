@@ -1,5 +1,5 @@
 {
-  "name": "InvoiceRouter v2.1.0 - Master Universal Provider Lifecycle",
+  "name": "InvoiceRouter v2.1.1 - Master Universal Provider Lifecycle",
   "nodes": [
     {
       "parameters": {},
@@ -1312,7 +1312,7 @@
   "meta": {
     "templateCredsSetupCompleted": false,
     "invoiceRouterFreeze": "1.0",
-    "invoiceRouterRelease": "2.1.0",
+    "invoiceRouterRelease": "2.1.1",
     "template": "simple-bulk-email-live-test-import-ready",
     "spreadsheetPlaceholder": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
     "invoiceRouterWorkflow": "master-universal-provider-lifecycle"

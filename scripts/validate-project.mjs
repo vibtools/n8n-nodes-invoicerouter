@@ -29,6 +29,7 @@ const requiredFiles = [
   'workflows/InvoiceRouter-v1-production.json',
   'scripts/clean.mjs', 'scripts/format.mjs', 'scripts/lint.mjs', 'scripts/validate-project.mjs', 'scripts/copy-node-icons.mjs',
   'scripts/diagnose-n8n-package.mjs', 'scripts/audit-release-source.mjs',
+  'scripts/phase07-n8n-engine-smoke.mjs', 'scripts/phase07-final-release-gate.mjs',
   'workflows/InvoiceRouter-v1.6-simple-bulk-email.json', 'workflows/InvoiceRouter-v2-master-universal.json',
   'docs/user/provider-support-matrix.md', 'docs/user/providers/odoo-complete-bulk-email.md',
   'docs/developer/odoo-email-evidence-contract.md', 'docs/developer/lifecycle-retry-resume.md',
@@ -36,7 +37,16 @@ const requiredFiles = [
   'template/providers/odoo/README.md', 'template/providers/odoo/QUICKSTART.md',
   'template/providers/odoo/ODOO_SETUP.md', 'template/providers/odoo/TROUBLESHOOTING.md',
   'template/providers/odoo/LIVE_TEST_CHECKLIST.md', 'template/providers/odoo/email_list.csv',
+  'template/providers/odoo/account_report.csv', 'template/providers/odoo/campaign_report.csv',
+  'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json',
+  'template/providers/odoo/n8n-import-workflow-live-bulk.json',
   'template/providers/odoo/provider.lifecycle.json', 'template/providers/odoo/provider.recipe.json',
+  'tests/helpers/phase07-runtime-worker.cjs',
+  'tests/fixtures/n8n/InvoiceRouter-Phase-07-Engine-Smoke.json',
+  'tests/fixtures/odoo/odoo-18-phase07-e2e.json', 'tests/fixtures/odoo/odoo-19-phase07-e2e.json',
+  'evidence/phase07/README.md', 'evidence/phase07/n8n-engine-smoke.template.json',
+  'evidence/phase07/canary-evidence.template.json', 'evidence/phase07/pilot-evidence.template.json',
+  'docs/developer/phase07-final-release-gate.md',
 ];
 
 const nodeFolders = [
@@ -50,6 +60,7 @@ const requiredDirectories = [
   '.github/workflows', 'assets/architecture', 'assets/node-cards/v1.0', 'docs/freeze/v1.0',
   'examples/google_sheets', 'examples/n8n_dry_run_validation', 'manifest', 'nodes', 'providers', 'scripts', 'shared', 'tests', 'workflows',
   'docs/user', 'docs/developer', 'docs/troubleshooting', 'template/providers/odoo',
+  'tests/helpers', 'tests/fixtures/n8n', 'tests/fixtures/odoo', 'evidence/phase07',
 ];
 
 const forbiddenPaths = [
@@ -151,12 +162,12 @@ const docsManifest = JSON.parse(await readFile('docs/docs.minifest.ygit', 'utf8'
 const readmeSource = await readFile('README.md', 'utf8');
 const changelogSource = await readFile('CHANGELOG.md', 'utf8');
 
-if (pkg.version !== '2.1.0') errors.push('package.json must use approved release version 2.1.0.');
+if (pkg.version !== '2.1.1') errors.push('package.json must use approved release version 2.1.1.');
 if (packageLock.version !== pkg.version || packageLock.packages?.['']?.version !== pkg.version) errors.push('package-lock.json version must match package.json.');
 if (vibProject.project?.version !== pkg.version || vibProject.release?.latestVersion !== pkg.version) errors.push('vibproject.ygit release metadata must match package.json.');
 if (docsManifest.versions?.current !== pkg.version || docsManifest.versions?.latest !== pkg.version || !docsManifest.versions?.available?.includes(pkg.version)) errors.push('docs/docs.minifest.ygit version metadata must include the package release.');
 if (!readmeSource.includes(`**Package version:** \`${pkg.version}\``)) errors.push('README.md current package version must match package.json.');
-if (!changelogSource.includes(`## ${pkg.version} - 2026-08-03`)) errors.push('CHANGELOG.md must contain the dated 2.1.0 release entry.');
+if (!changelogSource.includes(`## ${pkg.version} - 2026-08-03`)) errors.push('CHANGELOG.md must contain the dated 2.1.1 release entry.');
 if (!(pkg.files ?? []).includes('docs/troubleshooting')) errors.push('package.json must include docs/troubleshooting in npm files.');
 for (const providerId of ['odoo', 'stripe', 'zoho-books']) {
   const manifest = JSON.parse(await readFile(`template/providers/${providerId}/provider.template.ygit`, 'utf8'));
@@ -260,11 +271,104 @@ for (const field of ['email_evidence', 'lifecycle_outcome', 'lifecycle_failed_st
 }
 if (odooLifecycle.runtime?.emailSendModel !== 'account.move.send.wizard') errors.push('Odoo lifecycle runtime must document account.move.send.wizard.');
 
+const odooProductionWorkflow = JSON.parse(await readFile('template/providers/odoo/n8n-import-workflow-production-v2.1.1.json', 'utf8'));
+const odooLiveBulkWorkflow = await readFile('template/providers/odoo/n8n-import-workflow-live-bulk.json', 'utf8');
+const odooProductionWorkflowSource = JSON.stringify(odooProductionWorkflow, null, 2) + '\n';
+if (odooLiveBulkWorkflow !== odooProductionWorkflowSource) errors.push('Odoo canonical and live-bulk workflows must remain byte-identical.');
+if (odooProductionWorkflow.meta?.invoiceRouterHardeningPhase !== 'phase-07-final-corrective-audit') errors.push('Odoo workflow must declare the Phase 07 final release boundary.');
+if (odooProductionWorkflow.meta?.invoiceRouterN8nEngineTarget !== '2.31.6') errors.push('Odoo workflow must pin the Phase 07 n8n engine target to 2.31.6.');
+if (odooProductionWorkflow.meta?.invoiceRouterFinalReleaseGate !== true || odooProductionWorkflow.meta?.invoiceRouterLiveEvidenceRequired !== true) errors.push('Odoo workflow must require the Phase 07 final release and live evidence gates.');
+if (odooProductionWorkflow.meta?.invoiceRouterFinalCorrectiveAudit !== true) errors.push('Odoo workflow must declare the final corrective audit flag.');
+for (const flag of ['invoiceRouterMonotonicReporting', 'invoiceRouterStaleWriterProtection', 'invoiceRouterDurableAggregateRebuild', 'invoiceRouterIssuerMismatchReporting']) {
+  if (odooProductionWorkflow.meta?.[flag] !== true) errors.push(`Odoo workflow meta must enable ${flag}.`);
+}
+const odooNodesByName = Object.fromEntries((odooProductionWorkflow.nodes ?? []).map((node) => [node.name, node]));
+for (const name of [
+  'Google Sheets - Campaign Report Revision Read', 'Verify Campaign Report Revision',
+  'Google Sheets - Account Report Revision Read', 'Verify Account Report Revision',
+  'Google Sheets - Issuer Mismatch Account Report Read', 'Prepare Issuer Mismatch Account Report',
+  'Google Sheets - Issuer Mismatch Account Report',
+]) {
+  if (!odooNodesByName[name]) errors.push(`Odoo Phase 06 workflow must include ${name}.`);
+}
+for (const name of ['Google Sheets - Campaign Report', 'Google Sheets - Account Report', 'Google Sheets - Issuer Mismatch Account Report']) {
+  const mapping = odooNodesByName[name]?.parameters?.columns?.value ?? {};
+  for (const field of ['Base_Revision', 'Revision', 'Writer_Run_ID', 'Aggregate_Source']) {
+    if (!(field in mapping)) errors.push(`${name} must map ${field}.`);
+  }
+}
+for (const [name, requiredFragments] of [
+  ['Verify Campaign Report Revision', ['stale writer rejected', 'base+1', 'Run_ID']],
+  ['Verify Account Report Revision', ['stale writer rejected', 'base+1', 'Writer_Run_ID']],
+  ['Build Durable Work Items', ['DURABLE_SHEET_REBUILD', 'authoritative:true', 'emailRows', 'invoiceRows', 'queueRows']],
+  ['Build Writeback Repair Items', ['revision gap', 'repairSkippedAsStale']],
+]) {
+  const source = odooNodesByName[name]?.parameters?.jsCode ?? '';
+  for (const fragment of requiredFragments) if (!source.includes(fragment)) errors.push(`${name} must enforce ${fragment}.`);
+}
+const accountReportHeader = (await readFile('template/providers/odoo/account_report.csv', 'utf8')).split(/\r?\n/, 1)[0].split(',');
+for (const field of ['Issuer_Key', 'Company_ID', 'Company_Name', 'Issuer_Compatibility', 'Issuer_Mismatch', 'Base_Revision', 'Revision', 'Writer_Run_ID', 'Aggregate_Source']) {
+  if (!accountReportHeader.includes(field)) errors.push(`Odoo account_report.csv must include ${field}.`);
+}
+const campaignReportHeader = (await readFile('template/providers/odoo/campaign_report.csv', 'utf8')).split(/\r?\n/, 1)[0].split(',');
+for (const field of ['Base_Revision', 'Revision', 'Writer_Run_ID', 'Aggregate_Source']) {
+  if (!campaignReportHeader.includes(field)) errors.push(`Odoo campaign_report.csv must include ${field}.`);
+}
+
+
+// Phase 07 final release gate
+for (const [name, command] of Object.entries({
+  'verify:phase07:static': 'node scripts/phase07-final-release-gate.mjs --static-only',
+  'verify:phase07:engine': 'node scripts/phase07-n8n-engine-smoke.mjs',
+  'verify:phase07:evidence': 'node scripts/phase07-final-release-gate.mjs',
+})) if (pkg.scripts?.[name] !== command) errors.push(`package.json must define ${name}.`);
+const phase07EngineFixture = JSON.parse(await readFile('tests/fixtures/n8n/InvoiceRouter-Phase-07-Engine-Smoke.json', 'utf8'));
+const phase07CustomNodes = phase07EngineFixture.nodes?.filter((node) => String(node.type).startsWith('n8n-nodes-invoicerouter.')) ?? [];
+if (phase07EngineFixture.meta?.invoiceRouterEngineTarget !== '2.31.6' || phase07EngineFixture.meta?.sideEffects !== 'dry-run-only') errors.push('Phase 07 engine fixture must target n8n 2.31.6 and remain dry-run-only.');
+if (phase07CustomNodes.length !== 8 || phase07EngineFixture.nodes?.find((node) => node.name === 'Invoice Sender')?.parameters?.dryRun !== true) errors.push('Phase 07 engine fixture must contain all eight custom nodes with Invoice Sender dryRun=true.');
+for (const major of [18, 19]) {
+  const fixture = JSON.parse(await readFile(`tests/fixtures/odoo/odoo-${major}-phase07-e2e.json`, 'utf8'));
+  if (fixture.majorVersion !== major || fixture.expected?.capabilityProfileId !== `odoo-${major}-invoice-send`) errors.push(`Phase 07 Odoo ${major} fixture is invalid.`);
+  if (fixture.expected?.emailSendStatus !== 'SENT' || fixture.expected?.pdfEvidenceStatus !== 'VALID') errors.push(`Phase 07 Odoo ${major} fixture must require evidence-backed SENT and VALID PDF.`);
+}
+const phase07NodesByName = Object.fromEntries((odooProductionWorkflow.nodes ?? []).map((node) => [node.name, node]));
+for (const name of ['Google Sheets - Provider Lease Verify', 'Verify Provider Lease Before Side Effect']) if (!phase07NodesByName[name]) errors.push(`Phase 07 corrective workflow must include ${name}.`);
+const identityBootstrapNode = phase07NodesByName['Google Sheets - Persist Job Identity'];
+if (identityBootstrapNode?.parameters?.operation !== 'update' || JSON.stringify(identityBootstrapNode?.parameters?.columns?.matchingColumns) !== JSON.stringify(['row_number'])) errors.push('Initial Row_ID persistence must update the exact virtual Google Sheets row_number.');
+if (!String(phase07NodesByName['Prepare Job Identity Row']?.parameters?.jsCode ?? '').includes('Google Sheets source row_number')) errors.push('Prepare Job Identity Row must fail closed without the source row_number.');
+const phase07DurableCode = String(phase07NodesByName['Build Durable Work Items']?.parameters?.jsCode ?? '');
+if (!phase07DurableCode.includes('providerPendingByJob') || !phase07DurableCode.includes('operationRecovery:providerPending') || !phase07DurableCode.includes('latestWritebackByRepair')) errors.push('Phase 07 corrective workflow must reconcile PROVIDER_PENDING at startup.');
+const phase07EnvelopeCode = String(phase07NodesByName['Prepare Provider Operation Envelope']?.parameters?.jsCode ?? '');
+if (!phase07EnvelopeCode.includes('ready.invoice') || !phase07EnvelopeCode.includes('cannot enter PROVIDER_PENDING without a stable provider reference')) errors.push('Phase 07 corrective workflow must persist an exact stable reference before provider work.');
+const gitAttributes = await readFile('.gitattributes', 'utf8');
+if (!gitAttributes.includes('* text=auto eol=lf')) errors.push('Release source must enforce LF text checkout through .gitattributes.');
+const tsConfig = JSON.parse(await readFile('tsconfig.json', 'utf8'));
+if (tsConfig?.compilerOptions?.newLine !== 'lf') errors.push('TypeScript build output must enforce LF newlines for deterministic cross-platform package hashing.');
+const phase07EngineScript = await readFile('scripts/phase07-n8n-engine-smoke.mjs', 'utf8');
+if (!phase07EngineScript.includes('npm_execpath') || !phase07EngineScript.includes('process.execPath')) errors.push('Phase 07 engine harness must use a cross-platform npm CLI launcher.');
+if (!phase07EngineScript.includes("'import:workflow'") || !phase07EngineScript.includes("'export:workflow'")) errors.push('Phase 07 engine harness must import/export the complete canonical workflow.');
+if (!phase07EngineScript.includes('packageContentSha256') || !phase07EngineScript.includes('engineBindingSha256')) errors.push('Phase 07 engine harness must emit a deterministic package-content engine binding.');
+const phase07GateScript = await readFile('scripts/phase07-final-release-gate.mjs', 'utf8');
+if (!phase07GateScript.includes('evidence/phase07/artifacts') || !phase07GateScript.includes('artifact hash mismatch') || !phase07GateScript.includes("new Set(['.json', '.txt', '.log', '.md'])")) errors.push('Phase 07 final gate must verify contained sanitized evidence artifact files and their actual SHA-256 hashes.');
+if (phase07EngineScript.includes("tarballPath, '--ignore-scripts'")) errors.push('Phase 07 exact n8n install must allow dependency install scripts.');
+const phase07Redaction = await readFile('shared/security/Redaction.ts', 'utf8');
+if (!phase07Redaction.includes('replaceShortSecret') || !phase07Redaction.includes('Short alphanumeric secrets')) errors.push('Phase 07 short-secret boundary-aware redaction is missing.');
+await requireText('docs/developer/phase07-final-release-gate.md', ['n8n@2.31.6', 'one-recipient', 'five-recipient', 'PENDING']);
+for (const template of ['n8n-engine-smoke.template.json', 'canary-evidence.template.json', 'pilot-evidence.template.json']) {
+  const evidence = JSON.parse(await readFile(`evidence/phase07/${template}`, 'utf8'));
+  if (evidence.status !== 'PENDING') errors.push(`evidence/phase07/${template} must remain PENDING.`);
+}
+
 await requireText('docs/developer/odoo-email-evidence-contract.md', ['account.move.send.wizard', '`QUEUED`', '`SENT`', '`FAILED`', '`UNVERIFIED`']);
 await requireText('docs/developer/lifecycle-retry-resume.md', ['invoice.post', 'invoice.send_email', 'EMAIL_UNVERIFIED']);
 await requireText('template/providers/odoo/LIVE_TEST_CHECKLIST.md', ['complete project ZIP', 'n8n Community Nodes', 'recipient inbox']);
 
+const ciWorkflow = await readFile('.github/workflows/ci.yml', 'utf8');
+if (!ciWorkflow.includes('verify:phase07:engine')) errors.push('CI workflow must execute the Phase 07 n8n 2.31.6 engine smoke.');
 const releaseWorkflow = await readFile('.github/workflows/release.yml', 'utf8');
+if (!releaseWorkflow.includes('NPM_TOKEN is required for a tag release')) errors.push('Tag release must fail closed when NPM_TOKEN is missing.');
+if (!releaseWorkflow.includes('npm whoami --registry=https://registry.npmjs.org')) errors.push('Tag release must validate npm publication credentials.');
+if (releaseWorkflow.indexOf('Validate npm publication credentials') > releaseWorkflow.indexOf('Create GitHub Release')) errors.push('npm credential validation must run before GitHub release creation.');
 for (const fragment of [
   'workflows/InvoiceRouter-v2-master-universal.json',
   'workflows/InvoiceRouter-v1.6-simple-bulk-email.json',
@@ -272,6 +376,8 @@ for (const fragment of [
   'template/status-writeback-columns.csv',
   'docs/troubleshooting',
   'node scripts/audit-release-source.mjs release/bundle',
+  'verify:phase07:evidence',
+  'evidence/phase07',
 ]) {
   if (!releaseWorkflow.includes(fragment)) errors.push(`Release workflow must include ${fragment}.`);
 }

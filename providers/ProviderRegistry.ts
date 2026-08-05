@@ -145,6 +145,7 @@ function commonItems(invoice: IDataObject): IDataObject[] {
     quantity: Math.max(1, toFiniteNumber(item.quantity, 1)),
     unitPrice: toFiniteNumber(item.unitPrice ?? item.price ?? item.amount, 0),
     lineTotal: toFiniteNumber(item.lineTotal, toFiniteNumber(item.quantity, 1) * toFiniteNumber(item.unitPrice ?? item.price ?? item.amount, 0)),
+    discount: Math.max(0, Math.min(100, toFiniteNumber(item.discount, 0))),
   }));
 }
 
@@ -340,6 +341,15 @@ export function buildProviderRequest(input: ProviderBuildInput): ProviderBuildRe
       remarks: toStringValue(invoice.notes),
     };
   } else if (providerId === 'odoo') {
+    const totals = isRecord(invoice.totals) ? invoice.totals : {};
+    const unsupportedTotals = [
+      ['tax', toFiniteNumber(totals.tax, 0)],
+      ['global discount', toFiniteNumber(totals.discount, 0)],
+      ['shipping', toFiniteNumber(totals.shippingCharge, 0)],
+    ].filter((entry) => Math.abs(Number(entry[1])) > 0.000001);
+    if (unsupportedTotals.length > 0) {
+      errors.push(`Odoo built-in mapping does not apply ${unsupportedTotals.map((entry) => entry[0]).join(', ')} totals. Set these values to 0 or map them explicitly before sending.`);
+    }
     body = {
       customer: {
         lookup: 'email',
@@ -354,7 +364,7 @@ export function buildProviderRequest(input: ProviderBuildInput): ProviderBuildRe
         due_date: toStringValue(invoice.dueDate),
         currency: toStringValue(invoice.currency, 'USD'),
         notes: toStringValue(invoice.notes),
-        line_items: items.map((item) => ({ name: item.description || item.name || '', quantity: item.quantity ?? 1, price_unit: item.unitPrice ?? 0 })),
+        line_items: items.map((item) => ({ name: item.description || item.name || '', quantity: item.quantity ?? 1, price_unit: item.unitPrice ?? 0, discount: item.discount ?? 0 })),
       },
       automation: {
         provider: 'odoo',

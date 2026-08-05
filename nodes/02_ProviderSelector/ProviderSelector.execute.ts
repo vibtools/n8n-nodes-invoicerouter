@@ -1,5 +1,7 @@
 import type { IDataObject, IExecuteFunctions, INodeExecutionData, JsonValue } from '../../shared/types/N8n';
 import { allocateProvider, applyProviderFeedback, executionIdentity, publicPoolSnapshot, readPersistedFeedback, type AllocationStrategy } from '../../shared/runtime/RuntimeStore';
+import { admitCampaignJob } from '../../shared/runtime/CampaignStore';
+import { safeInputData } from '../../shared/utils/Input';
 import { getByPath, isRecord, parseJsonArray, slug, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
 
 interface ConditionalRoute {
@@ -51,20 +53,23 @@ function resolveConditionalRoute(item: IDataObject, rules: JsonValue[], provider
   return routeFromRules(item, rules) ?? routeFromPaths(item, providerPath, actionPath, environmentPath);
 }
 
-function blockedAllocation(job: INodeExecutionData, itemIndex: number, workerId: string, scopeKey: string, routing: IDataObject, message: string): INodeExecutionData {
+function blockedAllocation(job: INodeExecutionData, itemIndex: number, workerId: string, scopeKey: string, routing: IDataObject, message: string, status = 'BLOCKED', campaignSafety: IDataObject = {}): INodeExecutionData {
   return {
     json: {
       ...job.json,
-      providerAllocation: { status: 'BLOCKED', workerId, scopeKey, routing, reason: message },
+      providerAllocation: { status, workerId, scopeKey, routing, reason: message, campaignSafety },
       providerPool: publicPoolSnapshot(scopeKey),
     },
-    pairedItem: { item: itemIndex, input: 1 },
+    pairedItem: { item: itemIndex },
   };
 }
 
 export async function execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-  const providerItems = this.getInputData(0);
-  const workItems = this.getInputData(1);
+  const primaryItems = safeInputData(this, 0);
+  const secondaryItems = safeInputData(this, 1);
+  const primaryLooksLikeWork = primaryItems.some((item) => isRecord(item.json.job) || isRecord(item.json.recipient) || isRecord(item.json.providerLibrary));
+  const providerItems = secondaryItems.length > 0 || !primaryLooksLikeWork ? primaryItems : [];
+  const workItems = secondaryItems.length > 0 ? secondaryItems : primaryLooksLikeWork ? primaryItems : [];
   const embeddedLibrary = workItems.find((item) => isRecord(item.json.providerLibrary))?.json.providerLibrary;
   const library = providerItems.find((item) => Array.isArray(item.json.providers))?.json ?? providerItems[0]?.json ?? (isRecord(embeddedLibrary) ? embeddedLibrary : {});
   const workRuntime = workItems.length > 0 && isRecord(workItems[0].json.runtime) ? workItems[0].json.runtime : {};
@@ -102,7 +107,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
 
   const jobs = workItems.length > 0 ? workItems : [{ json: {} }];
   const output: INodeExecutionData[] = [];
-  jobs.forEach((job, itemIndex) => {
+  for (const [itemIndex, job] of jobs.entries()) {
     const jobRecord = isRecord(job.json.job) ? job.json.job : {};
     const failoverState = isRecord(job.json.failoverState) ? job.json.failoverState : isRecord(jobRecord.failoverState) ? jobRecord.failoverState : {};
     const attemptedProfileIds = Array.isArray(failoverState.attemptedProfileIds) ? failoverState.attemptedProfileIds.map((value) => toStringValue(value)).filter(Boolean) : [];
@@ -127,22 +132,33 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       const message = 'Conditional routing is required, but this item did not match a routing rule or routing fields.';
       if (unmatchedRouteBehavior === 'error') throw new Error(`${message} Worker: ${workerId}.`);
       output.push(blockedAllocation(job, itemIndex, workerId, scopeKey, routing, message));
-      return;
+      continue;
     }
+    const campaignConfig = isRecord(jobRecord.campaignSafety) ? jobRecord.campaignSafety : {};
+    const campaignId = toStringValue(jobRecord.campaignId, 'default-campaign');
+    const jobId = toStringValue(jobRecord.jobId, workerId);
+    const campaignSafety = await admitCampaignJob(this, { scopeKey, campaignId, jobId, config: campaignConfig });
+    if (campaignSafety.approved !== true) {
+      const status = toStringValue(campaignSafety.status, 'QUEUED').toUpperCase();
+      output.push(blockedAllocation(job, itemIndex, workerId, scopeKey, routing, toStringValue(campaignSafety.reason, 'Campaign is not currently eligible for sending.'), status, campaignSafety));
+      continue;
+    }
+    const invoiceTemplate = isRecord(job.json.invoiceTemplate) ? job.json.invoiceTemplate : {};
+    const requiredCurrency = toStringValue(invoiceTemplate.currency).trim().toUpperCase();
     const allocation = allocateProvider(scopeKey, {
       strategy, filters: itemFilters, workerId, workflowId: identity.workflowId, executionId: identity.executionId,
       lockTimeoutMs, maxRequestsPerMinute, circuitBreakerThreshold, holdLock: processingMode === 'parallel',
-      excludeProfileIds: requiredProfileId ? [] : attemptedProfileIds, failoverGroup, requiredProfileId,
+      excludeProfileIds: requiredProfileId ? [] : attemptedProfileIds, failoverGroup, requiredProfileId, requiredCurrency,
     });
     if (!allocation) {
       if (!queueWhenUnavailable) throw new Error(`No eligible provider account is available for worker ${workerId}.`);
-      output.push({ json: { ...job.json, providerAllocation: { status: 'QUEUED', workerId, scopeKey, routing, attemptedProfileIds, failoverGroup, requiredProfileId }, providerPool: publicPoolSnapshot(scopeKey) }, pairedItem: { item: itemIndex, input: 1 } });
-      return;
+      output.push({ json: { ...job.json, providerAllocation: { status: 'QUEUED', workerId, scopeKey, routing, attemptedProfileIds, failoverGroup, requiredProfileId, requiredCurrency, campaignSafety, reason: requiredCurrency ? `No eligible provider account is currently available for currency ${requiredCurrency}.` : 'No eligible provider account is currently available.' }, providerPool: publicPoolSnapshot(scopeKey) }, pairedItem: { item: itemIndex } });
+      continue;
     }
     output.push({
-      json: { ...job.json, providerAllocation: { ...allocation, status: 'ALLOCATED', workerId, scopeKey, routing, attemptedProfileIds, failoverGroup, requiredProfileId }, providerPool: publicPoolSnapshot(scopeKey) },
-      pairedItem: { item: itemIndex, input: workItems.length > 0 ? 1 : 0 },
+      json: { ...job.json, providerAllocation: { ...allocation, status: 'ALLOCATED', workerId, scopeKey, routing, attemptedProfileIds, failoverGroup, requiredProfileId, requiredCurrency, campaignSafety }, providerPool: publicPoolSnapshot(scopeKey) },
+      pairedItem: { item: itemIndex },
     });
-  });
+  }
   return [output];
 }

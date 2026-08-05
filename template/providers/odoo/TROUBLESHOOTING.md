@@ -31,7 +31,19 @@ Odoo accepted the operation but has not exposed terminal sent evidence. Inspect 
 
 ## Email status is `UNVERIFIED`
 
-The wizard completed, but sufficient evidence could not be read. Review the invoice chatter, notifications, outgoing mail, PDF, and inbox. `UNVERIFIED` is manual-review only and is not automatically retried.
+The send operation completed or may have executed, but sufficient current-attempt evidence could not be read. Review the invoice chatter, notifications, outgoing mail, PDF, and inbox. `UNVERIFIED` is manual-review only and is not automatically retried.
+
+## Wizard transport timeout
+
+Read current-attempt evidence before deciding the result. Sent evidence is `SENT`; outgoing/pending evidence is `QUEUED`; exception/bounce/cancel evidence is `FAILED`; no terminal evidence after an ambiguous send is `UNVERIFIED`. Never force an automatic resend from the timeout alone.
+
+## Duplicate contacts found
+
+InvoiceRouter blocks when more than one Odoo contact matches the recipient email. Correct or merge the contacts before rerunning. Mixed-case emails are matched case-insensitively.
+
+## PDF evidence is invalid
+
+Inspect `email_evidence.pdfEvidence`. Confirm `application/pdf`, `res_model=account.move`, the current invoice ID, current-attempt message attachment, and the invoice's `invoice_pdf_report_id`.
 
 ## Status is `SENT` but inbox is empty
 
@@ -64,3 +76,19 @@ Use a synchronized workflow. Valid n8n mappings look like:
 ```text
 ={{ $json.email_send_status }}
 ```
+
+## Active campaign lease blocks the run
+
+Inspect `campaign_report.Run_State`, `Run_ID`, and `Lock_Expires_At`. Do not clear the lease while its n8n execution is active. For an interrupted run, reconcile n8n execution status and `writeback_queue` before waiting for expiry or deliberately resetting the lease.
+
+## Mixed pending campaigns found
+
+The v2.1.1 production workflow accepts one pending `Campaign_ID` per execution. Isolate the intended campaign rows and rerun; do not bypass the guard or merge unrelated campaigns under the default ID.
+
+## Capability or issuer error
+
+For `ODOO_VERSION_UNSUPPORTED`, use a supported Odoo 18/19 deployment; do not force execution. For `ISSUER_MISMATCH`, make `Issuer_Key` and authenticated Odoo company identity consistent across the enabled failover group, or separate the accounts into different groups.
+
+## Report stale writer or revision gap
+
+Compare the candidate `Base_Revision` and `Writer_Run_ID` with the current `Revision` and active campaign `Run_ID`. Stop overlapping executions. Preserve the pending writeback envelope. Already-applied or older repair payloads are skipped; a forward revision gap remains blocked for manual reconciliation. Do not lower the Sheet revision or copy an older aggregate over a newer row.

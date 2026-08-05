@@ -3,6 +3,7 @@ import { finalizeInvoiceSend, getSecretMaterial, reserveInvoiceSend } from '../.
 import { redactJson, redactString, secretValues } from '../../shared/security/Redaction';
 import { isRecord, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
 import { declarativeRecipePlan, executeDeclarativeProviderRecipe } from '../../providers/DeclarativeRecipeRuntime';
+import { odooCapabilityProfileByMajor, type OdooCapabilityProfile } from '../../shared/odoo/OdooCapabilityManifest';
 
 function secretVariables(secret: { apiKey: string; apiSecret: string; extraValue: string; username?: string; password?: string; database?: string }): Record<string, string> {
   const variables: Record<string, string> = {
@@ -62,13 +63,70 @@ function responseParts(response: unknown): { statusCode: number; headers: IDataO
 }
 
 
+class OdooOperationError extends Error {
+  readonly details: IDataObject;
+
+  constructor(message: string, details: IDataObject = {}) {
+    super(message);
+    this.name = 'OdooOperationError';
+    this.details = details;
+  }
+}
+
+function odooStructuredClassification(message: string): string {
+  const text = message.toLowerCase();
+  if (/database .*does not exist|unknown database|database not found/.test(text)) return 'CONFIGURATION_ERROR';
+  if (/authentication|invalid login|invalid password|access denied/.test(text)) return 'AUTHENTICATION_ERROR';
+  if (/forbidden|not allowed|permission|access rights|authorization/.test(text)) return 'AUTHORIZATION_ERROR';
+  if (/method .*does not exist|has no attribute|unknown field|invalid field|model .*does not exist|not found in registry|missing required fields/.test(text)) return 'CONFIGURATION_ERROR';
+  if (/currency/.test(text)) return 'CONFIGURATION_ERROR';
+  if (/validation|invalid value|required field|cannot create|cannot post/.test(text)) return 'VALIDATION_ERROR';
+  return 'PROVIDER_ERROR';
+}
+
+function odooErrorDetails(error: unknown): IDataObject {
+  return error instanceof OdooOperationError ? error.details : {};
+}
+
 function valueFromRecord(value: unknown, key: string): unknown {
   return isRecord(value) ? value[key] : undefined;
 }
 
 type OdooEmailStatus = 'NOT_REQUESTED' | 'PENDING' | 'QUEUED' | 'SENT' | 'FAILED' | 'UNVERIFIED';
 
+
 type LifecycleResumeStage = 'invoice.create' | 'invoice.post' | 'invoice.send_email';
+
+function odooCapabilityForRequest(request: IDataObject): OdooCapabilityProfile {
+  const compatibility = isRecord(request.odooCompatibility) ? request.odooCompatibility : {};
+  const issuerCompatibility = isRecord(request.issuerCompatibility) ? request.issuerCompatibility : {};
+  if (compatibility.supported === false) {
+    throw new OdooOperationError('Odoo capability profile is explicitly unsupported for this provider account.', {
+      provider: 'odoo', category: 'configuration', errorType: 'CONFIGURATION_ERROR', lifecycleStage: 'compatibility.guard',
+      definitiveNoSideEffect: true, ambiguousSideEffect: false,
+    });
+  }
+  if (issuerCompatibility.compatible === false || toStringValue(issuerCompatibility.status).toUpperCase() === 'ISSUER_MISMATCH') {
+    throw new OdooOperationError('Odoo legal-issuer compatibility is not verified for this provider account.', {
+      provider: 'odoo', category: 'configuration', errorType: 'CONFIGURATION_ERROR', lifecycleStage: 'issuer.guard',
+      definitiveNoSideEffect: true, ambiguousSideEffect: false,
+    });
+  }
+  const declaredMajor = toFiniteNumber(compatibility.majorVersion ?? request.odooMajorVersion, 0);
+  if (declaredMajor > 0) {
+    const declared = odooCapabilityProfileByMajor(declaredMajor);
+    if (!declared) {
+      throw new OdooOperationError(`Unsupported Odoo major version ${declaredMajor}.`, {
+        provider: 'odoo', category: 'configuration', errorType: 'CONFIGURATION_ERROR', lifecycleStage: 'compatibility.guard',
+        definitiveNoSideEffect: true, ambiguousSideEffect: false, majorVersion: declaredMajor,
+      });
+    }
+    return declared;
+  }
+  // Compatibility workflows that predate Phase 04 retain the common Odoo 19 field surface.
+  // The canonical production workflow always provides a preflight-derived major version.
+  return odooCapabilityProfileByMajor(19)!;
+}
 
 function odooConfig(secret: { apiKey: string; apiSecret: string; username?: string; password?: string; database?: string; extraConfig?: IDataObject }): IDataObject {
   const extraConfig = isRecord(secret.extraConfig) ? secret.extraConfig : {};
@@ -87,14 +145,52 @@ function odooPayload(id: string, service: string, method: string, args: JsonValu
   return { jsonrpc: '2.0', method: 'call', params: { service, method, args }, id };
 }
 
-async function odooJsonRpc(context: IExecuteFunctions, url: string, timeout: number, body: IDataObject, secrets: string[]): Promise<JsonValue> {
-  const response = await context.helpers.httpRequest({
-    method: 'POST', url, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body,
-    json: true, timeout, returnFullResponse: true, ignoreHttpStatusErrors: true,
-  });
+async function odooJsonRpc(
+  context: IExecuteFunctions,
+  url: string,
+  timeout: number,
+  body: IDataObject,
+  secrets: string[],
+  meta: IDataObject = {},
+): Promise<JsonValue> {
+  let response: unknown;
+  try {
+    response = await context.helpers.httpRequest({
+      method: 'POST', url, headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body,
+      json: true, timeout, returnFullResponse: true, ignoreHttpStatusErrors: true,
+    });
+  } catch (error) {
+    const message = redactString(error instanceof Error ? error.message : String(error), secrets);
+    const method = toStringValue(meta.method);
+    const sideEffecting = ['create', 'write', 'unlink', 'action_post', 'action_send_and_print'].includes(method);
+    throw new OdooOperationError(`Odoo transport error${method ? ` during ${toStringValue(meta.model)}.${method}` : ''}: ${message}`, {
+      provider: 'odoo', category: 'transport', errorType: 'NETWORK_ERROR', model: meta.model, method,
+      lifecycleStage: meta.lifecycleStage, ambiguousSideEffect: sideEffecting, definitiveNoSideEffect: !sideEffecting,
+    });
+  }
   const parts = responseParts(response);
-  if (parts.statusCode < 200 || parts.statusCode >= 300) throw new Error(`Odoo JSON-RPC HTTP ${parts.statusCode}: ${redactString(JSON.stringify(parts.body), secrets)}`);
-  if (isRecord(parts.body) && parts.body.error !== undefined) throw new Error(`Odoo JSON-RPC error: ${redactString(JSON.stringify(parts.body.error), secrets)}`);
+  if (parts.statusCode < 200 || parts.statusCode >= 300) {
+    const message = `Odoo JSON-RPC HTTP ${parts.statusCode}: ${redactString(JSON.stringify(parts.body), secrets)}`;
+    const method = toStringValue(meta.method);
+    const sideEffecting = ['create', 'write', 'unlink', 'action_post', 'action_send_and_print'].includes(method);
+    const ambiguousSideEffect = sideEffecting && (parts.statusCode === 0 || parts.statusCode >= 500);
+    throw new OdooOperationError(message, {
+      provider: 'odoo', category: 'http', errorType: parts.statusCode >= 500 ? 'SERVER_ERROR' : 'CONFIGURATION_ERROR',
+      httpStatus: parts.statusCode, model: meta.model, method, lifecycleStage: meta.lifecycleStage,
+      ambiguousSideEffect, definitiveNoSideEffect: !ambiguousSideEffect,
+    });
+  }
+  if (isRecord(parts.body) && parts.body.error !== undefined) {
+    const errorObject = isRecord(parts.body.error) ? parts.body.error : {};
+    const data = isRecord(errorObject.data) ? errorObject.data : {};
+    const rawMessage = toStringValue(data.message ?? errorObject.message ?? JSON.stringify(parts.body.error), 'Unknown Odoo JSON-RPC error.');
+    const message = redactString(rawMessage, secrets);
+    throw new OdooOperationError(`Odoo JSON-RPC error${meta.model ? ` in ${toStringValue(meta.model)}.${toStringValue(meta.method)}` : ''}: ${message}`, {
+      provider: 'odoo', category: 'jsonrpc', errorType: odooStructuredClassification(message),
+      rpcCode: errorObject.code, rpcName: data.name, model: meta.model, method: meta.method,
+      lifecycleStage: meta.lifecycleStage, ambiguousSideEffect: false, definitiveNoSideEffect: true,
+    });
+  }
   return isRecord(parts.body) ? (parts.body.result ?? null) : null;
 }
 
@@ -110,10 +206,18 @@ async function odooExecuteKw(context: IExecuteFunctions, input: {
   kwargs?: IDataObject;
   id: string;
   secrets: string[];
+  lifecycleStage?: string;
 }): Promise<JsonValue> {
   const positionalArgs: JsonValue[] = [input.database, input.uid, input.password, input.model, input.method, input.args];
   if (input.kwargs && Object.keys(input.kwargs).length > 0) positionalArgs.push(input.kwargs);
-  return odooJsonRpc(context, input.url, input.timeout, odooPayload(input.id, 'object', 'execute_kw', positionalArgs), input.secrets);
+  return odooJsonRpc(
+    context,
+    input.url,
+    input.timeout,
+    odooPayload(input.id, 'object', 'execute_kw', positionalArgs),
+    input.secrets,
+    { model: input.model, method: input.method, lifecycleStage: input.lifecycleStage ?? input.id },
+  );
 }
 
 async function tryOdooExecuteKw(
@@ -130,12 +234,18 @@ async function tryOdooExecuteKw(
     kwargs?: IDataObject;
     id: string;
     secrets: string[];
+    lifecycleStage?: string;
   },
-): Promise<{ success: boolean; result: JsonValue; errorMessage: string }> {
+): Promise<{ success: boolean; result: JsonValue; errorMessage: string; errorDetails: IDataObject }> {
   try {
-    return { success: true, result: await odooExecuteKw(context, input), errorMessage: '' };
+    return { success: true, result: await odooExecuteKw(context, input), errorMessage: '', errorDetails: {} };
   } catch (error) {
-    return { success: false, result: null, errorMessage: error instanceof Error ? error.message : String(error) };
+    return {
+      success: false,
+      result: null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorDetails: odooErrorDetails(error),
+    };
   }
 }
 
@@ -158,6 +268,45 @@ function odooStringList(value: unknown): string[] {
   return value.map((entry) => toStringValue(entry).trim()).filter(Boolean);
 }
 
+function normalizeEmailAddress(value: unknown): string {
+  return toStringValue(value).trim().toLowerCase();
+}
+
+function extractEmailAddresses(value: unknown): string[] {
+  const text = toStringValue(value);
+  const matches = text.match(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+/gi) ?? [];
+  return [...new Set(matches.map((entry) => normalizeEmailAddress(entry)).filter(Boolean))];
+}
+
+function matchingOdooPartners(records: IDataObject[], recipientEmail: string): IDataObject[] {
+  const normalizedRecipient = normalizeEmailAddress(extractEmailAddresses(recipientEmail)[0] ?? recipientEmail);
+  return records.filter((record) => extractEmailAddresses(record.email).includes(normalizedRecipient));
+}
+
+function assertUniqueOdooPartner(records: IDataObject[], recipientEmail: string, details: IDataObject): IDataObject | undefined {
+  const matches = matchingOdooPartners(records, recipientEmail);
+  if (records.length > 1 || matches.length > 1) {
+    throw new OdooOperationError(`Odoo partner lookup found multiple contacts for recipient email ${recipientEmail}. Automatic customer selection was blocked.`, {
+      provider: 'odoo', category: 'reconciliation', errorType: 'AMBIGUOUS_PROVIDER_RESULT',
+      model: 'res.partner', method: 'search_read', lifecycleStage: 'customer.lookup',
+      definitiveNoSideEffect: details.definitiveNoSideEffect ?? true,
+      ambiguousSideEffect: details.ambiguousSideEffect ?? false,
+      reconciliation: 'multiple_partner_email_matches', matchCount: Math.max(records.length, matches.length),
+    });
+  }
+  if (matches.length === 1) return matches[0];
+  if (records.length === 1) {
+    throw new OdooOperationError(`Odoo partner lookup returned a contact whose email did not exactly match ${recipientEmail}. Automatic customer selection was blocked.`, {
+      provider: 'odoo', category: 'reconciliation', errorType: 'AMBIGUOUS_PROVIDER_RESULT',
+      model: 'res.partner', method: 'search_read', lifecycleStage: 'customer.lookup',
+      definitiveNoSideEffect: details.definitiveNoSideEffect ?? true,
+      ambiguousSideEffect: details.ambiguousSideEffect ?? false,
+      reconciliation: 'partner_email_exact_match_failed', matchCount: 1,
+    });
+  }
+  return undefined;
+}
+
 function odooEmailFailureText(records: IDataObject[]): string {
   const messages = records.flatMap((record) => [toStringValue(record.failure_reason), toStringValue(record.failure_type)]).filter(Boolean);
   return [...new Set(messages)].join('; ');
@@ -166,6 +315,7 @@ function odooEmailFailureText(records: IDataObject[]): string {
 function odooEmailEvidence(input: {
   wizardCompleted: boolean;
   wizardError: string;
+  wizardErrorDetails: IDataObject;
   messages: IDataObject[];
   notifications: IDataObject[];
   mails: IDataObject[];
@@ -179,9 +329,14 @@ function odooEmailEvidence(input: {
   const queued = notificationStatuses.some((status) => ['ready', 'process', 'pending'].includes(status)) || mailStates.includes('outgoing');
   const failureText = odooEmailFailureText([...input.notifications, ...input.mails]);
   const verificationText = input.verificationErrors.filter(Boolean).join('; ');
+  const ambiguousWizardTransport = input.wizardErrorDetails.ambiguousSideEffect === true &&
+    toStringValue(input.wizardErrorDetails.method) === 'action_send_and_print';
   const evidence: IDataObject = {
     schemaVersion: '1.0',
     wizardCompleted: input.wizardCompleted,
+    wizardError: input.wizardError,
+    wizardErrorDetails: input.wizardErrorDetails,
+    ambiguousWizardTransport,
     messageIds: input.messages.map((record) => toFiniteNumber(record.id, 0)).filter((id) => id > 0),
     notificationIds: input.notifications.map((record) => toFiniteNumber(record.id, 0)).filter((id) => id > 0),
     notificationStatuses,
@@ -191,10 +346,19 @@ function odooEmailEvidence(input: {
     mailFailureTypes: input.mails.map((record) => toStringValue(record.failure_type)).filter(Boolean),
     verificationErrors: input.verificationErrors,
   };
-  if (!input.wizardCompleted) return { status: 'FAILED', errorMessage: input.wizardError || 'Odoo invoice send wizard did not complete.', evidence };
-  if (failed) return { status: 'FAILED', errorMessage: failureText || 'Odoo reported an email notification or outgoing-mail failure.', evidence };
   if (sent) return { status: 'SENT', errorMessage: '', evidence };
   if (queued) return { status: 'QUEUED', errorMessage: '', evidence };
+  if (failed) return { status: 'FAILED', errorMessage: failureText || 'Odoo reported an email notification or outgoing-mail failure.', evidence };
+  if (!input.wizardCompleted) {
+    if (ambiguousWizardTransport) {
+      return {
+        status: 'UNVERIFIED',
+        errorMessage: [input.wizardError, 'No attempt-bound terminal Odoo mail evidence was found after the ambiguous send operation.', verificationText].filter(Boolean).join('; '),
+        evidence,
+      };
+    }
+    return { status: 'FAILED', errorMessage: input.wizardError || 'Odoo invoice send wizard did not complete.', evidence };
+  }
   return {
     status: 'UNVERIFIED',
     errorMessage: verificationText || 'Odoo send wizard completed, but no readable mail.notification or mail.mail terminal evidence was found.',
@@ -308,6 +472,7 @@ function lifecycleResult(input: {
 }
 
 async function executeOdooInvoiceEmail(context: IExecuteFunctions, input: {
+  capabilityProfile: OdooCapabilityProfile;
   url: string;
   timeout: number;
   database: string;
@@ -315,6 +480,7 @@ async function executeOdooInvoiceEmail(context: IExecuteFunctions, input: {
   password: string;
   invoiceId: number;
   partnerId: number;
+  recipientEmail: string;
   transactionId: string;
   emailForceSend: boolean;
   secrets: string[];
@@ -333,7 +499,7 @@ async function executeOdooInvoiceEmail(context: IExecuteFunctions, input: {
   const verificationErrors: string[] = baselineReadable ? [] : [beforeMessages.errorMessage || 'Odoo mail.message baseline could not be read.'];
   const wizardCreate = await tryOdooExecuteKw(context, {
     url: input.url, timeout: input.timeout, database: input.database, uid: input.uid, password: input.password,
-    model: 'account.move.send.wizard', method: 'create', args: [{
+    model: 'account.move.send.wizard', method: input.capabilityProfile.senderMethods.wizardCreate, args: [{
       move_id: input.invoiceId,
       sending_method_checkboxes: { email: { checked: true, label: 'Email' } },
       mail_partner_ids: [[6, 0, [input.partnerId]]],
@@ -343,44 +509,50 @@ async function executeOdooInvoiceEmail(context: IExecuteFunctions, input: {
   const wizardId = wizardCreate.success ? toFiniteNumber(wizardCreate.result, 0) : 0;
   let wizardCompleted = false;
   let wizardError = wizardCreate.errorMessage;
+  let wizardErrorDetails = wizardCreate.errorDetails;
   if (wizardId > 0) {
     const wizardRead = await tryOdooExecuteKw(context, {
       url: input.url, timeout: input.timeout, database: input.database, uid: input.uid, password: input.password,
-      model: 'account.move.send.wizard', method: 'read',
-      args: [[wizardId] as unknown as JsonValue, ['move_id', 'sending_methods', 'sending_method_checkboxes', 'mail_partner_ids', 'alerts']],
+      model: 'account.move.send.wizard', method: input.capabilityProfile.senderMethods.wizardRead,
+      args: [[wizardId] as unknown as JsonValue, input.capabilityProfile.senderFields.wizardRead],
       kwargs: { context: sendContext }, id: `${input.transactionId}-invoice-send-wizard-read`, secrets: input.secrets,
     });
     const wizard = odooRecords(wizardRead.result)[0];
     const sendingMethods = odooStringList(wizard?.sending_methods);
     const mailPartnerIds = odooNumberList(wizard?.mail_partner_ids);
-    if (!wizardRead.success) wizardError = wizardRead.errorMessage;
+    if (!wizardRead.success) {
+      wizardError = wizardRead.errorMessage;
+      wizardErrorDetails = wizardRead.errorDetails;
+    }
     else if (!sendingMethods.includes('email')) wizardError = 'Odoo invoice send wizard did not select the email sending method.';
     else if (mailPartnerIds.length === 0) wizardError = 'Odoo invoice send wizard did not resolve an email recipient.';
     else {
       const wizardSend = await tryOdooExecuteKw(context, {
         url: input.url, timeout: input.timeout, database: input.database, uid: input.uid, password: input.password,
-        model: 'account.move.send.wizard', method: 'action_send_and_print', args: [[wizardId] as unknown as JsonValue],
+        model: 'account.move.send.wizard', method: input.capabilityProfile.senderMethods.wizardSend, args: [[wizardId] as unknown as JsonValue],
         kwargs: { context: sendContext }, id: `${input.transactionId}-invoice-send-wizard-execute`, secrets: input.secrets,
       });
       wizardCompleted = wizardSend.success;
       wizardError = wizardSend.errorMessage;
+      wizardErrorDetails = wizardSend.errorDetails;
     }
   }
   const afterMessages = await tryOdooExecuteKw(context, {
     url: input.url, timeout: input.timeout, database: input.database, uid: input.uid, password: input.password,
-    model: 'mail.message', method: 'search_read', args: [[['model', '=', 'account.move'], ['res_id', '=', input.invoiceId]] as unknown as JsonValue],
-    kwargs: { fields: ['id', 'message_type', 'subject', 'date', 'author_id', 'partner_ids', 'attachment_ids'], order: 'id desc', limit: 100 },
+    model: 'mail.message', method: input.capabilityProfile.senderMethods.messageSearch, args: [[['model', '=', 'account.move'], ['res_id', '=', input.invoiceId]] as unknown as JsonValue],
+    kwargs: { fields: input.capabilityProfile.senderFields.messageRead, order: 'id desc', limit: 100 },
     id: `${input.transactionId}-mail-message-after`, secrets: input.secrets,
   });
   if (!afterMessages.success) verificationErrors.push(afterMessages.errorMessage);
-  const newMessages = baselineReadable && afterMessages.success ? odooRecords(afterMessages.result).filter((record) => {
+  const allNewMessages = baselineReadable && afterMessages.success ? odooRecords(afterMessages.result).filter((record) => {
     const id = toFiniteNumber(record.id, 0);
     return id > 0 && !beforeMessageIds.includes(id);
   }) : [];
+  const newMessages = allNewMessages.filter((record) => odooNumberList(record.partner_ids).includes(input.partnerId));
   const newMessageIds = newMessages.map((record) => toFiniteNumber(record.id, 0)).filter((id) => id > 0);
   const attemptEvidenceBound = baselineReadable && afterMessages.success && newMessageIds.length > 0;
   if (baselineReadable && afterMessages.success && newMessageIds.length === 0) {
-    verificationErrors.push('Odoo send wizard completed without a new attempt-bound mail.message record. Historical invoice mail evidence was not accepted.');
+    verificationErrors.push('Odoo send wizard completed without a new attempt-bound mail.message addressed to the intended partner. Historical or other-recipient evidence was not accepted.');
   }
   const notificationDomain = attemptEvidenceBound
     ? [['mail_message_id', 'in', newMessageIds], ['notification_type', '=', 'email']]
@@ -390,22 +562,33 @@ async function executeOdooInvoiceEmail(context: IExecuteFunctions, input: {
     : [['id', '=', 0]];
   const notifications = await tryOdooExecuteKw(context, {
     url: input.url, timeout: input.timeout, database: input.database, uid: input.uid, password: input.password,
-    model: 'mail.notification', method: 'search_read', args: [notificationDomain as unknown as JsonValue],
-    kwargs: { fields: ['id', 'notification_type', 'notification_status', 'failure_type', 'failure_reason', 'res_partner_id', 'mail_message_id', 'mail_mail_id'], order: 'id desc', limit: 100 },
+    model: 'mail.notification', method: input.capabilityProfile.senderMethods.notificationSearch, args: [notificationDomain as unknown as JsonValue],
+    kwargs: { fields: input.capabilityProfile.senderFields.notificationRead, order: 'id desc', limit: 100 },
     id: `${input.transactionId}-mail-notification-after`, secrets: input.secrets,
   });
   if (!notifications.success) verificationErrors.push(notifications.errorMessage);
   const mails = await tryOdooExecuteKw(context, {
     url: input.url, timeout: input.timeout, database: input.database, uid: input.uid, password: input.password,
-    model: 'mail.mail', method: 'search_read', args: [mailDomain as unknown as JsonValue],
-    kwargs: { fields: ['id', 'state', 'failure_type', 'failure_reason', 'email_to', 'recipient_ids', 'mail_message_id'], order: 'id desc', limit: 100 },
+    model: 'mail.mail', method: input.capabilityProfile.senderMethods.mailSearch, args: [mailDomain as unknown as JsonValue],
+    kwargs: { fields: input.capabilityProfile.senderFields.mailRead, order: 'id desc', limit: 100 },
     id: `${input.transactionId}-mail-mail-after`, secrets: input.secrets,
   });
   if (!mails.success) verificationErrors.push(mails.errorMessage);
+  const intendedNotifications = attemptEvidenceBound ? odooRecords(notifications.result).filter((record) => odooRelationId(record.res_partner_id) === input.partnerId) : [];
+  const normalizedRecipientEmail = normalizeEmailAddress(extractEmailAddresses(input.recipientEmail)[0] ?? input.recipientEmail);
+  const intendedMails = attemptEvidenceBound ? odooRecords(mails.result).filter((record) => {
+    const partnerMatch = odooNumberList(record.recipient_ids).includes(input.partnerId);
+    const emailMatch = normalizedRecipientEmail && extractEmailAddresses(record.email_to).includes(normalizedRecipientEmail);
+    return partnerMatch || Boolean(emailMatch);
+  }) : [];
+  if (attemptEvidenceBound && intendedNotifications.length === 0 && intendedMails.length === 0) {
+    verificationErrors.push('Attempt-bound Odoo email evidence did not match the intended partner or recipient email.');
+  }
+  const recipientEvidenceBound = attemptEvidenceBound && (intendedNotifications.length > 0 || intendedMails.length > 0);
   const evaluated = odooEmailEvidence({
-    wizardCompleted, wizardError, messages: newMessages,
-    notifications: attemptEvidenceBound ? odooRecords(notifications.result) : [],
-    mails: attemptEvidenceBound ? odooRecords(mails.result) : [],
+    wizardCompleted, wizardError, wizardErrorDetails, messages: newMessages,
+    notifications: recipientEvidenceBound ? intendedNotifications : [],
+    mails: recipientEvidenceBound ? intendedMails : [],
     verificationErrors,
   });
   return {
@@ -420,14 +603,71 @@ async function executeOdooInvoiceEmail(context: IExecuteFunctions, input: {
       afterMessageReadSucceeded: afterMessages.success,
       beforeMessageCount: beforeMessageIds.length,
       newMessageCount: newMessageIds.length,
+      attemptAttachmentIds: [...new Set(newMessages.flatMap((record) => odooNumberList(record.attachment_ids)))],
+      rejectedOtherRecipientMessageCount: Math.max(0, allNewMessages.length - newMessages.length),
+      intendedNotificationCount: intendedNotifications.length,
+      intendedMailCount: intendedMails.length,
       attemptEvidenceBound,
+      recipientEvidenceBound,
     },
     wizardId,
   };
 }
 
+async function validateOdooPdfEvidence(context: IExecuteFunctions, input: {
+  capabilityProfile: OdooCapabilityProfile;
+  url: string;
+  timeout: number;
+  database: string;
+  uid: number;
+  password: string;
+  invoiceId: number;
+  expectedAttachmentId: number;
+  attemptAttachmentIds: number[];
+  transactionId: string;
+  secrets: string[];
+}): Promise<IDataObject> {
+  const attemptAttachmentIds = [...new Set(input.attemptAttachmentIds.filter((id) => id > 0))];
+  const candidateIds = [...new Set([...attemptAttachmentIds, input.expectedAttachmentId].filter((id) => id > 0))];
+  const base: IDataObject = {
+    schemaVersion: '1.0', expectedAttachmentId: input.expectedAttachmentId,
+    attemptAttachmentIds, candidateAttachmentIds: candidateIds,
+  };
+  if (attemptAttachmentIds.length === 0) {
+    return { ...base, status: 'MISSING_ATTEMPT_ATTACHMENT', readSucceeded: false, expectedReportBound: false, validPdfAttachmentIds: [] };
+  }
+  const attachments = await tryOdooExecuteKw(context, {
+    url: input.url, timeout: input.timeout, database: input.database, uid: input.uid, password: input.password,
+    model: 'ir.attachment', method: input.capabilityProfile.senderMethods.attachmentRead,
+    args: [candidateIds as unknown as JsonValue, input.capabilityProfile.senderFields.attachmentRead],
+    id: `${input.transactionId}-invoice-pdf-attachment-read`, secrets: input.secrets,
+  });
+  if (!attachments.success) {
+    return { ...base, status: 'UNREADABLE', readSucceeded: false, expectedReportBound: false, validPdfAttachmentIds: [], errorMessage: attachments.errorMessage, errorDetails: attachments.errorDetails };
+  }
+  const records = odooRecords(attachments.result);
+  const summaries = records.map((record) => {
+    const id = toFiniteNumber(record.id, 0);
+    const mimetype = toStringValue(record.mimetype).trim().toLowerCase();
+    const resModel = toStringValue(record.res_model).trim();
+    const resId = toFiniteNumber(record.res_id, 0);
+    const name = toStringValue(record.name).trim();
+    const valid = id > 0 && mimetype === 'application/pdf' && resModel === 'account.move' && resId === input.invoiceId;
+    return { id, name, mimetype, resModel, resId, valid };
+  });
+  const validPdfAttachmentIds = summaries.filter((record) => record.valid === true).map((record) => toFiniteNumber(record.id, 0));
+  const expectedReportBound = input.expectedAttachmentId > 0 &&
+    attemptAttachmentIds.includes(input.expectedAttachmentId) && validPdfAttachmentIds.includes(input.expectedAttachmentId);
+  const status = expectedReportBound ? 'VALID'
+    : input.expectedAttachmentId <= 0 ? 'MISSING_EXPECTED_REPORT_BINDING'
+      : !attemptAttachmentIds.includes(input.expectedAttachmentId) ? 'EXPECTED_REPORT_NOT_ATTEMPT_BOUND'
+        : 'INVALID_ATTACHMENT';
+  return { ...base, status, readSucceeded: true, expectedReportBound, validPdfAttachmentIds, attachments: summaries };
+}
+
 async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, request: IDataObject, options: IHttpRequestOptions, secret: { apiKey: string; apiSecret: string; username?: string; password?: string; database?: string; extraConfig?: IDataObject }, secrets: string[]): Promise<{ statusCode: number; headers: IDataObject; body: JsonValue }> {
   const config = odooConfig(secret);
+  const capabilityProfile = odooCapabilityForRequest(request);
   const database = toStringValue(config.database).trim();
   const username = toStringValue(config.username).trim();
   const password = toStringValue(config.password).trim();
@@ -452,7 +692,12 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
   const resumeStage = normalizeResumeStage(resume.stage);
   let partnerId = toFiniteNumber(resume.providerCustomerId ?? resumeCheckpoint.providerCustomerId, 0);
   let numericInvoiceId = toFiniteNumber(resume.providerInvoiceId ?? resumeCheckpoint.providerInvoiceId, 0);
-  const invoiceReused = numericInvoiceId > 0;
+  let invoiceReused = numericInvoiceId > 0;
+  const incomingFailoverState = isRecord(request.failoverState) ? request.failoverState : {};
+  const recoveryQueueStatus = toStringValue(incomingFailoverState.queueStatus).trim().toUpperCase();
+  const recoveryRun = Boolean(resumeStage || toFiniteNumber(request.retryCount, 0) > 0 || ['PENDING', 'RETRY_WAIT', 'FAILOVER_READY', 'PROVIDER_PENDING'].includes(recoveryQueueStatus));
+  let recoveredExistingInvoice = false;
+  let recoveredExistingWasPosted = false;
   if (resumeStage && resumeStage !== 'invoice.create' && numericInvoiceId <= 0) throw new Error(`Lifecycle resume stage ${resumeStage} requires an existing provider invoice id.`);
 
   let uid = toFiniteNumber(config.uid, 0);
@@ -465,8 +710,8 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
   let initialMove: IDataObject = {};
   if (numericInvoiceId > 0) {
     const existingMove = await odooExecuteKw(context, {
-      url, timeout, database, uid, password, model: 'account.move', method: 'read',
-      args: [[numericInvoiceId] as unknown as JsonValue, ['id', 'name', 'state', 'partner_id', 'invoice_pdf_report_id']],
+      url, timeout, database, uid, password, model: 'account.move', method: capabilityProfile.senderMethods.invoiceRead,
+      args: [[numericInvoiceId] as unknown as JsonValue, capabilityProfile.senderFields.moveResume],
       id: `${transactionId}-resume-invoice-read`, secrets,
     });
     initialMove = odooRecords(existingMove)[0] ?? {};
@@ -479,24 +724,82 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
   let partnerCreated = false;
   if (partnerId <= 0) {
     const existingPartners = await odooExecuteKw(context, {
-      url, timeout, database, uid, password, model: 'res.partner', method: 'search_read',
-      args: [[['email', '=', recipientEmail]] as unknown as JsonValue],
-      kwargs: { fields: ['id', 'name', 'email'], limit: 1 }, id: `${transactionId}-partner-search`, secrets,
+      url, timeout, database, uid, password, model: 'res.partner', method: capabilityProfile.senderMethods.partnerSearch,
+      args: [[['email', '=ilike', recipientEmail]] as unknown as JsonValue],
+      kwargs: { fields: capabilityProfile.senderFields.partnerSearch, limit: 2 }, id: `${transactionId}-partner-search`, secrets,
     });
-    const found = odooRecords(existingPartners)[0];
+    const found = assertUniqueOdooPartner(odooRecords(existingPartners), recipientEmail, { definitiveNoSideEffect: true, ambiguousSideEffect: false });
     partnerId = toFiniteNumber(found?.id, 0);
     if (partnerId <= 0) {
       const partnerPayload: IDataObject = { name: recipientName, email: recipientEmail };
       if (recipientAddress) partnerPayload.street = recipientAddress;
-      const created = await odooExecuteKw(context, {
-        url, timeout, database, uid, password, model: 'res.partner', method: 'create', args: [partnerPayload],
-        id: `${transactionId}-partner-create`, secrets,
-      });
-      partnerId = toFiniteNumber(created, 0);
-      partnerCreated = true;
+      try {
+        const created = await odooExecuteKw(context, {
+          url, timeout, database, uid, password, model: 'res.partner', method: capabilityProfile.senderMethods.partnerCreate, args: [partnerPayload],
+          id: `${transactionId}-partner-create`, secrets, lifecycleStage: 'customer.create_if_missing',
+        });
+        partnerId = toFiniteNumber(created, 0);
+        partnerCreated = true;
+      } catch (error) {
+        const details = odooErrorDetails(error);
+        if (details.ambiguousSideEffect !== true) throw error;
+        const reconcile = await tryOdooExecuteKw(context, {
+          url, timeout, database, uid, password, model: 'res.partner', method: capabilityProfile.senderMethods.partnerSearch,
+          args: [[['email', '=ilike', recipientEmail]] as unknown as JsonValue],
+          kwargs: { fields: capabilityProfile.senderFields.partnerSearch, limit: 2 }, id: `${transactionId}-partner-reconcile`, secrets,
+        });
+        const reconciled = reconcile.success
+          ? assertUniqueOdooPartner(odooRecords(reconcile.result), recipientEmail, { definitiveNoSideEffect: false, ambiguousSideEffect: true })
+          : undefined;
+        partnerId = toFiniteNumber(reconciled?.id, 0);
+        if (partnerId <= 0) {
+          if (reconcile.success) {
+            throw new OdooOperationError(error instanceof Error ? error.message : String(error), {
+              ...details, definitiveNoSideEffect: true, ambiguousSideEffect: false, reconciliation: 'partner_not_found_after_transport_error',
+            });
+          }
+          throw new OdooOperationError(error instanceof Error ? error.message : String(error), {
+            ...details, definitiveNoSideEffect: false, ambiguousSideEffect: true, reconciliation: 'partner_lookup_failed', reconciliationError: reconcile.errorMessage,
+          });
+        }
+      }
     }
   }
   if (partnerId <= 0) throw new Error('Odoo partner lookup/create did not return a valid partner id.');
+
+  const requestedInvoiceNumber = toStringValue(invoice.invoiceNumber || invoiceBody.invoice_number).trim();
+  if (numericInvoiceId <= 0 && recoveryRun && requestedInvoiceNumber) {
+    const recoveryLookup = await tryOdooExecuteKw(context, {
+      url, timeout, database, uid, password, model: 'account.move', method: capabilityProfile.senderMethods.invoiceSearch,
+      args: [[['move_type', '=', 'out_invoice'], ['partner_id', '=', partnerId], ['ref', '=', requestedInvoiceNumber]] as unknown as JsonValue],
+      kwargs: { fields: capabilityProfile.senderFields.moveRecovery, order: 'id desc', limit: 2 },
+      id: `${transactionId}-invoice-recovery-lookup`, secrets,
+    });
+    if (!recoveryLookup.success) {
+      throw new OdooOperationError('Odoo recovery lookup failed before invoice creation; duplicate safety requires manual review.', {
+        provider: 'odoo', category: 'reconciliation', errorType: 'AMBIGUOUS_PROVIDER_RESULT',
+        model: 'account.move', method: capabilityProfile.senderMethods.invoiceSearch, lifecycleStage: 'invoice.recovery_lookup',
+        definitiveNoSideEffect: false, ambiguousSideEffect: true, reconciliation: 'invoice_recovery_lookup_failed',
+        reconciliationError: recoveryLookup.errorMessage,
+      });
+    }
+    const matches = odooRecords(recoveryLookup.result);
+    if (matches.length > 1) {
+      throw new OdooOperationError(`Odoo recovery found multiple invoices with stable reference ${requestedInvoiceNumber}.`, {
+        provider: 'odoo', category: 'reconciliation', errorType: 'AMBIGUOUS_PROVIDER_RESULT',
+        model: 'account.move', method: capabilityProfile.senderMethods.invoiceSearch, lifecycleStage: 'invoice.recovery_lookup',
+        definitiveNoSideEffect: false, ambiguousSideEffect: true, reconciliation: 'multiple_invoices_found',
+      });
+    }
+    const recovered = matches[0];
+    numericInvoiceId = toFiniteNumber(recovered?.id, 0);
+    if (numericInvoiceId > 0) {
+      initialMove = recovered ?? {};
+      invoiceReused = true;
+      recoveredExistingInvoice = true;
+      recoveredExistingWasPosted = toStringValue(initialMove.state).toLowerCase() === 'posted';
+    }
+  }
 
   if (numericInvoiceId <= 0) {
     const rawLineItems = Array.isArray(invoiceBody.line_items) ? invoiceBody.line_items : [];
@@ -519,26 +822,60 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
     };
     const dueDate = toStringValue(invoice.dueDate || invoiceBody.due_date);
     if (dueDate) movePayload.invoice_date_due = dueDate;
-    const requestedInvoiceNumber = toStringValue(invoice.invoiceNumber || invoiceBody.invoice_number).trim();
     if (requestedInvoiceNumber) movePayload.ref = requestedInvoiceNumber;
     const notes = toStringValue(invoice.notes || invoiceBody.notes).trim();
     if (notes) movePayload.narration = notes;
     const currencyCode = toStringValue(invoice.currency || invoiceBody.currency).trim().toUpperCase();
     if (currencyCode) {
       const currencies = await odooExecuteKw(context, {
-        url, timeout, database, uid, password, model: 'res.currency', method: 'search_read',
+        url, timeout, database, uid, password, model: 'res.currency', method: capabilityProfile.senderMethods.currencySearch,
         args: [[['name', '=', currencyCode]] as unknown as JsonValue],
-        kwargs: { fields: ['id', 'name', 'active'], limit: 1 }, id: `${transactionId}-currency-search`, secrets,
+        kwargs: { fields: capabilityProfile.senderFields.currencySearch, limit: 1 }, id: `${transactionId}-currency-search`, secrets,
       });
       const currencyId = toFiniteNumber(odooRecords(currencies)[0]?.id, 0);
       if (currencyId <= 0) throw new Error(`Odoo currency ${currencyCode} was not found.`);
       movePayload.currency_id = currencyId;
     }
-    const invoiceId = await odooExecuteKw(context, {
-      url, timeout, database, uid, password, model: 'account.move', method: 'create', args: [movePayload],
-      id: `${transactionId}-invoice-create`, secrets,
-    });
-    numericInvoiceId = toFiniteNumber(invoiceId, 0);
+    try {
+      const invoiceId = await odooExecuteKw(context, {
+        url, timeout, database, uid, password, model: 'account.move', method: capabilityProfile.senderMethods.invoiceCreate, args: [movePayload],
+        id: `${transactionId}-invoice-create`, secrets, lifecycleStage: 'invoice.create',
+      });
+      numericInvoiceId = toFiniteNumber(invoiceId, 0);
+    } catch (error) {
+      const details = odooErrorDetails(error);
+      if (details.ambiguousSideEffect !== true) throw error;
+      const reconciliationDomain: JsonValue[] = [
+        ['move_type', '=', 'out_invoice'] as unknown as JsonValue,
+        ['partner_id', '=', partnerId] as unknown as JsonValue,
+      ];
+      if (requestedInvoiceNumber) reconciliationDomain.push(['ref', '=', requestedInvoiceNumber] as unknown as JsonValue);
+      const reconcile = await tryOdooExecuteKw(context, {
+        url, timeout, database, uid, password, model: 'account.move', method: capabilityProfile.senderMethods.invoiceSearch,
+        args: [reconciliationDomain as unknown as JsonValue],
+        kwargs: { fields: ['id', 'name', 'state', 'ref', 'partner_id'], order: 'id desc', limit: 2 },
+        id: `${transactionId}-invoice-reconcile`, secrets,
+      });
+      const reconciledMatches = reconcile.success ? odooRecords(reconcile.result) : [];
+      if (reconciledMatches.length > 1) {
+        throw new OdooOperationError(`Odoo reconciliation found multiple invoices with stable reference ${requestedInvoiceNumber || '[missing]'}.`, {
+          ...details, errorType: 'AMBIGUOUS_PROVIDER_RESULT', definitiveNoSideEffect: false, ambiguousSideEffect: true,
+          reconciliation: 'multiple_invoices_found_after_transport_error',
+        });
+      }
+      const reconciled = reconciledMatches[0];
+      numericInvoiceId = toFiniteNumber(reconciled?.id, 0);
+      if (numericInvoiceId > 0) invoiceReused = true;
+      else if (reconcile.success) {
+        throw new OdooOperationError(error instanceof Error ? error.message : String(error), {
+          ...details, definitiveNoSideEffect: true, ambiguousSideEffect: false, reconciliation: 'invoice_not_found_after_transport_error',
+        });
+      } else {
+        throw new OdooOperationError(error instanceof Error ? error.message : String(error), {
+          ...details, definitiveNoSideEffect: false, ambiguousSideEffect: true, reconciliation: 'invoice_lookup_failed', reconciliationError: reconcile.errorMessage,
+        });
+      }
+    }
     if (numericInvoiceId <= 0) throw new Error('Odoo invoice create did not return a valid invoice id.');
   }
 
@@ -548,11 +885,22 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
   let postError = '';
   if (postRequested && !posted) {
     const post = await tryOdooExecuteKw(context, {
-      url, timeout, database, uid, password, model: 'account.move', method: 'action_post', args: [[numericInvoiceId] as unknown as JsonValue],
-      id: `${transactionId}-invoice-post`, secrets,
+      url, timeout, database, uid, password, model: 'account.move', method: capabilityProfile.senderMethods.invoicePost, args: [[numericInvoiceId] as unknown as JsonValue],
+      id: `${transactionId}-invoice-post`, secrets, lifecycleStage: 'invoice.post',
     });
     posted = post.success;
     postError = post.errorMessage;
+    if (!post.success) {
+      const reconcilePost = await tryOdooExecuteKw(context, {
+        url, timeout, database, uid, password, model: 'account.move', method: 'read',
+        args: [[numericInvoiceId] as unknown as JsonValue, capabilityProfile.senderFields.movePostReconcile], id: `${transactionId}-invoice-post-reconcile`, secrets,
+      });
+      const reconciledState = toStringValue(odooRecords(reconcilePost.result)[0]?.state).toLowerCase();
+      if (reconcilePost.success && reconciledState === 'posted') {
+        posted = true;
+        postError = '';
+      }
+    }
   }
 
   let wizardId = 0;
@@ -560,9 +908,18 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
   let emailMethod = '';
   let emailError = postError;
   let emailEvidence: IDataObject = { schemaVersion: '1.0', wizardCompleted: false, blockedByPostFailure: Boolean(postError) };
-  if (emailRequested && posted) {
+  if (emailRequested && posted && recoveredExistingInvoice && recoveredExistingWasPosted && !resumeStage) {
+    emailStatus = 'UNVERIFIED';
+    emailMethod = 'recovery.manual_review';
+    emailError = 'A posted invoice with the stable Campaign/Job reference already exists, but no trusted lifecycle checkpoint proves whether its email was previously sent. Automatic resend was blocked.';
+    emailEvidence = {
+      schemaVersion: '1.0', recoveryRun: true, recoveredExistingInvoice: true,
+      recoveredExistingWasPosted: true, providerInvoiceId: numericInvoiceId,
+      attemptEvidenceBound: false, recipientEvidenceBound: false, automaticResendBlocked: true,
+    };
+  } else if (emailRequested && posted) {
     const email = await executeOdooInvoiceEmail(context, {
-      url, timeout, database, uid, password, invoiceId: numericInvoiceId, partnerId, transactionId,
+      capabilityProfile, url, timeout, database, uid, password, invoiceId: numericInvoiceId, partnerId, recipientEmail, transactionId,
       emailForceSend: config.emailForceSend === true, secrets,
     });
     wizardId = email.wizardId;
@@ -574,7 +931,7 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
 
   const moveRead = await tryOdooExecuteKw(context, {
     url, timeout, database, uid, password, model: 'account.move', method: 'read',
-    args: [[numericInvoiceId] as unknown as JsonValue, ['id', 'name', 'state', 'ref', 'partner_id', 'currency_id', 'invoice_date', 'invoice_date_due', 'invoice_pdf_report_id']],
+    args: [[numericInvoiceId] as unknown as JsonValue, capabilityProfile.senderFields.moveRead],
     id: `${transactionId}-invoice-read`, secrets,
   });
   const move = odooRecords(moveRead.result)[0] ?? initialMove;
@@ -585,6 +942,15 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
   if (!moveRead.success) {
     const readError = moveRead.errorMessage;
     emailError = emailError ? `${emailError}; ${readError}` : readError;
+  }
+  if (emailRequested && isRecord(emailEvidence) && emailEvidence.attemptEvidenceBound === true) {
+    const pdfEvidence = await validateOdooPdfEvidence(context, {
+      capabilityProfile, url, timeout, database, uid, password, invoiceId: numericInvoiceId,
+      expectedAttachmentId: pdfAttachmentId,
+      attemptAttachmentIds: odooNumberList(emailEvidence.attemptAttachmentIds),
+      transactionId, secrets,
+    });
+    emailEvidence = { ...emailEvidence, pdfEvidence };
   }
 
   const failedStep = postError ? 'invoice.post' : emailRequested && emailStatus === 'FAILED' ? 'invoice.send_email' : '';
@@ -623,6 +989,8 @@ async function executeOdooAutoCustomerInvoice(context: IExecuteFunctions, reques
         send_invoice_email: emailRequested, email_sent: emailStatus === 'SENT', email_queued: emailStatus === 'QUEUED',
         email_status: emailStatus, email_method: emailMethod, email_error_message: emailError,
         email_evidence: emailEvidence, wizard_id: wizardId, invoice_number: actualInvoiceNumber,
+        compatibility: { profileId: capabilityProfile.id, majorVersion: capabilityProfile.majorVersion, supported: true },
+        issuer: request.issuerCompatibility ?? null,
         pdf_attachment_id: pdfAttachmentId, lifecycle_resume: Object.keys(resume).length > 0 ? resume : null,
       },
     },
@@ -741,7 +1109,7 @@ function activePersistedDuplicate(context: IExecuteFunctions, scopeKey: string, 
   } catch {
     // Ignore persistence cleanup failure.
   }
-  return active.find((entry) => entry.scopeKey === scopeKey && entry.key === key && ['RESERVED', 'SENT'].includes(toStringValue(entry.status)));
+  return active.find((entry) => entry.scopeKey === scopeKey && entry.key === key && ['RESERVED', 'SENT', 'MANUAL_REVIEW'].includes(toStringValue(entry.status)));
 }
 
 function workflowScope(context: IExecuteFunctions): string {
@@ -1170,10 +1538,13 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     } catch (error) {
       const message = redactString(error instanceof Error ? error.message : String(error), activeSecrets);
       const request = isRecord(item.json.readyRequest) ? item.json.readyRequest : {};
+      const providerError = odooErrorDetails(error);
       if (preventDuplicateSends && reservedDuplicateKey && reservedDuplicateScope) {
         const ttlMs = duplicateTtlHours * 60 * 60 * 1000;
-        const record = idempotencyRecord(request, reservedDuplicateScope, reservedDuplicateKey, 'FAILED', ttlMs, message);
-        finalizeInvoiceSend(reservedDuplicateScope, reservedDuplicateKey, 'FAILED', { errorMessage: message, finishedAt: new Date().toISOString() });
+        const ambiguous = providerError.ambiguousSideEffect === true;
+        const reservationStatus = ambiguous ? 'MANUAL_REVIEW' : 'FAILED';
+        const record = idempotencyRecord(request, reservedDuplicateScope, reservedDuplicateKey, reservationStatus, ttlMs, message);
+        finalizeInvoiceSend(reservedDuplicateScope, reservedDuplicateKey, reservationStatus, { errorMessage: message, ambiguousSideEffect: ambiguous, finishedAt: new Date().toISOString() });
         persistIdempotency(this, record);
       }
       if (stopOnTransportError && !this.continueOnFail()) throw new Error(`${this.getNode().name} item ${itemIndex}: ${message}`);
@@ -1181,7 +1552,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
         schemaVersion: '1.0', success: false, transportStatus: /timeout/i.test(message) ? 'TIMEOUT' : 'ERROR',
         requestId: request.requestId, providerId: request.providerId, profileId: request.profileId, accountId: request.accountId,
         workerId: request.workerId, actionId: request.actionId, httpStatus: 0, responseHeaders: {}, responseBody: null,
-        latencyMs: Date.now() - started, responseSizeBytes: 0, error: { message }, idempotency: request.idempotency ?? null, activationSafety: activationSafety ?? null, bulkSafety: bulkSafetyBase, presetSelfCheck, startedAt: startedAt.toISOString(), finishedAt: new Date().toISOString(),
+        latencyMs: Date.now() - started, responseSizeBytes: 0, error: { message, ...providerError }, idempotency: request.idempotency ?? null, activationSafety: activationSafety ?? null, bulkSafety: bulkSafetyBase, presetSelfCheck, startedAt: startedAt.toISOString(), finishedAt: new Date().toISOString(),
         responsePaths: request.responsePaths, responsePolicy: request.responsePolicy ?? null, requestMapping: request.requestMapping ?? null, lifecycleResume: request.lifecycleResume ?? null, runtime: request.runtime,
       } }, pairedItem: { item: itemIndex } });
       if (enableBulkSafety) {

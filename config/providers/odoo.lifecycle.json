@@ -11,7 +11,8 @@
   "requiredAccountFields": [
     "Database",
     "Username",
-    "Password"
+    "Password",
+    "Issuer_Key"
   ],
   "steps": [
     "customer.search_by_email",
@@ -19,5 +20,12 @@
     "invoice.create",
     "invoice.post",
     "invoice.send_email"
-  ]
+  ],
+  "compatibility": {
+    "supportedOdooMajorVersions": [
+      18,
+      19
+    ],
+    "unknownVersionPolicy": "fail_closed"
+  }
 }

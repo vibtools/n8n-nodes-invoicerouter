@@ -1,5 +1,81 @@
 # InvoiceRouter Architecture
 
+## v2.1.1 Production Corrective Layer
+
+The frozen eight-node topology remains unchanged. v2.1.1 corrects the v2.1.0 production workflow without adding custom nodes or runtime dependencies. The canonical Odoo workflow is `template/providers/odoo/n8n-import-workflow-production-v2.1.1.json`; the same file is retained as `n8n-import-workflow-live-bulk.json` for compatibility.
+
+
+### Phase 02 durable campaign state and run lease
+
+The campaign correctness source is now the managed Sheets. Startup reads `email_list`, `retry_queue`, `invoice_results`, `campaign_report`, and `account_report`, then reconstructs admitted/terminal job IDs, campaign counters, pause state, last attempt, run lease, and revision. `CampaignStore` merges that Sheet seed with same-run process state; process memory and workflow static data no longer replace Sheet evidence.
+
+Before `Loop Over Recipient Jobs`, the workflow writes an `ACTIVE` lease keyed by `Campaign_ID`, rereads `campaign_report`, and verifies `Run_ID`, `Revision`, and `Lock_Expires_At`. A different active unexpired owner blocks before Provider Selector. After the loop, the workflow rereads and releases the same lease. Mixed pending campaign IDs are rejected before job identity/provider work.
+
+```text
+campaign_report read -> Sheet-derived seed -> one Campaign_ID check
+-> lease acquire -> lease reread/verify -> one-item loop
+-> outcome revisions -> final lease release
+```
+
+The lease uses additive columns only and does not change existing public node names, custom-node count, APIs, libraries, or provider lifecycle behavior.
+
+
+### Phase 03 Odoo truthfulness boundary
+
+Invoice Sender preserves structured `OdooOperationError` metadata through internal read/send probes. Email-state precedence is current-attempt and recipient-bound:
+
+```text
+SENT evidence
+-> QUEUED evidence
+-> explicit failure evidence
+-> ambiguous wizard transport without terminal evidence = UNVERIFIED
+-> definitive pre-send/wizard validation failure = FAILED
+```
+
+`res.partner` lookup uses `=ilike`, reads at most two records, normalizes the returned address, and blocks zero-trust selection when more than one exact contact exists. RFC display-name mail recipients are normalized before comparison.
+
+PDF proof is evaluated independently after invoice metadata read. `ir.attachment` must have MIME `application/pdf`, `res_model=account.move`, `res_id=<invoice id>`, and the expected `invoice_pdf_report_id` must also be attached to the current-attempt message. This proof is recorded under `emailEvidence.pdfEvidence`; it does not convert a verified email transport state into an inbox-delivery claim.
+
+
+### Phase 04 Odoo capability and issuer boundary
+
+`shared/odoo/OdooCapabilityManifest.ts` is the single runtime contract for Odoo 18/19 model fields, sender read shapes, and method names. Provider Loader resolves the profile from `common.version`; unsupported major versions are excluded before authentication. Sender consumes the same resolved profile and rejects an explicitly unsupported or issuer-incompatible request.
+
+```text
+common.version -> Odoo 18/19 profile
+-> authenticate -> read-only fields/model probes
+-> authenticated user's company -> res.company identity
+-> Issuer_Key/company group verification
+-> pool registration only when compatible
+```
+
+Preflight evidence is additive: `Odoo_Server_Version`, `Odoo_Major_Version`, `Capability_Status`, `Issuer_Key`, `Company_ID`, `Company_Name`, and `Issuer_Compatibility`. `CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN` is deliberate: `fields_get`, `read`, and `search_count` validate shape/readability but do not prove create/post/send authorization.
+
+Issuer validation happens before runtime pool registration. A mismatched Odoo failover group is removed as a group; no arbitrary cross-company failover is allowed. This does not rename provider rows, change the eight-node architecture, or add dependencies.
+
+Corrected execution order:
+
+```text
+writeback-only repair -> provider preflight -> durable Job_ID/retry checkpoint
+-> one-item loop -> campaign admission/delay -> provider allocation checkpoint
+-> Request Builder -> Invoice Sender -> Status Checker -> Status Manager
+-> pending writeback bundle -> ordered Sheet writes -> bundle complete
+-> retry/failover Wait -> provider Sheet reread -> Provider Loader pool/vault rehydration
+-> required-profile retry or fresh-profile failover selection -> Request Builder/Sender
+-> finalize -> next recipient
+```
+
+Request Builder supports both the historical three-input contract and the canonical embedded single-input contract. Odoo preflight uses public JSON-RPC calls (`version`, `authenticate`, `search_read`, `fields_get`, and `search_count`) and never invokes the unavailable external `check_access_rights` method.
+
+Campaign safety is persisted across the one-item loop: total eligible jobs, maximum jobs, failure/manual-review threshold, inter-send delay, critical pause, and `Pause_Reason`. A durable `writeback_queue` records the complete Sheet write bundle before invoice/result/status/report updates. The repair path is isolated from Provider Selector and Invoice Sender.
+
+Odoo duplicate safety uses stable Campaign+Job references, structured provider errors, side-effect reconciliation, original-profile locking after allocation, and manual review when a posted recovered invoice has no trusted email checkpoint. Current-attempt email evidence is additionally bound to the intended partner/email.
+
+
+### v2.1.1 Phase 01 runtime rehydration
+
+Provider pools and credential material remain process-local runtime state. The canonical Odoo retry/failover path therefore treats every Wait boundary as a possible process/worker boundary. It rereads `provider`, executes the existing Provider Loader to rebuild `RuntimeStore` pool/vault entries under the stable workflow/batch scope, restores the waited job, and re-enters Provider Selector. This adds no custom node type and preserves the eight-node package architecture.
+
 ## v2.1.0 Bulk Reliability Layer
 
 The eight-node topology remains frozen. The canonical Odoo production workflow serializes recipient jobs through a one-item loop so Provider Selector allocates immediately before each send. Status Manager feedback is available before the next recipient allocation.
@@ -12,7 +88,7 @@ provider -> Provider Loader -> email_list -> Email List -> Invoice Template
 -> Status Checker -> Status Manager
 ```
 
-Status Manager branches into invoice results, recipient status, provider status, retry queue, account report, and campaign report writebacks. Only approved same-account retry returns to Invoice Sender. Only pre-side-effect failover returns to Provider Selector. Sheet writeback branches never return to the transport path.
+Status Manager branches into invoice results, recipient status, provider status, retry queue, account report, and campaign report writebacks. In the canonical Odoo workflow, both approved same-account retry and pre-side-effect failover wait, reread the provider Sheet, rerun Provider Loader, and re-enter Provider Selector. Retry requires the original profile; failover excludes attempted profiles. Sheet writeback branches never return directly to the transport path.
 
 Provider Loader performs optional read-only Odoo account preflight before pool registration. The canonical production template enables authentication, active-currency, and model-access checks. Each managed Google Sheets write branch retries its write independently up to three times.
 
@@ -188,3 +264,48 @@ Status Manager is the only component that may approve a stage resume. Invoice Se
 
 The GitHub install bundle contains the npm tarball, v2 master and compatibility workflows, the Odoo mode pack, common status-writeback assets, and synchronized user/developer/troubleshooting documentation. Release staging is audited before the tarball is added to the bundle. Final publication remains blocked until a complete-project forensic audit passes. Community-node update precedes the one-recipient live canary.
 
+
+## Phase 05 exactly-once operation envelope
+The canonical Odoo workflow writes `PROVIDER_PENDING` before any provider side effect, updates the same `Operation_ID` with result/checkpoint/evidence, then completes ordered Sheet writeback. Recipient identity is `Row_ID`; provider-row identity is `Profile_ID`.
+
+## Phase 06 monotonic reporting boundary
+
+The campaign lease serializes report mutation for one `Campaign_ID`. Status Manager emits a candidate aggregate containing a base revision and the next revision. Before `Google Sheets - Campaign Report` or `Google Sheets - Account Report`, the workflow performs a fresh read and a compare step:
+
+```text
+report candidate
+-> fresh Sheet read
+-> require current Revision == Base_Revision
+-> require candidate Revision == Base_Revision + 1
+-> require campaign writer owns active Run_ID
+-> appendOrUpdate
+```
+
+`Build Durable Work Items` chooses the highest-revision row when duplicate report rows exist. Campaign counts are reconstructed from `email_list`, `invoice_results`, and `retry_queue`; process memory and an older aggregate row cannot preserve an obsolete maximum. `RuntimeStore.updateCampaignAccountStats` treats a new-run Sheet seed as authoritative and advances the account revision monotonically.
+
+Writeback repair compares report payload revisions against the startup Sheet snapshot. An already-applied or older payload is a no-op and can complete the repair envelope; a revision gap blocks instead of overwriting. Odoo issuer-group failures branch from Provider Loader into revisioned `account_report` rows under the `PREFLIGHT` campaign namespace. This reporting branch cannot enter Provider Selector or Invoice Sender.
+
+## Phase 07 release verification boundary
+
+Phase 07 adds verification assets without changing the frozen eight-node runtime architecture. A dry-run-only workflow fixture is executed through exactly n8n 2.31.6 in an isolated custom-extension root, and the complete canonical workflow is imported/exported through the same engine. The separate-process regression uses a 66-second resume marker to prove provider-pool and secret-vault reconstruction across different processes; it does not impersonate n8n database wait/resume. Actual restart/other-worker behavior remains a reviewed pilot requirement. Odoo 18 and 19 fixture pipelines share the canonical capability manifest and verify evidence-backed send/PDF results through Status Manager.
+
+The final release gate consumes sanitized engine, canary, and pilot evidence. Live evidence remains external to runtime correctness: canary/pilot records must be reviewed and cannot be generated as `PASS` by static tests.
+
+
+## v2.1.1 Final corrective forensic audit
+
+The canonical production workflow now contains 126 nodes and 141 edges while retaining exactly eight exported InvoiceRouter custom nodes. Immediately before each provider operation, Request Builder is followed by a fresh `campaign_report` lease read and fail-closed Run_ID/expiry verification. Only then is the exact built stable reference persisted in the `PROVIDER_PENDING` operation envelope.
+
+On startup, an unresolved `PROVIDER_PENDING` row is reconstructed as `operationRecovery`. Email List preserves its stable reference, Request Builder reuses that reference, and Invoice Sender enters reconciliation mode before any invoice creation. A recovered posted invoice without trusted email checkpoint becomes `UNVERIFIED`/manual review rather than an automatic resend.
+
+The exact-engine harness invokes npm through Node's `npm_execpath`, imports/exports the complete 126-node canonical workflow, and records package/workflow/log hashes. Final canary and pilot evidence is cryptographically bound to that engine-tested tarball and canonical workflow. Tag releases validate npm credentials before GitHub release creation.
+
+## Final corrective Row_ID bootstrap
+
+`Google Sheets - Email List` supplies n8n's virtual `row_number`. Email List preserves it as `job.sourceRow`; `Prepare Job Identity Row` fails closed if it is missing; and `Google Sheets - Persist Job Identity` updates that exact row. Once persisted, all recipient lifecycle writes use `Row_ID`.
+
+Phase 07 evidence binding is deterministic across Windows and CI: package file contents, canonical workflow, fixture, exact n8n version, custom-node count, and imported topology form `engineBindingSha256`. Runtime timestamps remain audit metadata and do not participate in cross-run identity.
+
+Cross-platform artifact determinism is completed by repository-wide LF text checkout and TypeScript `newLine: "lf"`. Package-content hashing therefore compares stable bytes rather than platform-specific line endings.
+
+The final evidence boundary resolves supporting artifact paths below `evidence/phase07/artifacts/`, validates actual file hashes and scans allowed text artifacts before release approval.

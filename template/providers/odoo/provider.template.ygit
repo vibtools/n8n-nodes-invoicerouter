@@ -4,8 +4,8 @@
   "templateId": "template-001-odoo-complete-bulk-email",
   "providerId": "odoo",
   "displayName": "Odoo Complete Bulk Email Sending System",
-  "templateVersion": "2.1.0",
-  "invoiceRouterVersion": "2.1.0",
+  "templateVersion": "2.1.1",
+  "invoiceRouterVersion": "2.1.1",
   "supportTier": "tier-1-candidate-live-core-proven-email-proof-required",
   "files": {
     "workbook": "InvoiceRouter_TEMPLATE001_ODOO_COMPLETE_BULK_EMAIL_GOOGLE_SHEETS_TEMPLATE.xlsx",
@@ -27,7 +27,9 @@
     "workbookLive": "google-sheets-template-live.xlsx",
     "retryQueue": "retry_queue.csv",
     "accountReport": "account_report.csv",
-    "campaignReport": "campaign_report.csv"
+    "campaignReport": "campaign_report.csv",
+    "workflowProductionV211": "n8n-import-workflow-production-v2.1.1.json",
+    "writebackQueue": "writeback_queue.csv"
   },
   "sheetContract": {
     "providerSheet": "provider",
@@ -39,18 +41,35 @@
     "emailListOptionalColumns": [
       "Name",
       "Address"
-    ]
+    ],
+    "writebackQueueSheet": "writeback_queue"
   },
   "defaultSafetyMode": "dryRunValidation",
   "liveBulkRequires": [
     "SEND_REAL_INVOICES",
     "SEND_BULK_REAL_INVOICES"
   ],
-  "notes": "Template assets are public starter files. Live email delivery must be proven in the user's Odoo/n8n environment before production claims.",
+  "notes": "Template assets are public starter files. v2.1.1 includes URL-importable production workflow, durable campaign control, truthful Odoo evidence, Odoo 18/19 capability profiles, and legal-issuer failover validation. Live create/post/send and inbox delivery still require user-environment proof.",
   "modeSupport": {
     "sandbox": true,
     "live": true,
     "dryRunDefault": true,
     "liveSafety": "live templates keep InvoiceRouter live confirmation and bulk confirmation tokens explicit"
+  },
+  "odooCompatibility": {
+    "supportedMajorVersions": [
+      18,
+      19
+    ],
+    "unknownVersionPolicy": "fail_closed",
+    "capabilityManifest": "shared/odoo/OdooCapabilityManifest.ts"
+  },
+  "legalIssuer": {
+    "requiredField": "Issuer_Key",
+    "preflightEvidence": [
+      "Company_ID",
+      "Company_Name"
+    ],
+    "mismatchPolicy": "block_entire_failover_group"
   }
 }
