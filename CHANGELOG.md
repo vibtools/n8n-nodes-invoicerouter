@@ -11,6 +11,7 @@
 - Bound live evidence to the engine evidence, package tarball, canonical workflow, sanitized artifacts, and reviewer metadata.
 - Made tag releases validate npm publication credentials before GitHub Release creation.
 - Clarified that the 66-second marker test is a separate-process rehydration regression; real n8n restart/worker resume remains a live-pilot acceptance item.
+- Corrected publication order so tag-driven GitHub/npm release completes before the Community Nodes update and reviewed live canary/pilot evidence; live evidence remains mandatory for production bulk approval.
 
 ## 2.1.1 - 2026-08-03 — Production corrective patch
 

@@ -105,7 +105,7 @@ Stop the run and investigate when:
 - [ ] One-recipient canary: one posted invoice, zero duplicates, provider `SENT`, valid PDF, inbox confirmed, Sheet row matched, operation envelope `COMPLETE`.
 - [ ] Five-recipient/two-account pilot: failover and restart/other-worker resume exercised, five terminal rows, zero duplicates, no revision regression, stale writer rejected.
 - [ ] Sanitized evidence contains no recipient addresses or secrets.
-- [ ] `npm run verify:phase07:evidence` passes before tag or npm publish.
+- [ ] After GitHub/npm publication and the n8n Community Nodes update, `npm run verify:phase07:evidence` passes before production bulk approval.
 
 
 ## Final corrective audit acceptance

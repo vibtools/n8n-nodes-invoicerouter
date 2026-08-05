@@ -369,6 +369,7 @@ const releaseWorkflow = await readFile('.github/workflows/release.yml', 'utf8');
 if (!releaseWorkflow.includes('NPM_TOKEN is required for a tag release')) errors.push('Tag release must fail closed when NPM_TOKEN is missing.');
 if (!releaseWorkflow.includes('npm whoami --registry=https://registry.npmjs.org')) errors.push('Tag release must validate npm publication credentials.');
 if (releaseWorkflow.indexOf('Validate npm publication credentials') > releaseWorkflow.indexOf('Create GitHub Release')) errors.push('npm credential validation must run before GitHub release creation.');
+if (releaseWorkflow.includes('run: npm run verify:phase07:evidence')) errors.push('Tag release must not require post-publication live evidence before GitHub/npm publication.');
 for (const fragment of [
   'workflows/InvoiceRouter-v2-master-universal.json',
   'workflows/InvoiceRouter-v1.6-simple-bulk-email.json',
@@ -376,7 +377,6 @@ for (const fragment of [
   'template/status-writeback-columns.csv',
   'docs/troubleshooting',
   'node scripts/audit-release-source.mjs release/bundle',
-  'verify:phase07:evidence',
   'evidence/phase07',
 ]) {
   if (!releaseWorkflow.includes(fragment)) errors.push(`Release workflow must include ${fragment}.`);

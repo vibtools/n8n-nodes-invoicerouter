@@ -289,7 +289,7 @@ Writeback repair compares report payload revisions against the startup Sheet sna
 
 Phase 07 adds verification assets without changing the frozen eight-node runtime architecture. A dry-run-only workflow fixture is executed through exactly n8n 2.31.6 in an isolated custom-extension root, and the complete canonical workflow is imported/exported through the same engine. The separate-process regression uses a 66-second resume marker to prove provider-pool and secret-vault reconstruction across different processes; it does not impersonate n8n database wait/resume. Actual restart/other-worker behavior remains a reviewed pilot requirement. Odoo 18 and 19 fixture pipelines share the canonical capability manifest and verify evidence-backed send/PDF results through Status Manager.
 
-The final release gate consumes sanitized engine, canary, and pilot evidence. Live evidence remains external to runtime correctness: canary/pilot records must be reviewed and cannot be generated as `PASS` by static tests.
+The automated publication gate consumes source, static, and exact-engine evidence. After GitHub/npm publication and the n8n Community Nodes update, the production-approval gate consumes sanitized engine, canary, and pilot evidence. Live evidence remains external to runtime correctness: canary/pilot records must be reviewed and cannot be generated as `PASS` by static tests.
 
 
 ## v2.1.1 Final corrective forensic audit
