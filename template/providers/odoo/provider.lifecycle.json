@@ -90,13 +90,14 @@
     "A future Odoo API migration requires a separately approved change."
   ],
   "compatibility": {
-    "supportedOdooMajorVersions": [
+    "unknownVersionPolicy": "capability_driven",
+    "capabilityManifest": "shared/odoo/OdooCapabilityManifest.ts",
+    "sideEffectPermission": "unproven_until_live_canary",
+    "profiledOdooMajorVersions": [
       18,
       19
     ],
-    "unknownVersionPolicy": "fail_closed",
-    "capabilityManifest": "shared/odoo/OdooCapabilityManifest.ts",
-    "sideEffectPermission": "unproven_until_live_canary"
+    "versionAllowlistEnforced": false
   },
   "issuerCompatibility": {
     "requiredForFailoverGroups": true,

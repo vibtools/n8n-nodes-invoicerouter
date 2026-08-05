@@ -237,12 +237,12 @@ function odooEmailResumeResponses({ notificationStatus = 'sent', mailState = '',
   ];
 }
 
-function odooPreflightResponses(majorVersion = 19, companyId = 1, companyName = 'Example Company') {
+function odooPreflightResponses(majorVersion = 19, companyId = 1, companyName = 'Example Company', serverVersion = `${majorVersion}.0`) {
   const { odooCapabilityProfileByMajor } = load('shared/odoo/OdooCapabilityManifest.js');
   const profile = odooCapabilityProfileByMajor(majorVersion);
   assert.ok(profile);
   return [
-    { result: { server_version: `${majorVersion}.0` } },
+    { result: { server_version: serverVersion } },
     { result: 7 },
     { result: [{ id: 2, name: 'USD', active: true }] },
     ...Object.values(profile.requiredFields).map((fields) => ({
@@ -2256,8 +2256,10 @@ test('v2.1.1 canonical workflow orders identity, retry checkpoint, processing, a
   assert.deepEqual(next('Provider Selector'), ['Prepare Allocation Checkpoint']);
   assert.deepEqual(next('Google Sheets - Allocation Checkpoint'), ['Restore Allocation Checkpoint Context']);
   assert.deepEqual(next('Restore Allocation Checkpoint Context'), ['Request Builder']);
-  assert.deepEqual(next('Request Builder'), ['Google Sheets - Provider Lease Verify']);
-  assert.deepEqual(next('Google Sheets - Provider Lease Verify'), ['Verify Provider Lease Before Side Effect']);
+  assert.deepEqual(next('Request Builder'), ['Google Sheets - Provider Lease Verify', 'Merge Request Context and Provider Lease']);
+  assert.deepEqual(next('Google Sheets - Provider Lease Verify'), ['Pack Provider Lease Rows']);
+  assert.deepEqual(next('Pack Provider Lease Rows'), ['Merge Request Context and Provider Lease']);
+  assert.deepEqual(next('Merge Request Context and Provider Lease'), ['Verify Provider Lease Before Side Effect']);
   assert.deepEqual(next('Verify Provider Lease Before Side Effect'), ['Prepare Provider Operation Envelope']);
   assert.deepEqual(next('Restore Provider Operation Context'), ['Invoice Sender']);
   assert.deepEqual(next('Status Manager'), ['Prepare Pending Writeback Bundle']);
@@ -2273,7 +2275,11 @@ test('v2.1.1 canonical workflow starts writeback-only repair before any provider
   const workflow = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json'), 'utf8'));
   const next = (name, output = 0) => (workflow.connections[name]?.main?.[output] ?? []).map((entry) => entry.node);
   assert.deepEqual(next('Manual Trigger'), ['Google Sheets - Writeback Queue Input']);
-  assert.deepEqual(next('Google Sheets - Writeback Queue Input'), ['Build Writeback Repair Items']);
+  assert.deepEqual(next('Google Sheets - Writeback Queue Input'), ['Prepare Repair Campaign Report Read']);
+  assert.deepEqual(next('Prepare Repair Campaign Report Read'), ['Google Sheets - Repair Campaign Report Input']);
+  assert.deepEqual(next('Google Sheets - Repair Campaign Report Input'), ['Prepare Repair Account Report Read']);
+  assert.deepEqual(next('Prepare Repair Account Report Read'), ['Google Sheets - Repair Account Report Input']);
+  assert.deepEqual(next('Google Sheets - Repair Account Report Input'), ['Build Writeback Repair Items']);
   assert.deepEqual(next('Loop Over Writeback Repairs', 0), ['Google Sheets - Provider Accounts']);
   assert.deepEqual(next('Repair Noop'), ['Loop Over Writeback Repairs']);
   const repairNodes = workflow.nodes.filter((node) => /^Repair |Writeback Repair/.test(node.name));
@@ -2544,16 +2550,22 @@ test('v2.1.1 Phase 03 invalid PDF attachment identity is reported without fabric
 
 
 
-test('v2.1.1 Phase 04 shared capability manifest distinguishes Odoo 18 and Odoo 19 wizard fields', () => {
-  const { odooCapabilityProfileByMajor } = load('shared/odoo/OdooCapabilityManifest.js');
+test('v2.1.1 Odoo capability manifest is version-agnostic and parses Odoo SaaS version strings', () => {
+  const { odooCapabilityProfileByMajor, odooMajorVersion, requireOdooCapabilityProfile } = load('shared/odoo/OdooCapabilityManifest.js');
   const v18 = odooCapabilityProfileByMajor(18);
   const v19 = odooCapabilityProfileByMajor(19);
-  assert.ok(v18.requiredFields['account.move.send.wizard'].includes('mail_subject'));
-  assert.ok(!v18.requiredFields['account.move.send.wizard'].includes('subject'));
-  assert.ok(v19.requiredFields['account.move.send.wizard'].includes('subject'));
-  assert.ok(v19.requiredFields['account.move.send.wizard'].includes('template_id'));
+  const v20 = odooCapabilityProfileByMajor(20);
+  assert.equal(odooMajorVersion('saas~19.4+e'), 19);
+  assert.equal(requireOdooCapabilityProfile('saas~19.4+e').majorVersion, 19);
+  assert.deepEqual(v18.versionSpecificWizardFields, ['mail_template_id', 'mail_subject', 'mail_body']);
+  assert.deepEqual(v19.versionSpecificWizardFields, ['template_id', 'subject', 'body', 'model', 'res_ids']);
+  assert.equal(v20.majorVersion, 20);
+  assert.equal(v20.supported, true);
+  assert.deepEqual(v20.versionSpecificWizardFields, []);
   assert.equal(v18.senderMethods.wizardSend, 'action_send_and_print');
-  assert.equal(v19.senderMethods.wizardSend, 'action_send_and_print');
+  assert.equal(v20.senderMethods.wizardSend, 'action_send_and_print');
+  assert.equal(v18.requiredFields['account.move.send.wizard'].includes('mail_subject'), false);
+  assert.equal(v19.requiredFields['account.move.send.wizard'].includes('template_id'), false);
 });
 
 test('v2.1.1 Phase 04 Odoo 18 preflight validates the version profile and issuer identity', async () => {
@@ -2573,9 +2585,10 @@ test('v2.1.1 Phase 04 Odoo 18 preflight validates the version profile and issuer
   assert.equal(loaded[0][0].json.preflightResults[0].Capability_Status, 'CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN');
 });
 
-test('v2.1.1 Phase 04 unknown Odoo major version fails closed before authentication', async () => {
+test('v2.1.1 Phase 04 unprofiled Odoo versions use capability-driven preflight instead of a version allowlist', async () => {
   const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
   const rows = [{ json: {
+    row_number: 12,
     Enabled: true, Provider: 'Odoo', Account: 'Odoo 20', Environment: 'live', Action: 'Create Invoice', Method: 'POST',
     'Base URL': 'https://v20.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
     Password: 'secret', Database: 'v20', Failover_Group: 'issuer-a', Issuer_Key: 'issuer-a', status: 'READY',
@@ -2583,11 +2596,30 @@ test('v2.1.1 Phase 04 unknown Odoo major version fails closed before authenticat
   const ctx = context([rows], {
     batchId: 'phase04-v20', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
     enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'excludeAndReport',
-  }, [{ result: { server_version: '20.0' } }]);
+  }, odooPreflightResponses(20, 20, 'Odoo 20 Company'));
   const loaded = await loadProviders.call(ctx);
-  assert.equal(ctx.calls.length, 1);
-  assert.equal(loaded[0][0].json.total, 0);
-  assert.equal(loaded[0][0].json.preflightResults[0].status, 'ODOO_VERSION_UNSUPPORTED');
+  assert.ok(ctx.calls.length > 1);
+  assert.equal(loaded[0][0].json.total, 1);
+  assert.equal(loaded[0][0].json.providers[0].odooMajorVersion, 20);
+  assert.equal(loaded[0][0].json.preflightResults[0].row_number, 12);
+  assert.equal(loaded[0][0].json.preflightResults[0].status, 'READY');
+});
+
+test('v2.1.1 Phase 04 Odoo Online saas version strings are parsed without blocking preflight', async () => {
+  const { execute: loadProviders } = load('nodes/01_ProviderLoader/ProviderLoader.execute.js');
+  const rows = [{ json: {
+    row_number: 2,
+    Enabled: true, Provider: 'Odoo', Account: 'Odoo SaaS', Environment: 'live', Action: 'Create Invoice', Method: 'POST',
+    'Base URL': 'https://saas.odoo.com', Endpoint: '/jsonrpc', 'Auth Type': 'Odoo JSON-RPC', Username: 'api@example.com',
+    Password: 'secret', Database: 'saas', Failover_Group: 'issuer-a', Issuer_Key: 'issuer-a', status: 'READY',
+  } }];
+  const loaded = await loadProviders.call(context([rows], {
+    batchId: 'phase04-saas19', sourceName: 'provider', duplicatePolicy: 'error', includeDisabled: false, strictValidation: true,
+    enableOdooPreflight: true, preflightCurrency: 'USD', preflightCheckPermissions: true, preflightFailurePolicy: 'excludeAndReport',
+  }, odooPreflightResponses(19, 19, 'SaaS Company', 'saas~19.4+e')));
+  assert.equal(loaded[0][0].json.total, 1);
+  assert.equal(loaded[0][0].json.providers[0].odooMajorVersion, 19);
+  assert.equal(loaded[0][0].json.preflightResults[0].Odoo_Server_Version, 'saas~19.4+e');
 });
 
 test('v2.1.1 Phase 04 issuer mismatch blocks the entire Odoo failover group', async () => {
@@ -2837,8 +2869,11 @@ test('v2.1.1 Phase 05 canonical workflow writes PROVIDER_PENDING before Invoice 
   const names = new Set(workflow.nodes.map((node) => node.name));
   for (const name of ['Prepare Provider Operation Envelope','Google Sheets - Provider Operation Envelope','Restore Provider Operation Context']) assert.equal(names.has(name), true);
   assert.equal(workflow.connections['Restore Allocation Checkpoint Context'].main[0][0].node, 'Request Builder');
-  assert.equal(workflow.connections['Request Builder'].main[0][0].node, 'Google Sheets - Provider Lease Verify');
-  assert.equal(workflow.connections['Google Sheets - Provider Lease Verify'].main[0][0].node, 'Verify Provider Lease Before Side Effect');
+  assert.deepEqual(workflow.connections['Request Builder'].main[0].map((entry) => [entry.node, entry.index]), [['Google Sheets - Provider Lease Verify', 0], ['Merge Request Context and Provider Lease', 0]]);
+  assert.equal(workflow.connections['Google Sheets - Provider Lease Verify'].main[0][0].node, 'Pack Provider Lease Rows');
+  assert.equal(workflow.connections['Pack Provider Lease Rows'].main[0][0].node, 'Merge Request Context and Provider Lease');
+  assert.equal(workflow.connections['Pack Provider Lease Rows'].main[0][0].index, 1);
+  assert.equal(workflow.connections['Merge Request Context and Provider Lease'].main[0][0].node, 'Verify Provider Lease Before Side Effect');
   assert.equal(workflow.connections['Verify Provider Lease Before Side Effect'].main[0][0].node, 'Prepare Provider Operation Envelope');
   assert.equal(workflow.connections['Restore Provider Operation Context'].main[0][0].node, 'Invoice Sender');
   const prep = workflow.nodes.find((node) => node.name === 'Prepare Provider Operation Envelope').parameters.jsCode;
@@ -2859,7 +2894,9 @@ test('v2.1.1 Phase 05 recipient and provider writes match immutable Row_ID and P
   assert.equal(byName['Google Sheets - Persist Job Identity'].parameters.columns.value.row_number, '={{ $json["row_number"] }}');
   assert.deepEqual(byName['Google Sheets - Recipient Status'].parameters.columns.matchingColumns, ['Row_ID']);
   assert.deepEqual(byName['Google Sheets - Provider Status'].parameters.columns.matchingColumns, ['Profile_ID']);
-  assert.deepEqual(byName['Google Sheets - Preflight Provider Status'].parameters.columns.matchingColumns, ['Profile_ID']);
+  assert.equal(byName['Google Sheets - Preflight Provider Status'].parameters.operation, 'update');
+  assert.deepEqual(byName['Google Sheets - Preflight Provider Status'].parameters.columns.matchingColumns, ['row_number']);
+  assert.equal(byName['Google Sheets - Preflight Provider Status'].parameters.columns.value.row_number, '={{ $json["row_number"] }}');
   const headers = fs.readFileSync(path.join(root, 'template/providers/odoo/writeback_queue.csv'), 'utf8').split(/\r?\n/)[0];
   for (const field of ['Operation_ID','Row_ID','Profile_ID','Stable_Reference','Lifecycle_Action','Operation_State','Checkpoint_JSON','Evidence_JSON']) assert.match(headers, new RegExp(field));
 });
@@ -3213,10 +3250,10 @@ test('v2.1.1 final corrective audit preserves operation envelope Created_At acro
 test('v2.1.1 final corrective audit rereads and verifies the campaign lease immediately before every provider envelope and send', () => {
   const workflow = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json'), 'utf8'));
   const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
-  assert.equal(workflow.nodes.length, 126);
+  assert.equal(workflow.nodes.length, 132);
   let edges = 0;
   for (const value of Object.values(workflow.connections)) for (const groups of Object.values(value)) for (const group of groups) edges += group.length;
-  assert.equal(edges, 141);
+  assert.equal(edges, 148);
   assert.equal(byName['Google Sheets - Provider Lease Verify'].parameters.operation, 'read');
   assert.equal(byName['Google Sheets - Provider Lease Verify'].retryOnFail, true);
   assert.equal(byName['Google Sheets - Provider Lease Verify'].maxTries, 3);
@@ -3224,7 +3261,8 @@ test('v2.1.1 final corrective audit rereads and verifies the campaign lease imme
   assert.match(verify, /Run_State/);
   assert.match(verify, /Run_ID/);
   assert.match(verify, /Lock_Expires_At/);
-  assert.equal(workflow.connections['Request Builder'].main[0][0].node, 'Google Sheets - Provider Lease Verify');
+  assert.deepEqual(workflow.connections['Request Builder'].main[0].map((entry) => [entry.node, entry.index]), [['Google Sheets - Provider Lease Verify', 0], ['Merge Request Context and Provider Lease', 0]]);
+  assert.equal(workflow.connections['Merge Request Context and Provider Lease'].main[0][0].node, 'Verify Provider Lease Before Side Effect');
   assert.equal(workflow.connections['Verify Provider Lease Before Side Effect'].main[0][0].node, 'Prepare Provider Operation Envelope');
   assert.equal(workflow.connections['Restore Provider Operation Context'].main[0][0].node, 'Invoice Sender');
 });
@@ -3280,4 +3318,78 @@ test('v2.1.1 Phase 07 static final-release gate validates the frozen release pre
   const output = execFileSync(process.execPath, [path.join(root, 'scripts/phase07-final-release-gate.mjs'), '--static-only'], { encoding: 'utf8' });
   assert.match(output, /static final-release prerequisites PASS/);
   assert.match(output, /Live canary\/pilot evidence remains intentionally PENDING/);
+});
+
+test('v2.1.1 corrective scope keeps the production workflow account-count agnostic', () => {
+  const workflow = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json'), 'utf8'));
+  const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
+  assert.equal(workflow.meta.invoiceRouterAccountCountPolicy, 'all-enabled-provider-rows');
+  assert.equal(workflow.meta.invoiceRouterProviderCountLimit, null);
+  assert.equal(/3-Account/i.test(workflow.name), false);
+  assert.equal(byName['Provider Loader'].parameters.includeDisabled, false);
+  assert.equal(byName['Provider Selector'].parameters.strategy, 'roundRobin');
+  assert.equal(byName['Email List'].parameters.campaignMaxInvoices, 100);
+  assert.equal(byName['Invoice Sender'].parameters.maxInvoicesPerExecution, 100);
+});
+
+test('v2.1.1 corrective scope updates provider preflight evidence on the original row', () => {
+  const workflow = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json'), 'utf8'));
+  const byName = Object.fromEntries(workflow.nodes.map((node) => [node.name, node]));
+  const prepare = byName['Prepare Preflight Provider Status'].parameters.jsCode;
+  const sheet = byName['Google Sheets - Preflight Provider Status'];
+  assert.match(prepare, /row_number/);
+  assert.equal(sheet.parameters.operation, 'update');
+  assert.deepEqual(sheet.parameters.columns.matchingColumns, ['row_number']);
+  assert.equal(sheet.parameters.columns.value.row_number, '={{ $json["row_number"] }}');
+  assert.equal(sheet.parameters.columns.schema.some((field) => field.id === 'row_number' && field.readOnly === true), true);
+});
+
+test('v2.1.1 corrective scope reclaims only a pre-provider failed campaign lease', () => {
+  const workflow = JSON.parse(fs.readFileSync(path.join(root, 'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json'), 'utf8'));
+  const code = workflow.nodes.find((node) => node.name === 'Prepare Campaign Lease').parameters.jsCode;
+  const executeCode = new Function('items', code);
+  const base = {
+    json: {
+      providerLibrary: { providers: [{ id: 'odoo-account-1' }] },
+      job: {
+        campaignId: 'campaign-recover',
+        campaignSafety: {
+          runId: 'run-new',
+          totalItems: 1,
+          leaseDurationMs: 60_000,
+          seed: {
+            runState: 'ACTIVE',
+            runId: 'run-old',
+            lockExpiresAt: '2099-01-01T00:00:00.000Z',
+            revision: 4,
+          },
+        },
+      },
+      failoverState: {},
+    },
+  };
+  const recovered = executeCode([base]);
+  assert.equal(recovered[0].json.Run_ID, 'run-new');
+  assert.equal(recovered[0].json.Recovered_From_Run_ID, 'run-old');
+  assert.equal(recovered[0].json.Aggregate_Source, 'LEASE_RECOVERED_BEFORE_PROVIDER_SIDE_EFFECT');
+
+  assert.throws(() => executeCode([{ json: {
+    ...base.json,
+    job: { ...base.json.job, operationRecovery: { state: 'PROVIDER_PENDING' } },
+  } }]), /unresolved provider operation/);
+
+  assert.throws(() => executeCode([{ json: {
+    ...base.json,
+    providerLibrary: { providers: [] },
+  } }]), /no eligible provider account/);
+});
+
+test('v2.1.1 corrective scope removes Odoo major-version sender allowlist gates', () => {
+  const manifest = fs.readFileSync(path.join(root, 'shared/odoo/OdooCapabilityManifest.ts'), 'utf8');
+  const sender = fs.readFileSync(path.join(root, 'nodes/06_InvoiceSender/InvoiceSender.execute.ts'), 'utf8');
+  assert.match(manifest, /capability-driven/);
+  assert.match(manifest, /saas~19\.4\+e/);
+  assert.doesNotMatch(manifest, /major !== 18 && major !== 19/);
+  assert.doesNotMatch(sender, /Unsupported Odoo major version/);
+  assert.doesNotMatch(sender, /compatibility\.supported === false/);
 });

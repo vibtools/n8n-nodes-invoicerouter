@@ -1,6 +1,10 @@
 import { toFiniteNumber, toStringValue } from '../utils/Helpers';
 
-export type SupportedOdooMajorVersion = 18 | 19;
+/**
+ * Odoo version numbers are recorded for diagnostics only. Runtime support is
+ * capability-driven and is not restricted to a fixed major-version allowlist.
+ */
+export type SupportedOdooMajorVersion = number;
 
 export interface OdooCapabilityProfile {
   id: string;
@@ -43,6 +47,11 @@ export interface OdooCapabilityProfile {
   versionSpecificWizardFields: string[];
 }
 
+/**
+ * These versions have documented metadata profiles. This is not an allowlist;
+ * other Odoo versions use the common capability profile and are accepted when
+ * the required API surface is present.
+ */
 export const SUPPORTED_ODOO_MAJOR_VERSIONS: SupportedOdooMajorVersion[] = [18, 19];
 
 const COMMON_REQUIRED_FIELDS: Record<string, string[]> = {
@@ -104,30 +113,24 @@ const COMMON_REQUIRED_METHODS: Record<string, string[]> = {
   'ir.attachment': ['read'],
 };
 
-const VERSION_WIZARD_FIELDS: Record<SupportedOdooMajorVersion, string[]> = {
+const VERSION_WIZARD_FIELDS: Record<number, string[]> = {
   18: ['mail_template_id', 'mail_subject', 'mail_body'],
   19: ['template_id', 'subject', 'body', 'model', 'res_ids'],
 };
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
-}
 
 function cloneFields(fields: Record<string, string[]>): Record<string, string[]> {
   return Object.fromEntries(Object.entries(fields).map(([model, values]) => [model, [...values]]));
 }
 
-function profileForMajor(majorVersion: SupportedOdooMajorVersion): OdooCapabilityProfile {
-  const requiredFields = cloneFields(COMMON_REQUIRED_FIELDS);
-  requiredFields['account.move.send.wizard'] = unique([
-    ...requiredFields['account.move.send.wizard'],
-    ...VERSION_WIZARD_FIELDS[majorVersion],
-  ]);
+function profileForMajor(majorVersion: number): OdooCapabilityProfile {
+  const normalizedMajor = Math.max(0, Math.trunc(toFiniteNumber(majorVersion, 0)));
   return {
-    id: `odoo-${majorVersion}-invoice-send`,
-    majorVersion,
+    id: normalizedMajor > 0 ? `odoo-${normalizedMajor}-invoice-send` : 'odoo-capability-driven-invoice-send',
+    majorVersion: normalizedMajor,
     supported: true,
-    requiredFields,
+    // Version-specific display/template fields are intentionally not required.
+    // InvoiceRouter validates only the fields it actually reads or writes.
+    requiredFields: cloneFields(COMMON_REQUIRED_FIELDS),
     requiredMethods: cloneFields(COMMON_REQUIRED_METHODS),
     readProbeModels: ['res.partner', 'account.move'],
     senderFields: {
@@ -181,42 +184,27 @@ function profileForMajor(majorVersion: SupportedOdooMajorVersion): OdooCapabilit
       mailSearch: 'search_read',
       attachmentRead: 'read',
     },
-    versionSpecificWizardFields: [...VERSION_WIZARD_FIELDS[majorVersion]],
+    versionSpecificWizardFields: [...(VERSION_WIZARD_FIELDS[normalizedMajor] ?? [])],
   };
 }
 
-const PROFILES: Record<SupportedOdooMajorVersion, OdooCapabilityProfile> = {
-  18: profileForMajor(18),
-  19: profileForMajor(19),
-};
-
 export function odooMajorVersion(value: unknown): number {
-  if (Array.isArray(value)) return Math.trunc(toFiniteNumber(value[0], 0));
-  if (typeof value === 'number') return Math.trunc(value);
+  if (Array.isArray(value)) return odooMajorVersion(value[0]);
+  if (typeof value === 'number') return Math.max(0, Math.trunc(value));
   const text = toStringValue(value).trim();
-  const match = text.match(/^(\d+)/);
+  // Odoo Online may report values such as "saas~19.4+e".
+  const match = text.match(/(\d+)/);
   return match ? Number(match[1]) : 0;
 }
 
-export function resolveOdooCapabilityProfile(serverVersion: unknown): OdooCapabilityProfile | undefined {
-  const major = odooMajorVersion(serverVersion);
-  if (major !== 18 && major !== 19) return undefined;
-  return profileForMajor(major);
+export function resolveOdooCapabilityProfile(serverVersion: unknown): OdooCapabilityProfile {
+  return profileForMajor(odooMajorVersion(serverVersion));
 }
 
 export function requireOdooCapabilityProfile(serverVersion: unknown): OdooCapabilityProfile {
-  const profile = resolveOdooCapabilityProfile(serverVersion);
-  if (profile) return profile;
-  const major = odooMajorVersion(serverVersion);
-  const label = toStringValue(serverVersion).trim() || 'unknown';
-  throw new Error(
-    `Unsupported Odoo server version ${label}${major > 0 ? ` (major ${major})` : ''}. ` +
-      `InvoiceRouter v2.1.1 supports Odoo major versions ${SUPPORTED_ODOO_MAJOR_VERSIONS.join(' and ')} only.`,
-  );
+  return resolveOdooCapabilityProfile(serverVersion);
 }
 
-export function odooCapabilityProfileByMajor(value: unknown): OdooCapabilityProfile | undefined {
-  const major = odooMajorVersion(value);
-  if (major !== 18 && major !== 19) return undefined;
-  return profileForMajor(major);
+export function odooCapabilityProfileByMajor(value: unknown): OdooCapabilityProfile {
+  return profileForMajor(odooMajorVersion(value));
 }

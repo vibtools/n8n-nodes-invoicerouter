@@ -82,7 +82,7 @@ Stop the run and investigate when:
 
 ## Capability and issuer gate
 
-- [ ] Every enabled Odoo account reports major version 18 or 19.
+- [ ] Every enabled Odoo account reports its server version and passes capability validation.
 - [ ] `Capability_Status=CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN` was reviewed.
 - [ ] Every enabled account has a non-placeholder `Issuer_Key`.
 - [ ] All accounts in each failover group resolve to the same `Company_ID`/`Company_Name`.
@@ -110,7 +110,7 @@ Stop the run and investigate when:
 
 ## Final corrective audit acceptance
 
-- [ ] Exact n8n 2.31.6 evidence reports canonical import/export at 126 nodes, 141 edges, and eight custom nodes.
+- [ ] Exact n8n 2.31.6 evidence reports canonical import/export at 132 nodes, 148 edges, and eight custom nodes.
 - [ ] A forced restart after `PROVIDER_PENDING` reuses the same stable reference and creates no duplicate invoice/email.
 - [ ] A changed/expired Run_ID immediately before provider work blocks the operation.
 - [ ] Canary/pilot evidence hashes match the engine-tested tarball and canonical workflow.

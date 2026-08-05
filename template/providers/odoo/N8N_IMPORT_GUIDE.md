@@ -117,4 +117,4 @@ Do not bypass `Prepare Campaign Lease`, `Verify Campaign Lease`, or the release 
 
 ## Phase 04 provider columns
 
-The `provider` tab must include `Issuer_Key`, `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Odoo_Major_Version`, `Capability_Status`, and `Issuer_Compatibility`. Fill `Issuer_Key`; preflight writes the remaining evidence. Use only Odoo 18 or 19.
+The `provider` tab must include `Issuer_Key`, `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Odoo_Major_Version`, `Capability_Status`, and `Issuer_Compatibility`. Fill `Issuer_Key`; preflight writes the remaining evidence. Odoo version is not hard-locked; preflight validates the required capability surface.

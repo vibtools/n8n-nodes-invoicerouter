@@ -22,10 +22,11 @@
     "invoice.send_email"
   ],
   "compatibility": {
-    "supportedOdooMajorVersions": [
+    "unknownVersionPolicy": "capability_driven",
+    "profiledOdooMajorVersions": [
       18,
       19
     ],
-    "unknownVersionPolicy": "fail_closed"
+    "versionAllowlistEnforced": false
   }
 }

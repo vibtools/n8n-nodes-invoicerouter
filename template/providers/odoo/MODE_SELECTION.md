@@ -33,4 +33,4 @@ All production/canary/bulk uses of the v2.1.1 canonical workflow require one pen
 
 ## Version and issuer rule for every mode
 
-Dry-run, sandbox, canary, and live-bulk templates share the same Odoo version and legal-issuer gate. Only Odoo 18/19 profiles enter the runtime pool. A failover group may contain only accounts for the same issuer/company.
+Dry-run, sandbox, canary, and live-bulk templates share the same capability and legal-issuer gate. Odoo version is diagnostic metadata; accounts enter the runtime pool when the required capability surface is validated. A failover group may contain only accounts for the same issuer/company.

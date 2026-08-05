@@ -31,7 +31,7 @@ Partner resolution uses case-insensitive exact email matching with a two-record 
 
 ## Phase 04 — Shared Odoo capability, version, and legal-issuer compatibility
 
-InvoiceRouter now uses one canonical manifest, `shared/odoo/OdooCapabilityManifest.ts`, for the Odoo fields and methods used by Provider Loader preflight, Invoice Sender, and regression tests. Supported server majors are **Odoo 18 and Odoo 19**. An unknown major version fails closed before authentication or any provider side effect.
+InvoiceRouter now uses one canonical manifest, `shared/odoo/OdooCapabilityManifest.ts`, for the Odoo fields and methods used by Provider Loader preflight, Invoice Sender, and regression tests. Runtime support is capability-driven and does not enforce a fixed Odoo major-version allowlist. Odoo 18 and 19 retain documented metadata profiles; strings such as `saas~19.4+e` are parsed for diagnostics, while compatibility is decided by the API fields and methods actually required by InvoiceRouter.
 
 Preflight records the server version, resolved capability profile, authenticated company identity, and the explicit status `CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN`. Read-only field/model validation cannot prove create, post, or send permission; those side-effect permissions remain unproven until the controlled live canary.
 
@@ -619,7 +619,7 @@ GitHub/npm publication remains fail-closed on source validation, the Phase 07 st
 The final audit found and corrected four release-critical gaps after the initial Phase 07 implementation:
 
 - the Windows engine harness no longer launches `npm.cmd`/`npx.cmd` directly; it invokes the npm CLI through the active Node executable;
-- the engine gate now imports and exports the complete 126-node/141-edge canonical workflow in addition to executing the dry-run eight-node fixture;
+- the engine gate now imports and exports the complete 132-node/148-edge canonical workflow in addition to executing the dry-run eight-node fixture;
 - `PROVIDER_PENDING` is now a startup reconciliation input with the exact Request Builder stable reference, preventing blind create/send replay after a crash;
 - the campaign lease is reread and verified immediately before the operation envelope and Invoice Sender path.
 

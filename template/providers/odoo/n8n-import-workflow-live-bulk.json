@@ -153,7 +153,7 @@
     },
     {
       "parameters": {
-        "strategy": "firstAvailable",
+        "strategy": "roundRobin",
         "providerFilter": "Odoo",
         "actionFilter": "Create Invoice",
         "environmentFilter": "live",
@@ -277,7 +277,7 @@
     },
     {
       "parameters": {
-        "content": "## InvoiceRouter Odoo Production Bulk v2.1.1\n\nCorrective production workflow: version-aware Odoo preflight, one-input embedded Request Builder, campaign-wide cap/failure threshold/delay, persisted Job_ID before send, ordered Sheet writebacks, durable writeback-only repair, safe retry/failover, and aggregate account/campaign reports.\n\nRaw import path after release: template/providers/odoo/n8n-import-workflow-production-v2.1.1.json",
+        "content": "## InvoiceRouter Odoo Production v2.1.1\n\nAccount-count agnostic production workflow. Every enabled provider row is loaded. Includes durable retry/failover, original-row provider preflight writeback, capability-driven Odoo version handling, provider-side-effect lease verification, and safe pre-provider lease recovery.",
         "height": 460,
         "width": 560
       },
@@ -2981,7 +2981,7 @@
     },
     {
       "parameters": {
-        "jsCode": "if(items[0]?.json?.rehydration)return [];const results=Array.isArray(items[0]?.json?.preflightResults)?items[0].json.preflightResults:[];return results.filter((row)=>row?.Account).map((row)=>({json:{...items[0].json,Profile_ID:row.Profile_ID||'',Account:row.Account,Enabled:row.Enabled,status:row.status||'READY',Status_Reason:row.Status_Reason||'',Auto_Disabled:row.Auto_Disabled===true,Last_Error_Type:row.Last_Error_Type||'',Last_Error:row.Last_Error||'',Issuer_Key:row.Issuer_Key||'',Company_ID:row.Company_ID||'',Company_Name:row.Company_Name||'',Odoo_Server_Version:row.Odoo_Server_Version||'',Odoo_Major_Version:row.Odoo_Major_Version||'',Capability_Status:row.Capability_Status||'',Issuer_Compatibility:row.Issuer_Compatibility||'',Updated_At:row.Updated_At||new Date().toISOString()}}));"
+        "jsCode": "if(items[0]?.json?.rehydration)return [];const results=Array.isArray(items[0]?.json?.preflightResults)?items[0].json.preflightResults:[];return results.filter((row)=>row?.Account).map((row)=>{const sourceRow=Math.max(2,Number(row.row_number||row.Row_Number||0));if(!Number.isInteger(sourceRow))throw new Error(`Provider preflight result for ${String(row.Account||'unknown')} is missing its source row.`);return {json:{...items[0].json,row_number:sourceRow,Profile_ID:row.Profile_ID||'',Account:row.Account,Enabled:row.Enabled,status:row.status||'READY',Status_Reason:row.Status_Reason||'',Auto_Disabled:row.Auto_Disabled===true,Last_Error_Type:row.Last_Error_Type||'',Last_Error:row.Last_Error||'',Issuer_Key:row.Issuer_Key||'',Company_ID:row.Company_ID||'',Company_Name:row.Company_Name||'',Odoo_Server_Version:row.Odoo_Server_Version||'',Odoo_Major_Version:row.Odoo_Major_Version||'',Capability_Status:row.Capability_Status||'',Issuer_Compatibility:row.Issuer_Compatibility||'',Updated_At:row.Updated_At||new Date().toISOString()}};});"
       },
       "id": "prepare-preflight-provider-status",
       "name": "Prepare Preflight Provider Status",
@@ -2994,7 +2994,7 @@
     },
     {
       "parameters": {
-        "operation": "appendOrUpdate",
+        "operation": "update",
         "documentId": {
           "__rl": true,
           "value": "REPLACE_ODOO_SPREADSHEET_ID",
@@ -3023,12 +3023,24 @@
             "Odoo_Major_Version": "={{ $json[\"Odoo_Major_Version\"] }}",
             "Capability_Status": "={{ $json[\"Capability_Status\"] }}",
             "Issuer_Compatibility": "={{ $json[\"Issuer_Compatibility\"] }}",
-            "Profile_ID": "={{ $json[\"Profile_ID\"] }}"
+            "Profile_ID": "={{ $json[\"Profile_ID\"] }}",
+            "row_number": "={{ $json[\"row_number\"] }}"
           },
           "matchingColumns": [
-            "Profile_ID"
+            "row_number"
           ],
           "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
             {
               "id": "Account",
               "displayName": "Account",
@@ -3183,7 +3195,7 @@
               "id": "Profile_ID",
               "displayName": "Profile_ID",
               "required": false,
-              "defaultMatch": true,
+              "defaultMatch": false,
               "display": true,
               "type": "string",
               "canBeUsedToMatch": true,
@@ -3273,7 +3285,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const rows=items.map((item)=>item.json||{});\nconst pending=rows.filter((row)=>['PENDING','RETRY_WAIT'].includes(String(row.Queue_Status||'').trim().toUpperCase()));\nconst campaignRows=$items(\"Google Sheets - Campaign Report Input\").map((item)=>item.json||{});const accountRows=$items(\"Google Sheets - Account Report Input\").map((item)=>item.json||{});\nconst current=(target,key)=>{const source=target==='campaign_report'?campaignRows:accountRows;return source.filter((row)=>String(row.Report_Key||'')===String(key||'')).sort((a,b)=>Number(b.Revision||0)-Number(a.Revision||0))[0]||{};};\nconst shouldWrite=(target,payload)=>{if(!['campaign_report','account_report'].includes(target))return true;const next=Number(payload.Revision||0),base=Number(payload.Base_Revision||0);if(!next)return true;const present=Number(current(target,payload.Report_Key).Revision||0);if(next<=present)return false;if(base!==present)throw new Error(`Repair ${target} ${payload.Report_Key} has revision gap: current ${present}, base ${base}, candidate ${next}.`);if(next!==base+1)throw new Error(`Repair ${target} ${payload.Report_Key} candidate revision must equal Base_Revision + 1.`);return true;};\nconst out=[];\nfor (const row of pending) {\n  let payload={};\n  try { payload=typeof row.Payload_JSON==='string'?JSON.parse(row.Payload_JSON):(row.Payload_JSON||{}); } catch { payload={}; }\n  const ordered=['invoice_results','email_list','retry_queue','campaign_report','provider','account_report'];\n  const targets=ordered.filter((target)=>payload[target]&&typeof payload[target]==='object'&&Object.keys(payload[target]).length>0&&shouldWrite(target,payload[target]));\n  if(targets.length===0){out.push({json:{repairId:String(row.Repair_ID||''),repairCampaignId:String(row.Campaign_ID||''),repairJobId:String(row.Job_ID||''),repairTarget:'noop',repairIndex:1,repairTotal:1,repairSkippedAsStale:true},pairedItem:{item:out.length}});continue;}\n  targets.forEach((target,index)=>out.push({json:{repairId:String(row.Repair_ID||''),repairCampaignId:String(row.Campaign_ID||''),repairJobId:String(row.Job_ID||''),repairTarget:target,repairPayload:payload[target],repairIndex:index+1,repairTotal:targets.length},pairedItem:{item:out.length}}));\n}\nif (out.length===0) out.push({json:{repairTarget:'noop',repairIndex:1,repairTotal:1,repairId:'NO_PENDING_REPAIRS'},pairedItem:{item:0}});\nreturn out;"
+        "jsCode": "const rows=$items(\"Google Sheets - Writeback Queue Input\").map((item)=>item.json||{});\nconst pending=rows.filter((row)=>['PENDING','RETRY_WAIT'].includes(String(row.Queue_Status||'').trim().toUpperCase()));\nconst campaignRows=$items(\"Google Sheets - Repair Campaign Report Input\").map((item)=>item.json||{});const accountRows=items.map((item)=>item.json||{});\nconst current=(target,key)=>{const source=target==='campaign_report'?campaignRows:accountRows;return source.filter((row)=>String(row.Report_Key||'')===String(key||'')).sort((a,b)=>Number(b.Revision||0)-Number(a.Revision||0))[0]||{};};\nconst shouldWrite=(target,payload)=>{if(!['campaign_report','account_report'].includes(target))return true;const next=Number(payload.Revision||0),base=Number(payload.Base_Revision||0);if(!next)return true;const present=Number(current(target,payload.Report_Key).Revision||0);if(next<=present)return false;if(base!==present)throw new Error(`Repair ${target} ${payload.Report_Key} has revision gap: current ${present}, base ${base}, candidate ${next}.`);if(next!==base+1)throw new Error(`Repair ${target} ${payload.Report_Key} candidate revision must equal Base_Revision + 1.`);return true;};\nconst out=[];\nfor (const row of pending) {\n  let payload={};\n  try { payload=typeof row.Payload_JSON==='string'?JSON.parse(row.Payload_JSON):(row.Payload_JSON||{}); } catch { payload={}; }\n  const ordered=['invoice_results','email_list','retry_queue','campaign_report','provider','account_report'];\n  const targets=ordered.filter((target)=>payload[target]&&typeof payload[target]==='object'&&Object.keys(payload[target]).length>0&&shouldWrite(target,payload[target]));\n  if(targets.length===0){out.push({json:{repairId:String(row.Repair_ID||''),repairCampaignId:String(row.Campaign_ID||''),repairJobId:String(row.Job_ID||''),repairTarget:'noop',repairIndex:1,repairTotal:1,repairSkippedAsStale:true},pairedItem:{item:out.length}});continue;}\n  targets.forEach((target,index)=>out.push({json:{repairId:String(row.Repair_ID||''),repairCampaignId:String(row.Campaign_ID||''),repairJobId:String(row.Job_ID||''),repairTarget:target,repairPayload:payload[target],repairIndex:index+1,repairTotal:targets.length},pairedItem:{item:out.length}}));\n}\nif (out.length===0) out.push({json:{repairTarget:'noop',repairIndex:1,repairTotal:1,repairId:'NO_PENDING_REPAIRS'},pairedItem:{item:0}});\nreturn out;"
       },
       "id": "4cb897f7-edff-43c9-b2d6-e6d41b5a6202",
       "name": "Build Writeback Repair Items",
@@ -7517,7 +7529,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const first=items.find((item)=>item.json?.job?.campaignId);\nif(!first)return[];\nconst job=first.json.job||{};const config=job.campaignSafety||{};const seed=config.seed||{};\nconst campaignId=String(job.campaignId||'default-campaign');const runId=String(config.runId||'').trim();\nif(!runId)throw new Error(`Campaign ${campaignId} cannot acquire a run lease without Run_ID.`);\nconst now=Date.now();const existingState=String(seed.runState||seed.Run_State||'').toUpperCase();const existingRunId=String(seed.runId||seed.Run_ID||'');const existingExpiry=Date.parse(String(seed.lockExpiresAt||seed.Lock_Expires_At||''));\nif(existingState==='ACTIVE'&&existingRunId&&existingRunId!==runId&&Number.isFinite(existingExpiry)&&existingExpiry>now)throw new Error(`Campaign ${campaignId} already has an active run lease owned by ${existingRunId} until ${new Date(existingExpiry).toISOString()}.`);\nconst leaseDurationMs=Math.max(900000,Number(config.leaseDurationMs||14400000));const acquiredAt=new Date(now).toISOString();const expiresAt=new Date(now+leaseDurationMs).toISOString();const baseRevision=Math.max(0,Number(seed.revision||seed.Revision||0));const revision=baseRevision+1;\nconst terminal=Array.isArray(seed.terminalJobIds)?seed.terminalJobIds.length:0;const total=Math.max(Number(config.totalItems||0),Number(seed.totalItems||0));\nreturn [{json:{Report_Key:campaignId,Campaign_ID:campaignId,Job_ID:'',Recipient_Email:'',Status:seed.paused?'PAUSED':'RUNNING',Pending:Math.max(0,total-terminal),Sent:Number(seed.sent||0),Queued:Number(seed.queued||0),Failed:Number(seed.failed||0),Manual_Review:Number(seed.manualReview||0),Duplicate:Number(seed.duplicate||0),Retrying:Number(seed.retrying||seed.Retrying||0),Failover:Number(seed.failover||seed.Failover||0),Account_ID:'',Updated_At:acquiredAt,Pause_Reason:String(seed.pauseReason||''),Run_State:'ACTIVE',Run_ID:runId,Lock_Acquired_At:acquiredAt,Lock_Expires_At:expiresAt,Base_Revision:baseRevision,Revision:revision,Writer_Run_ID:runId,Aggregate_Source:'LEASE_ACQUIRE',Last_Attempt_At:String(seed.lastAttemptAt||''),__lease:{campaignId,runId,acquiredAt,expiresAt,baseRevision,revision,leaseDurationMs}}}];"
+        "jsCode": "const first=items.find((item)=>item.json?.job?.campaignId);\nif(!first)return[];\nconst job=first.json.job||{};const config=job.campaignSafety||{};const seed=config.seed||{};\nconst providerLibrary=first.json.providerLibrary||{};const providers=Array.isArray(providerLibrary.providers)?providerLibrary.providers:[];\nconst campaignId=String(job.campaignId||'default-campaign');const runId=String(config.runId||'').trim();\nif(providers.length===0)throw new Error(`Campaign ${campaignId} has no eligible provider account after validation/preflight. No run lease was acquired.`);\nif(!runId)throw new Error(`Campaign ${campaignId} cannot acquire a run lease without Run_ID.`);\nconst unresolvedProviderOperation=items.some((item)=>{const operation=item.json?.job?.operationRecovery||{};const failover=item.json?.failoverState||{};return String(operation.state||'').toUpperCase()==='PROVIDER_PENDING'||String(failover.queueStatus||'').toUpperCase()==='PROVIDER_PENDING';});\nconst now=Date.now();const existingState=String(seed.runState||seed.Run_State||'').toUpperCase();const existingRunId=String(seed.runId||seed.Run_ID||'');const existingExpiry=Date.parse(String(seed.lockExpiresAt||seed.Lock_Expires_At||''));\nconst differentActiveOwner=existingState==='ACTIVE'&&existingRunId&&existingRunId!==runId&&Number.isFinite(existingExpiry)&&existingExpiry>now;\nif(differentActiveOwner&&unresolvedProviderOperation)throw new Error(`Campaign ${campaignId} already has an active run lease owned by ${existingRunId} until ${new Date(existingExpiry).toISOString()}, with an unresolved provider operation.`);\nconst recoveredFromRunId=differentActiveOwner?existingRunId:'';\nconst leaseDurationMs=Math.max(900000,Number(config.leaseDurationMs||14400000));const acquiredAt=new Date(now).toISOString();const expiresAt=new Date(now+leaseDurationMs).toISOString();const baseRevision=Math.max(0,Number(seed.revision||seed.Revision||0));const revision=baseRevision+1;\nconst terminal=Array.isArray(seed.terminalJobIds)?seed.terminalJobIds.length:0;const total=Math.max(Number(config.totalItems||0),Number(seed.totalItems||0));\nreturn [{json:{Report_Key:campaignId,Campaign_ID:campaignId,Job_ID:'',Recipient_Email:'',Status:seed.paused?'PAUSED':'RUNNING',Pending:Math.max(0,total-terminal),Sent:Number(seed.sent||0),Queued:Number(seed.queued||0),Failed:Number(seed.failed||0),Manual_Review:Number(seed.manualReview||0),Duplicate:Number(seed.duplicate||0),Retrying:Number(seed.retrying||seed.Retrying||0),Failover:Number(seed.failover||seed.Failover||0),Account_ID:'',Updated_At:acquiredAt,Pause_Reason:String(seed.pauseReason||''),Run_State:'ACTIVE',Run_ID:runId,Lock_Acquired_At:acquiredAt,Lock_Expires_At:expiresAt,Base_Revision:baseRevision,Revision:revision,Writer_Run_ID:runId,Aggregate_Source:recoveredFromRunId?'LEASE_RECOVERED_BEFORE_PROVIDER_SIDE_EFFECT':'LEASE_ACQUIRE',Last_Attempt_At:String(seed.lastAttemptAt||''),Recovered_From_Run_ID:recoveredFromRunId,__lease:{campaignId,runId,acquiredAt,expiresAt,baseRevision,revision,leaseDurationMs,recoveredFromRunId}}}];"
       },
       "id": "prepare-campaign-lease",
       "name": "Prepare Campaign Lease",
@@ -9130,7 +9142,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const source=$items(\"Request Builder\");\nif(source.length===0)return[];\nconst rows=items.map((item)=>item.json||{});\nreturn source.map((item,index)=>{\n const job=item.json.job||{};const config=job.campaignSafety||{};const campaignId=String(job.campaignId||'default-campaign');const expectedRunId=String(config.runId||config.seed?.runId||'');\n if(config.requireRunLease!==true) return {json:{...item.json,providerLeaseVerified:{required:false,verifiedAt:new Date().toISOString()}},pairedItem:item.pairedItem};\n const row=rows.filter((entry)=>String(entry.Report_Key||entry.Campaign_ID||'')===campaignId).sort((a,b)=>Number(b.Revision||0)-Number(a.Revision||0))[0];\n if(!row)throw new Error(`Campaign ${campaignId} provider-side-effect lease row is missing.`);\n const expires=Date.parse(String(row.Lock_Expires_At||''));\n if(String(row.Run_State||'').toUpperCase()!=='ACTIVE'||String(row.Run_ID||'')!==expectedRunId)throw new Error(`Campaign ${campaignId} provider-side-effect lease verification failed because the active Run_ID changed.`);\n if(!Number.isFinite(expires)||expires<=Date.now())throw new Error(`Campaign ${campaignId} provider-side-effect lease expired before Invoice Sender.`);\n return {json:{...item.json,providerLeaseVerified:{required:true,campaignId,runId:expectedRunId,revision:Number(row.Revision||0),lockExpiresAt:String(row.Lock_Expires_At||''),verifiedAt:new Date().toISOString()}},pairedItem:item.pairedItem};\n});"
+        "jsCode": "return items.map((item)=>{const {providerLeaseRows,...requestContext}=item.json||{};const job=requestContext.job||{};const config=job.campaignSafety||{};const campaignId=String(job.campaignId||'default-campaign');const expectedRunId=String(config.runId||config.seed?.runId||'');const rows=Array.isArray(providerLeaseRows)?providerLeaseRows:[];if(!requestContext.readyRequest?.requestId)throw new Error(`Campaign ${campaignId} lost Request Builder context before provider lease verification.`);if(config.requireRunLease!==true)return {json:{...requestContext,providerLeaseVerified:{required:false,verifiedAt:new Date().toISOString()}},pairedItem:item.pairedItem};const row=rows.filter((entry)=>String(entry.Report_Key||entry.Campaign_ID||'')===campaignId).sort((a,b)=>Number(b.Revision||0)-Number(a.Revision||0))[0];if(!row)throw new Error(`Campaign ${campaignId} provider-side-effect lease row is missing.`);const expires=Date.parse(String(row.Lock_Expires_At||''));if(String(row.Run_State||'').toUpperCase()!=='ACTIVE'||String(row.Run_ID||'')!==expectedRunId)throw new Error(`Campaign ${campaignId} provider-side-effect lease verification failed because the active Run_ID changed.`);if(!Number.isFinite(expires)||expires<=Date.now())throw new Error(`Campaign ${campaignId} provider-side-effect lease expired before Invoice Sender.`);return {json:{...requestContext,providerLeaseVerified:{required:true,campaignId,runId:expectedRunId,revision:Number(row.Revision||0),lockExpiresAt:String(row.Lock_Expires_At||''),verifiedAt:new Date().toISOString()}},pairedItem:item.pairedItem};});"
       },
       "id": "verify-provider-side-effect-lease",
       "name": "Verify Provider Lease Before Side Effect",
@@ -9139,6 +9151,128 @@
       "position": [
         3420,
         820
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{control:true}}];"
+      },
+      "id": "c770ace8-d6bc-4be5-9e5e-7b6b06350a79",
+      "name": "Prepare Repair Campaign Report Read",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1060,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "campaign_report",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "f54e6e75-d4c1-4491-ae63-c69c617fd8bd",
+      "name": "Google Sheets - Repair Campaign Report Input",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -840,
+        340
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{control:true}}];"
+      },
+      "id": "3ad15acc-d5c6-4bd5-9006-a1a971ca9fa5",
+      "name": "Prepare Repair Account Report Read",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_ODOO_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "account_report",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "62d7c0c4-5aba-4234-9353-49144d33691b",
+      "name": "Google Sheets - Repair Account Report Input",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -400,
+        340
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const providerLeaseRows=items.map((item)=>item.json||{}).filter((row)=>Object.keys(row).length>0);return [{json:{providerLeaseRows}}];"
+      },
+      "id": "a2224465-c3bf-41a4-be19-91615f60afe9",
+      "name": "Pack Provider Lease Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "a37f9e2d-e711-49c1-b748-93e9e3edabc1",
+      "name": "Merge Request Context and Provider Lease",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1500,
+        160
       ]
     }
   ],
@@ -9158,7 +9292,7 @@
       "main": [
         [
           {
-            "node": "Build Writeback Repair Items",
+            "node": "Prepare Repair Campaign Report Read",
             "type": "main",
             "index": 0
           }
@@ -9652,6 +9786,11 @@
         [
           {
             "node": "Google Sheets - Provider Lease Verify",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Request Context and Provider Lease",
             "type": "main",
             "index": 0
           }
@@ -10572,7 +10711,7 @@
       "main": [
         [
           {
-            "node": "Verify Provider Lease Before Side Effect",
+            "node": "Pack Provider Lease Rows",
             "type": "main",
             "index": 0
           }
@@ -10589,6 +10728,72 @@
           }
         ]
       ]
+    },
+    "Prepare Repair Campaign Report Read": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Repair Campaign Report Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Repair Campaign Report Input": {
+      "main": [
+        [
+          {
+            "node": "Prepare Repair Account Report Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Repair Account Report Read": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Repair Account Report Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Repair Account Report Input": {
+      "main": [
+        [
+          {
+            "node": "Build Writeback Repair Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack Provider Lease Rows": {
+      "main": [
+        [
+          {
+            "node": "Merge Request Context and Provider Lease",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Request Context and Provider Lease": {
+      "main": [
+        [
+          {
+            "node": "Verify Provider Lease Before Side Effect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -10597,13 +10802,13 @@
     "executionOrder": "v1",
     "saveManualExecutions": false
   },
-  "versionId": "invoice-router-odoo-production-v2.1.1-corrective",
+  "versionId": "655110c2-f7d6-447b-bafd-2bbf7765228f",
   "meta": {
     "templateCredsSetupCompleted": false,
     "invoiceRouterFreeze": "1.0",
     "invoiceRouterRelease": "2.1.1",
     "template": "template-001-odoo-production-corrective",
-    "spreadsheetPlaceholder": "REPLACE_SIMPLE_BULK_SPREADSHEET_ID",
+    "spreadsheetPlaceholder": "REPLACE_ODOO_SPREADSHEET_ID",
     "invoiceRouterWorkflow": "odoo-production-corrective-v2.1.1",
     "invoiceRouterHardeningPhase": "phase-07-final-corrective-audit",
     "invoiceRouterRuntimeRehydration": true,
@@ -10611,11 +10816,6 @@
     "invoiceRouterCampaignRunLease": true,
     "invoiceRouterMixedCampaignBlock": true,
     "invoiceRouterSharedOdooCapabilityManifest": true,
-    "invoiceRouterSupportedOdooMajorVersions": [
-      18,
-      19
-    ],
-    "invoiceRouterUnknownOdooVersionPolicy": "fail_closed",
     "invoiceRouterLegalIssuerCompatibility": true,
     "invoiceRouterMonotonicReporting": true,
     "invoiceRouterStaleWriterProtection": true,
@@ -10624,7 +10824,37 @@
     "invoiceRouterN8nEngineTarget": "2.31.6",
     "invoiceRouterFinalReleaseGate": true,
     "invoiceRouterLiveEvidenceRequired": true,
-    "invoiceRouterFinalCorrectiveAudit": true
+    "invoiceRouterFinalCorrectiveAudit": true,
+    "invoiceRouterAllocationStrategy": "roundRobin",
+    "googleSheetsCredentialName": "Google Sheets account",
+    "credentialBindingMode": "replace-one-instance-specific-id",
+    "setupNote": "Replace REPLACE_ODOO_SPREADSHEET_ID and REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID before import.",
+    "invoiceRouterRepairReadOrderingFix": true,
+    "invoiceRouterRepairReadOrderingFixReason": "Execute campaign_report and account_report reads before Build Writeback Repair Items.",
+    "googleSheetsCredentialIdPlaceholder": "REPLACE_GOOGLE_SHEETS_CREDENTIAL_ID",
+    "invoiceRouterRuntimeTopologyFix": true,
+    "invoiceRouterRuntimeTopologyFixScope": "writeback-repair-read-order",
+    "invoiceRouterRuntimeTopologyAudit": "STATIC_PASS",
+    "invoiceRouterNodeCount": 132,
+    "invoiceRouterEdgeCount": 148,
+    "invoiceRouterCustomNodeCount": 8,
+    "invoiceRouterGoogleSheetsNodeCount": 41,
+    "invoiceRouterProviderLeaseContextFix": true,
+    "invoiceRouterProviderLeaseContextFixMode": "merge-by-position",
+    "invoiceRouterProviderLeaseContextFixScope": "workflow-json-only",
+    "invoiceRouterLiveExecutionClaim": "requires-user-canary",
+    "invoiceRouterAccountCountPolicy": "all-enabled-provider-rows",
+    "invoiceRouterProviderCountLimit": null,
+    "invoiceRouterOdooVersionPolicy": "capability-driven-no-major-allowlist",
+    "invoiceRouterPreflightWritebackPolicy": "update-original-row-by-row_number",
+    "invoiceRouterLeaseRecoveryPolicy": "reclaim-only-before-provider-side-effect",
+    "invoiceRouterProfiledOdooMajorVersions": [
+      18,
+      19
+    ],
+    "invoiceRouterUnknownOdooVersionPolicy": "capability_driven",
+    "invoiceRouterVersionAllowlistEnforced": false,
+    "invoiceRouterInvoiceSafetyCap": 100
   },
   "tags": [
     {

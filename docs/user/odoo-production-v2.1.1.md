@@ -56,7 +56,7 @@ Do not manually retry an `UNVERIFIED` email. Reconcile the Odoo invoice, chatter
 
 ## Odoo version and issuer setup
 
-Use Odoo 18 or Odoo 19 only. Put the same stable `Issuer_Key` on every account that is legally allowed to issue interchangeable invoices in one failover group. After preflight, review `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Capability_Status`, and `Issuer_Compatibility`. Do not proceed when the group reports `ISSUER_MISMATCH` or `ODOO_VERSION_UNSUPPORTED`. A READY capability result still requires a one-recipient canary because create/post/send permission is not proven by read-only preflight.
+Odoo version is not hard-locked. Use an Odoo deployment that exposes the required InvoiceRouter JSON-RPC capability surface. Put the same stable `Issuer_Key` on every account that is legally allowed to issue interchangeable invoices in one failover group. After preflight, review `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Capability_Status`, and `Issuer_Compatibility`. Do not proceed when the group reports `ISSUER_MISMATCH` or a required capability validation failure. A READY capability result still requires a one-recipient canary because create/post/send permission is not proven by read-only preflight.
 
 ## Row and provider identity
 Do not edit generated `Row_ID` or `Profile_ID`. They are the durable matching keys used for recipient and provider updates. `writeback_queue` operation rows beginning with `OP:` must not be deleted while a run is active.

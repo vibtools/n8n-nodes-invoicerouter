@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Removed the fixed Odoo major-version allowlist; Odoo Online strings such as `saas~19.4+e` are parsed and compatibility is capability-driven.
+- Provider preflight status now updates the original Google Sheets row by `row_number`, preventing partial duplicate provider rows.
+- Campaign leases are not acquired with zero eligible providers and may be reclaimed only before any unresolved provider-side effect.
+- Production workflow remains account-count agnostic and loads every enabled valid provider row.
+
 ## 2.1.1 final corrective forensic audit — 2026-08-04
 
 - Fixed the exact n8n 2.31.6 engine import harness to use a temporary `--separate` directory, allowing n8n to generate a transient workflow ID without changing the canonical public workflow JSON.

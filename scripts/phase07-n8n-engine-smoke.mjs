@@ -99,8 +99,8 @@ function validateFixture(fixture) {
 
 function validateCanonical(workflow) {
   const custom = (workflow.nodes ?? []).filter((node) => String(node.type).startsWith('n8n-nodes-invoicerouter.'));
-  if (workflow.nodes?.length !== 126 || countEdges(workflow) !== 141 || custom.length !== 8) {
-    throw new Error(`Canonical workflow topology mismatch; expected 126 nodes / 141 edges / 8 custom nodes, found ${workflow.nodes?.length ?? 0} / ${countEdges(workflow)} / ${custom.length}.`);
+  if (workflow.nodes?.length !== 132 || countEdges(workflow) !== 148 || custom.length !== 8) {
+    throw new Error(`Canonical workflow topology mismatch; expected 132 nodes / 148 edges / 8 custom nodes, found ${workflow.nodes?.length ?? 0} / ${countEdges(workflow)} / ${custom.length}.`);
   }
 }
 

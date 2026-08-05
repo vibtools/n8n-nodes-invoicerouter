@@ -39,10 +39,10 @@ PDF proof is evaluated independently after invoice metadata read. `ir.attachment
 
 ### Phase 04 Odoo capability and issuer boundary
 
-`shared/odoo/OdooCapabilityManifest.ts` is the single runtime contract for Odoo 18/19 model fields, sender read shapes, and method names. Provider Loader resolves the profile from `common.version`; unsupported major versions are excluded before authentication. Sender consumes the same resolved profile and rejects an explicitly unsupported or issuer-incompatible request.
+`shared/odoo/OdooCapabilityManifest.ts` is the single runtime contract for the Odoo model fields, sender read shapes, and method names consumed by InvoiceRouter. Provider Loader records `common.version` but does not use a fixed major-version allowlist. Odoo 18 and 19 retain documented metadata profiles; all other versions use the common capability profile and proceed only when the required API surface is present. Sender still rejects issuer-incompatible requests.
 
 ```text
-common.version -> Odoo 18/19 profile
+common.version -> diagnostic major + capability-driven profile
 -> authenticate -> read-only fields/model probes
 -> authenticated user's company -> res.company identity
 -> Issuer_Key/company group verification
@@ -294,11 +294,11 @@ The automated publication gate consumes source, static, and exact-engine evidenc
 
 ## v2.1.1 Final corrective forensic audit
 
-The canonical production workflow now contains 126 nodes and 141 edges while retaining exactly eight exported InvoiceRouter custom nodes. Immediately before each provider operation, Request Builder is followed by a fresh `campaign_report` lease read and fail-closed Run_ID/expiry verification. Only then is the exact built stable reference persisted in the `PROVIDER_PENDING` operation envelope.
+The canonical production workflow now contains 132 nodes and 148 edges while retaining exactly eight exported InvoiceRouter custom nodes. Immediately before each provider operation, Request Builder is followed by a fresh `campaign_report` lease read and fail-closed Run_ID/expiry verification. Only then is the exact built stable reference persisted in the `PROVIDER_PENDING` operation envelope.
 
 On startup, an unresolved `PROVIDER_PENDING` row is reconstructed as `operationRecovery`. Email List preserves its stable reference, Request Builder reuses that reference, and Invoice Sender enters reconciliation mode before any invoice creation. A recovered posted invoice without trusted email checkpoint becomes `UNVERIFIED`/manual review rather than an automatic resend.
 
-The exact-engine harness invokes npm through Node's `npm_execpath`, imports/exports the complete 126-node canonical workflow, and records package/workflow/log hashes. Final canary and pilot evidence is cryptographically bound to that engine-tested tarball and canonical workflow. Tag releases validate npm credentials before GitHub release creation.
+The exact-engine harness invokes npm through Node's `npm_execpath`, imports/exports the complete 132-node canonical workflow, and records package/workflow/log hashes. Final canary and pilot evidence is cryptographically bound to that engine-tested tarball and canonical workflow. Tag releases validate npm credentials before GitHub release creation.
 
 ## Final corrective Row_ID bootstrap
 

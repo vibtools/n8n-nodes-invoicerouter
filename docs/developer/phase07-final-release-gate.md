@@ -6,7 +6,7 @@ Phase 07 combines the automated pre-release publication gate with the reviewed p
 
 - Package: `n8n-nodes-invoicerouter@2.1.1`
 - Workflow engine: `n8n@2.31.6`
-- Canonical Odoo workflow: 126 nodes, 141 edges, eight InvoiceRouter custom nodes
+- Canonical Odoo workflow: 132 nodes, 148 edges, eight InvoiceRouter custom nodes
 - Supported Odoo capability profiles: 18 and 19
 
 ## Automated gates
@@ -25,7 +25,7 @@ This verifies package metadata, workflow topology, canonical/live-bulk byte iden
 npm run verify:phase07:engine
 ```
 
-The command builds and packs the current source, installs the package in an isolated custom-extension directory, launches exactly `n8n@2.31.6`, and executes `tests/fixtures/n8n/InvoiceRouter-Phase-07-Engine-Smoke.json`. It then copies the unchanged canonical workflow bytes into an isolated temporary import directory and uses `import:workflow --separate`, allowing n8n to generate a transient database workflow ID without adding a fixed ID to the public canonical JSON. The gate exports the imported complete 126-node/141-edge workflow and verifies all eight custom-node types. The launcher calls npm through `process.execPath + npm_execpath`, avoiding the Windows `.cmd` direct-spawn failure. Evidence includes fixture, canonical workflow, tarball, execution-log, and import/export hashes and is written to `evidence/phase07/n8n-engine-smoke.json` and `.log`.
+The command builds and packs the current source, installs the package in an isolated custom-extension directory, launches exactly `n8n@2.31.6`, and executes `tests/fixtures/n8n/InvoiceRouter-Phase-07-Engine-Smoke.json`. It then copies the unchanged canonical workflow bytes into an isolated temporary import directory and uses `import:workflow --separate`, allowing n8n to generate a transient database workflow ID without adding a fixed ID to the public canonical JSON. The gate exports the imported complete 132-node/148-edge workflow and verifies all eight custom-node types. The launcher calls npm through `process.execPath + npm_execpath`, avoiding the Windows `.cmd` direct-spawn failure. Evidence includes fixture, canonical workflow, tarball, execution-log, and import/export hashes and is written to `evidence/phase07/n8n-engine-smoke.json` and `.log`.
 
 ### Runtime restart/worker regression
 

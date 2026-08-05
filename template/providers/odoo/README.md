@@ -89,9 +89,9 @@ Use this order:
 
 The v2.1.0 workflow was superseded by the v2.1.1 corrective production template. `n8n-import-workflow-live-bulk.json` now mirrors the v2.1.1 canonical workflow for compatibility. The workbook includes provider status, recipient status, retry queue, account report, and campaign report tabs.
 
-## Odoo 18/19 and legal issuer
+## Odoo capability validation and legal issuer
 
-The production adapter supports Odoo 18 and 19 through a shared capability manifest. Set `Issuer_Key` on every enabled provider row. Accounts in one `Failover_Group` must resolve to the same authenticated Odoo company. Unsupported versions and issuer mismatches are blocked before provider work.
+The production adapter uses a shared capability manifest without a fixed Odoo major-version allowlist. Odoo 18 and 19 retain documented metadata profiles. Set `Issuer_Key` on every enabled provider row. Accounts in one `Failover_Group` must resolve to the same authenticated Odoo company. Missing required capabilities and issuer mismatches are blocked before provider work.
 
 ## Phase 06 monotonic reporting
 

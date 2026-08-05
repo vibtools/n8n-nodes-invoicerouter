@@ -87,7 +87,7 @@ The v2.1.1 production workflow accepts one pending `Campaign_ID` per execution. 
 
 ## Capability or issuer error
 
-For `ODOO_VERSION_UNSUPPORTED`, use a supported Odoo 18/19 deployment; do not force execution. For `ISSUER_MISMATCH`, make `Issuer_Key` and authenticated Odoo company identity consistent across the enabled failover group, or separate the accounts into different groups.
+A fixed-version `ODOO_VERSION_UNSUPPORTED` result is no longer expected. Review the specific missing model/field/method capability reported by preflight. For `ISSUER_MISMATCH`, make `Issuer_Key` and authenticated Odoo company identity consistent across the enabled failover group, or separate the accounts into different groups.
 
 ## Report stale writer or revision gap
 

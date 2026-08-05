@@ -49,7 +49,7 @@
     "SEND_REAL_INVOICES",
     "SEND_BULK_REAL_INVOICES"
   ],
-  "notes": "Template assets are public starter files. v2.1.1 includes URL-importable production workflow, durable campaign control, truthful Odoo evidence, Odoo 18/19 capability profiles, and legal-issuer failover validation. Live create/post/send and inbox delivery still require user-environment proof.",
+  "notes": "Template assets are public starter files. v2.1.1 includes URL-importable production workflow, durable campaign control, truthful Odoo evidence, capability-driven Odoo profiles, and legal-issuer failover validation. Live create/post/send and inbox delivery still require user-environment proof.",
   "modeSupport": {
     "sandbox": true,
     "live": true,
@@ -57,12 +57,13 @@
     "liveSafety": "live templates keep InvoiceRouter live confirmation and bulk confirmation tokens explicit"
   },
   "odooCompatibility": {
-    "supportedMajorVersions": [
+    "unknownVersionPolicy": "capability_driven",
+    "capabilityManifest": "shared/odoo/OdooCapabilityManifest.ts",
+    "profiledMajorVersions": [
       18,
       19
     ],
-    "unknownVersionPolicy": "fail_closed",
-    "capabilityManifest": "shared/odoo/OdooCapabilityManifest.ts"
+    "versionAllowlistEnforced": false
   },
   "legalIssuer": {
     "requiredField": "Issuer_Key",

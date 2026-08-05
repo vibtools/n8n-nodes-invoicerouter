@@ -461,7 +461,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       consecutiveFailures: Math.max(0, toFiniteNumber(row.consecutiveFailures, 0)), retryCount: Math.max(0, toFiniteNumber(row.retryCount, 0)),
       cooldownUntil: toStringValue(row.cooldownUntil), lastErrorType: toStringValue(row.lastErrorType), lastError: toStringValue(row.lastError),
       totalAllocated: Math.max(0, toFiniteNumber(row.totalAllocated, 0)), totalSent: Math.max(0, toFiniteNumber(row.totalSent, 0)), totalFailed: Math.max(0, toFiniteNumber(row.totalFailed, 0)),
-      metadata: { sourceType: 'google_sheet', sheetName: sourceName, sheetRow: itemIndex + 2 },
+      metadata: { sourceType: 'google_sheet', sheetName: sourceName, sheetRow: Math.max(2, Math.floor(toFiniteNumber(item.json.row_number, itemIndex + 2))) },
       lifecycle: lifecycleMetadata(providerId, extraConfig),
     };
     const secret: SecretMaterial = { apiKey, apiSecret, extraValue, headerName, headerValue, authType, username, password, database, extraConfig };
@@ -473,8 +473,10 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       });
       const capabilities = isRecord(preflight.capabilities) ? preflight.capabilities : {};
       const company = isRecord(capabilities.company) ? capabilities.company : {};
+      const sourceRow = Math.max(2, Math.floor(toFiniteNumber(item.json.row_number, itemIndex + 2)));
       const result: IDataObject = {
         Provider: providerName, Account: accountName, Account_Name: accountName, Account_ID: accountId, Profile_ID: id,
+        row_number: sourceRow, Row_Number: sourceRow,
         Failover_Group: slug(row.failoverGroup), Enabled: preflight.enabled,
         status: preflight.status, Status_Reason: preflight.reason, Auto_Disabled: preflight.autoDisabled,
         Last_Error_Type: preflight.passed === true ? '' : preflight.errorType, Last_Error: preflight.reason,

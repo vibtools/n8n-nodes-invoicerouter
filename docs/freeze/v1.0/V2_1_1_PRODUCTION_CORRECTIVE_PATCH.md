@@ -47,7 +47,7 @@ Customer lookup is case-insensitive exact-match and fail-closed for duplicate co
 
 ## Phase 04 completed implementation boundary
 
-Phase 04 adds the shared Odoo 18/19 capability manifest, fail-closed unknown-version policy, authenticated company evidence, and legal-issuer failover gate. It preserves the frozen eight-node architecture.
+Phase 04 adds the shared Odoo capability manifest, capability-driven version handling, authenticated company evidence, and legal-issuer failover gate. It preserves the frozen eight-node architecture.
 
 ## Phase 05 exactly-once Sheet boundary
 
@@ -64,7 +64,7 @@ The corrective patch may be published after source validation, the Phase 07 stat
 
 ## Final corrective audit boundary
 
-The final source correction keeps eight custom nodes and adds two built-in workflow gates, producing 126 nodes and 141 edges. It fixes Windows engine launching, complete canonical import/export, exact stable-reference operation envelopes, unresolved `PROVIDER_PENDING` startup reconciliation, immediate pre-side-effect lease verification, evidence hash binding, and npm credential preflight. GitHub/npm publication remains blocked until the automated source/static/engine/version/credential gates pass; production bulk approval remains blocked until the post-publication canary/pilot evidence gate passes.
+The final source correction keeps eight custom nodes and adds two built-in workflow gates, producing 132 nodes and 148 edges. It fixes Windows engine launching, complete canonical import/export, exact stable-reference operation envelopes, unresolved `PROVIDER_PENDING` startup reconciliation, immediate pre-side-effect lease verification, evidence hash binding, and npm credential preflight. GitHub/npm publication remains blocked until the automated source/static/engine/version/credential gates pass; production bulk approval remains blocked until the post-publication canary/pilot evidence gate passes.
 
 ### Final recipient identity correction
 

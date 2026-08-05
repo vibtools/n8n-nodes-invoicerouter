@@ -100,32 +100,16 @@ type LifecycleResumeStage = 'invoice.create' | 'invoice.post' | 'invoice.send_em
 function odooCapabilityForRequest(request: IDataObject): OdooCapabilityProfile {
   const compatibility = isRecord(request.odooCompatibility) ? request.odooCompatibility : {};
   const issuerCompatibility = isRecord(request.issuerCompatibility) ? request.issuerCompatibility : {};
-  if (compatibility.supported === false) {
-    throw new OdooOperationError('Odoo capability profile is explicitly unsupported for this provider account.', {
-      provider: 'odoo', category: 'configuration', errorType: 'CONFIGURATION_ERROR', lifecycleStage: 'compatibility.guard',
-      definitiveNoSideEffect: true, ambiguousSideEffect: false,
-    });
-  }
   if (issuerCompatibility.compatible === false || toStringValue(issuerCompatibility.status).toUpperCase() === 'ISSUER_MISMATCH') {
     throw new OdooOperationError('Odoo legal-issuer compatibility is not verified for this provider account.', {
       provider: 'odoo', category: 'configuration', errorType: 'CONFIGURATION_ERROR', lifecycleStage: 'issuer.guard',
       definitiveNoSideEffect: true, ambiguousSideEffect: false,
     });
   }
+  // Odoo version is diagnostic metadata, not a runtime allowlist. The sender
+  // uses the common capability surface verified by Provider Loader preflight.
   const declaredMajor = toFiniteNumber(compatibility.majorVersion ?? request.odooMajorVersion, 0);
-  if (declaredMajor > 0) {
-    const declared = odooCapabilityProfileByMajor(declaredMajor);
-    if (!declared) {
-      throw new OdooOperationError(`Unsupported Odoo major version ${declaredMajor}.`, {
-        provider: 'odoo', category: 'configuration', errorType: 'CONFIGURATION_ERROR', lifecycleStage: 'compatibility.guard',
-        definitiveNoSideEffect: true, ambiguousSideEffect: false, majorVersion: declaredMajor,
-      });
-    }
-    return declared;
-  }
-  // Compatibility workflows that predate Phase 04 retain the common Odoo 19 field surface.
-  // The canonical production workflow always provides a preflight-derived major version.
-  return odooCapabilityProfileByMajor(19)!;
+  return odooCapabilityProfileByMajor(declaredMajor);
 }
 
 function odooConfig(secret: { apiKey: string; apiSecret: string; username?: string; password?: string; database?: string; extraConfig?: IDataObject }): IDataObject {

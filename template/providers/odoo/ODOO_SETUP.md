@@ -69,7 +69,7 @@ Capture:
 
 ## Supported versions and company access
 
-Use Odoo 18 or Odoo 19. The API user must be able to read its `res.users.company_id` and the selected `res.company` record. Read-only capability success does not prove permission to create/post/send; complete the live canary. Unknown major versions are blocked.
+Odoo version is not hard-locked; the required JSON-RPC capability surface must be available. The API user must be able to read its `res.users.company_id` and the selected `res.company` record. Read-only capability success does not prove permission to create/post/send; complete the live canary. Unprofiled major versions are evaluated by capability rather than blocked by version number.
 
 ## Reporting identity and revision fields
 

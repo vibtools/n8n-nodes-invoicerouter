@@ -76,8 +76,9 @@ for (const filename of ['provider.lifecycle.json', 'provider.recipe.json']) {
   const source = `${providersRoot}/odoo/${filename}`;
   const contract = JSON.parse(await readFile(source, 'utf8'));
   if (!contract.requiredAccountFields?.includes('Issuer_Key')) errors.push(`${source} must require Issuer_Key.`);
-  if (JSON.stringify(contract.compatibility?.supportedOdooMajorVersions) !== JSON.stringify([18, 19])) errors.push(`${source} must support Odoo majors 18 and 19.`);
-  if (contract.compatibility?.unknownVersionPolicy !== 'fail_closed') errors.push(`${source} must fail closed for unknown Odoo versions.`);
+  if (JSON.stringify(contract.compatibility?.profiledOdooMajorVersions) !== JSON.stringify([18, 19])) errors.push(`${source} must retain documented Odoo 18 and 19 metadata profiles.`);
+  if (contract.compatibility?.unknownVersionPolicy !== 'capability_driven') errors.push(`${source} must use capability-driven handling for unprofiled Odoo versions.`);
+  if (contract.compatibility?.versionAllowlistEnforced !== false) errors.push(`${source} must not enforce a fixed Odoo version allowlist.`);
   if (contract.compatibility?.sideEffectPermission !== 'unproven_until_live_canary') errors.push(`${source} must keep side-effect permission unproven until live canary.`);
   if (contract.issuerCompatibility?.requiredForFailoverGroups !== true) errors.push(`${source} must require legal-issuer compatibility for failover groups.`);
   if (contract.issuerCompatibility?.mismatchPolicy !== 'block_entire_failover_group') errors.push(`${source} must block the whole failover group on issuer mismatch.`);
@@ -152,8 +153,9 @@ if (await exists(odooCanonicalPath) && await exists(odooCompatibilityPath)) {
     errors.push('Odoo production workflow must identify the Phase 07 final release gate while retaining monotonic reporting and stale-writer protection.');
   }
   if (workflow.meta?.invoiceRouterSharedOdooCapabilityManifest !== true) errors.push('Odoo production workflow must declare the shared Odoo capability manifest.');
-  if (JSON.stringify(workflow.meta?.invoiceRouterSupportedOdooMajorVersions) !== JSON.stringify([18, 19])) errors.push('Odoo production workflow must declare supported Odoo majors 18 and 19.');
-  if (workflow.meta?.invoiceRouterUnknownOdooVersionPolicy !== 'fail_closed') errors.push('Odoo production workflow must fail closed for unknown Odoo versions.');
+  if (JSON.stringify(workflow.meta?.invoiceRouterProfiledOdooMajorVersions) !== JSON.stringify([18, 19])) errors.push('Odoo production workflow must retain documented Odoo 18 and 19 metadata profiles.');
+  if (workflow.meta?.invoiceRouterUnknownOdooVersionPolicy !== 'capability_driven') errors.push('Odoo production workflow must use capability-driven handling for unprofiled Odoo versions.');
+  if (workflow.meta?.invoiceRouterVersionAllowlistEnforced !== false) errors.push('Odoo production workflow must not enforce a fixed Odoo version allowlist.');
   if (workflow.meta?.invoiceRouterLegalIssuerCompatibility !== true) errors.push('Odoo production workflow must declare legal-issuer compatibility enforcement.');
   if (workflow.meta?.invoiceRouterFinalCorrectiveAudit !== true) errors.push('Odoo production workflow must declare the final corrective audit flag.');
   for (const name of ['Google Sheets - Provider Lease Verify', 'Verify Provider Lease Before Side Effect']) if (!byName[name]) errors.push(`Odoo production workflow is missing ${name}.`);
@@ -171,6 +173,12 @@ const providerPendingCode = String(byName['Build Durable Work Items']?.parameter
     if (!preflightCode.includes(field)) errors.push(`Prepare Preflight Provider Status is missing ${field}.`);
     if (!(field in preflightMapping)) errors.push(`Google Sheets - Preflight Provider Status is missing ${field}.`);
   }
+  const preflightStatusNode = byName['Google Sheets - Preflight Provider Status'];
+  if (preflightStatusNode?.parameters?.operation !== 'update' || JSON.stringify(preflightStatusNode?.parameters?.columns?.matchingColumns) !== JSON.stringify(['row_number'])) errors.push('Provider preflight status must update the original provider row by row_number.');
+  if (!preflightCode.includes('row_number')) errors.push('Prepare Preflight Provider Status must preserve the source row_number.');
+  const leaseCode = String(byName['Prepare Campaign Lease']?.parameters?.jsCode ?? '');
+  if (!leaseCode.includes('no eligible provider account') || !leaseCode.includes('LEASE_RECOVERED_BEFORE_PROVIDER_SIDE_EFFECT') || !leaseCode.includes('PROVIDER_PENDING')) errors.push('Campaign lease acquisition must block zero-provider runs and safely reclaim only pre-provider failed leases.');
+  if (workflow.meta?.invoiceRouterAccountCountPolicy !== 'all-enabled-provider-rows' || workflow.meta?.invoiceRouterProviderCountLimit !== null) errors.push('Workflow must remain provider-account-count agnostic.');
   for (const name of [
     'Google Sheets - Invoice Results Input', 'Google Sheets - Campaign Report Input', 'Prepare Campaign Lease',
     'Google Sheets - Campaign Lease Acquire', 'Google Sheets - Campaign Lease Verify', 'Verify Campaign Lease',
