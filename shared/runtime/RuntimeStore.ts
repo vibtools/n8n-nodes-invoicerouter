@@ -2,7 +2,7 @@ import type { IDataObject, IExecuteFunctions } from '../types/N8n';
 import { cloneJson, isRecord, nowIso, toFiniteNumber, toStringValue } from '../utils/Helpers';
 
 export type AccountState = 'AVAILABLE' | 'LOCKED' | 'IN_USE' | 'COOLDOWN' | 'ERROR' | 'DISABLED';
-export type SendReservationStatus = 'RESERVED' | 'SENT' | 'FAILED';
+export type SendReservationStatus = 'RESERVED' | 'SENT' | 'FAILED' | 'MANUAL_REVIEW';
 export type AllocationStrategy = 'firstAvailable' | 'roundRobin' | 'leastRecentlyUsed' | 'leastBusy' | 'highestHealth' | 'weighted';
 
 export interface SecretMaterial {
@@ -151,6 +151,7 @@ export interface AllocationOptions {
   excludeProfileIds?: string[];
   failoverGroup?: string;
   requiredProfileId?: string;
+  requiredCurrency?: string;
 }
 
 export function allocateProvider(scopeKey: string, options: AllocationOptions): IDataObject | undefined {
@@ -169,9 +170,19 @@ export function allocateProvider(scopeKey: string, options: AllocationOptions): 
     }
     const profileId = toStringValue(account.profile.id);
     const accountGroup = toStringValue(account.profile.failoverGroup).trim().toLowerCase();
+    const capabilities = isRecord(account.profile.preflightCapabilities) ? account.profile.preflightCapabilities : {};
+    const issuerCompatibility = isRecord(account.profile.issuerCompatibility) ? account.profile.issuerCompatibility : {};
+    const providerId = toStringValue(account.profile.providerId).trim().toLowerCase();
+    const compatibilityAllowed = providerId !== 'odoo' || capabilities.supported !== false;
+    const issuerAllowed = providerId !== 'odoo' || issuerCompatibility.compatible !== false;
+    const activeCurrencies = Array.isArray(capabilities.activeCurrencies)
+      ? capabilities.activeCurrencies.map((value) => toStringValue(value).trim().toUpperCase()).filter(Boolean) : [];
+    const requestedCurrency = toStringValue(options.requiredCurrency).trim().toUpperCase();
+    const currencyCompatible = !requestedCurrency || activeCurrencies.length === 0 || activeCurrencies.includes(requestedCurrency);
     return account.state === 'AVAILABLE' && account.requestTimes.length < options.maxRequestsPerMinute
       && (!requiredProfileId || profileId === requiredProfileId)
-      && !excluded.has(profileId) && (!requestedGroup || accountGroup === requestedGroup) && matches(account, options.filters);
+      && !excluded.has(profileId) && (!requestedGroup || accountGroup === requestedGroup)
+      && compatibilityAllowed && issuerAllowed && currencyCompatible && matches(account, options.filters);
   });
   if (candidates.length === 0) return undefined;
 
@@ -310,26 +321,48 @@ export function applyProviderFeedback(scopeKey: string, feedback: ProviderFeedba
 
 export function updateCampaignAccountStats(input: {
   scopeKey: string; campaignId: string; profileId: string; seed?: IDataObject; event: IDataObject;
+  runId?: string; eventId?: string;
 }): IDataObject {
   const campaignId = input.campaignId.trim() || 'default-campaign';
   const key = `${input.scopeKey}:${campaignId}`;
   const map = campaignAccountStats.get(key) ?? new Map<string, IDataObject>();
   const seed = isRecord(input.seed) ? input.seed : {};
-  const existing = map.get(input.profileId) ?? {
+  const runId = toStringValue(input.runId ?? input.event.Writer_Run_ID).trim();
+  const seedRevision = Math.max(0, toFiniteNumber(seed.Revision, 0));
+  const cached = map.get(input.profileId);
+  const cachedRunId = isRecord(cached) ? toStringValue(cached.Writer_Run_ID) : '';
+  const cachedRevision = isRecord(cached) ? Math.max(0, toFiniteNumber(cached.Revision, 0)) : 0;
+  const useSeed = !cached || (runId && cachedRunId && cachedRunId !== runId) || seedRevision > cachedRevision;
+  const existing: IDataObject = useSeed ? {
     Allocated: Math.max(0, toFiniteNumber(seed.Allocated, 0)), Attempted: Math.max(0, toFiniteNumber(seed.Attempted, 0)),
     Succeeded: Math.max(0, toFiniteNumber(seed.Succeeded, 0)), Email_Sent: Math.max(0, toFiniteNumber(seed.Email_Sent, 0)),
     Email_Queued: Math.max(0, toFiniteNumber(seed.Email_Queued, 0)), Failed: Math.max(0, toFiniteNumber(seed.Failed, 0)),
     Retried: Math.max(0, toFiniteNumber(seed.Retried, 0)), Failover_Count: Math.max(0, toFiniteNumber(seed.Failover_Count, 0)),
-  };
-  for (const field of ['Allocated','Attempted','Succeeded','Email_Sent','Email_Queued','Failed','Retried','Failover_Count']) {
-    existing[field] = Math.max(0, toFiniteNumber(existing[field], 0)) + Math.max(0, toFiniteNumber(input.event[field], 0));
+    Base_Revision: seedRevision, Revision: seedRevision, Writer_Run_ID: runId,
+    Aggregate_Source: 'DURABLE_ACCOUNT_REPORT_SEED', __eventIds: [],
+  } : cached as IDataObject;
+  const eventIds = new Set(Array.isArray(existing.__eventIds) ? existing.__eventIds.map((entry) => toStringValue(entry)).filter(Boolean) : []);
+  const eventId = toStringValue(input.eventId).trim();
+  if (!eventId || !eventIds.has(eventId)) {
+    for (const field of ['Allocated','Attempted','Succeeded','Email_Sent','Email_Queued','Failed','Retried','Failover_Count']) {
+      existing[field] = Math.max(0, toFiniteNumber(existing[field], 0)) + Math.max(0, toFiniteNumber(input.event[field], 0));
+    }
+    if (eventId) eventIds.add(eventId);
   }
-  for (const field of ['Failover_From','Failover_To','Auto_Disabled','Disabled_Reason','Last_Error_Type','Last_Error','Current_Status','Enabled','Last_Used_At','Updated_At']) {
+  for (const field of ['Failover_From','Failover_To','Auto_Disabled','Disabled_Reason','Last_Error_Type','Last_Error','Current_Status','Enabled','Last_Used_At','Updated_At','Issuer_Key','Company_ID','Company_Name','Issuer_Compatibility','Issuer_Mismatch']) {
     if (input.event[field] !== undefined && input.event[field] !== '') existing[field] = input.event[field];
   }
+  const previousRevision = Math.max(seedRevision, toFiniteNumber(existing.Revision, 0));
+  existing.Base_Revision = previousRevision;
+  existing.Revision = previousRevision + 1;
+  existing.Writer_Run_ID = runId || toStringValue(existing.Writer_Run_ID);
+  existing.Aggregate_Source = 'DURABLE_ACCOUNT_REPORT_PLUS_EVENT';
+  existing.__eventIds = [...eventIds].slice(-200);
   map.set(input.profileId, existing);
   campaignAccountStats.set(key, map);
-  return cloneJson(existing);
+  const output = cloneJson(existing);
+  delete output.__eventIds;
+  return output;
 }
 
 export function reserveRecipient(scopeKey: string, email: string): boolean {

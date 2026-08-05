@@ -1,0 +1,514 @@
+{
+  "name": "InvoiceRouter Phase 07 n8n 2.31.6 Engine Smoke",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "phase07-manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "phase07-provider-fixture-1",
+              "name": "Enabled",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "phase07-provider-fixture-2",
+              "name": "Provider",
+              "value": "Custom",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-3",
+              "name": "Account",
+              "value": "Phase 07 Engine Smoke",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-4",
+              "name": "Environment",
+              "value": "Sandbox",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-5",
+              "name": "Action",
+              "value": "Custom Request",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-6",
+              "name": "Method",
+              "value": "POST",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-7",
+              "name": "Base URL",
+              "value": "https://api.example.test",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-8",
+              "name": "Endpoint",
+              "value": "/invoices",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-9",
+              "name": "Auth Type",
+              "value": "Bearer",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-10",
+              "name": "API Key",
+              "value": "phase07-engine-secret",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-11",
+              "name": "API Secret",
+              "value": "phase07-engine-api-secret",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-12",
+              "name": "Extra Value",
+              "value": "tenant-phase07",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-13",
+              "name": "Content-Type",
+              "value": "application/json",
+              "type": "string"
+            },
+            {
+              "id": "phase07-provider-fixture-14",
+              "name": "Timeout",
+              "value": 30,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "phase07-provider-fixture",
+      "name": "Provider Fixture",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -900,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "phase07-recipient-fixture-1",
+              "name": "Email",
+              "value": "engine.smoke@example.com",
+              "type": "string"
+            },
+            {
+              "id": "phase07-recipient-fixture-2",
+              "name": "Name",
+              "value": "Phase 07 Engine Smoke",
+              "type": "string"
+            },
+            {
+              "id": "phase07-recipient-fixture-3",
+              "name": "Address",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "phase07-recipient-fixture",
+      "name": "Recipient Fixture",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -900,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "phase07-template-seed-1",
+              "name": "phase07_seed",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "phase07-template-seed",
+      "name": "Template Seed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -900,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "batchId": "={{$execution.id}}",
+        "sourceName": "provider",
+        "duplicatePolicy": "error",
+        "includeDisabled": false,
+        "strictValidation": true
+      },
+      "id": "provider-loader",
+      "name": "Provider Loader",
+      "type": "n8n-nodes-invoicerouter.providerLoader",
+      "typeVersion": 1,
+      "position": [
+        -650,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "batchId": "={{$execution.id}}",
+        "emailField": "Email",
+        "nameField": "Name",
+        "nameGeneration": "formatted",
+        "invalidPolicy": "skip",
+        "preserveCustomColumns": false,
+        "preventReuse": true,
+        "addressField": "Address"
+      },
+      "id": "email-list",
+      "name": "Email List",
+      "type": "n8n-nodes-invoicerouter.emailList",
+      "typeVersion": 1,
+      "position": [
+        -650,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "templateMode": "manual",
+        "invoiceId": "#INV#",
+        "invoiceNumber": "INV-#INV#",
+        "invoiceDate": "={{$now.toISODate()}}",
+        "dueDate": "={{$now.plus({days: 30}).toISODate()}}",
+        "currency": "USD",
+        "lineItemsJson": "[{\"name\":\"Service\",\"description\":\"Professional service for #NAME#\",\"quantity\":1,\"unit_price\":100}]",
+        "tax": 0,
+        "discount": 0,
+        "shipping": 0,
+        "paymentTerms": "Net 30",
+        "notes": "Thank you, #NAME#. Reference #TRX#.",
+        "customFieldsJson": "{}",
+        "strictValidation": true
+      },
+      "id": "invoice-template",
+      "name": "Invoice Template",
+      "type": "n8n-nodes-invoicerouter.invoiceTemplate",
+      "typeVersion": 1,
+      "position": [
+        -650,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "strategy": "firstAvailable",
+        "providerFilter": "custom",
+        "actionFilter": "custom-request",
+        "environmentFilter": "sandbox",
+        "queueWhenUnavailable": false,
+        "lockTimeoutSeconds": 300,
+        "maxRequestsPerMinute": 60,
+        "circuitBreakerThreshold": 5,
+        "processingMode": "sequential",
+        "conditionalRouting": false,
+        "routingRulesJson": "[]",
+        "routeProviderPath": "recipient.customFields.Provider",
+        "routeActionPath": "recipient.customFields.Action",
+        "routeEnvironmentPath": "recipient.customFields.Environment",
+        "requireConditionalMatch": false,
+        "unmatchedRouteBehavior": "block"
+      },
+      "id": "provider-selector",
+      "name": "Provider Selector",
+      "type": "n8n-nodes-invoicerouter.providerSelector",
+      "typeVersion": 1,
+      "position": [
+        -380,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "strictProviderWarnings": false,
+        "customBodyJson": "{}",
+        "extraHeadersJson": "{}",
+        "extraQueryJson": "{}",
+        "idempotencyHeader": "Idempotency-Key",
+        "allowHttp": false,
+        "sendGuardMode": "audit",
+        "strictProviderValidation": true,
+        "idempotencyKeyMode": "providerInvoiceRecipient",
+        "idempotencyScope": "workflow"
+      },
+      "id": "request-builder",
+      "name": "Request Builder",
+      "type": "n8n-nodes-invoicerouter.requestBuilder",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "dryRun": true,
+        "includeResponseBody": true,
+        "stopOnTransportError": false,
+        "requireSendGuard": false,
+        "liveModeConfirmation": "",
+        "preventDuplicateSends": false,
+        "duplicateTtlHours": 720,
+        "reservationTtlMinutes": 15,
+        "activationSafetyMode": "dryRunValidation",
+        "expectedEnvironment": "sandbox",
+        "sandboxModeConfirmation": "",
+        "enableBulkSafety": true,
+        "maxInvoicesPerExecution": 100,
+        "requireUniformEnvironment": true,
+        "delayBetweenSendsMs": 0,
+        "maxFailedSendsBeforeAbort": 5,
+        "stopOnCriticalBulkError": true,
+        "sandboxBulkConfirmation": "",
+        "liveBulkConfirmation": "",
+        "productionPresetMode": "dryRunValidation"
+      },
+      "id": "invoice-sender",
+      "name": "Invoice Sender",
+      "type": "n8n-nodes-invoicerouter.invoiceSender",
+      "typeVersion": 1,
+      "position": [
+        170,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "includeParsedMetadata": true,
+        "unknownSuccessStatus": "CREATED"
+      },
+      "id": "status-checker",
+      "name": "Status Checker",
+      "type": "n8n-nodes-invoicerouter.statusChecker",
+      "typeVersion": 1,
+      "position": [
+        430,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "retryLimit": 3,
+        "retryBaseDelaySeconds": 30,
+        "cooldownSeconds": 30,
+        "disableOnAuthFailure": true,
+        "alertOnFailure": true,
+        "includeEvents": true,
+        "includeExecutionLog": true,
+        "persistExecutionLog": false,
+        "executionLogRetention": 500,
+        "includeStatusWriteback": true,
+        "writebackTarget": "invoice_results",
+        "writebackKeyMode": "idempotencyKey",
+        "retryMaxDelaySeconds": 900,
+        "respectRetryAfterHeader": true
+      },
+      "id": "status-manager",
+      "name": "Status Manager",
+      "type": "n8n-nodes-invoicerouter.statusManager",
+      "typeVersion": 1,
+      "position": [
+        690,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Provider Fixture",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Recipient Fixture",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Template Seed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provider Fixture": {
+      "main": [
+        [
+          {
+            "node": "Provider Loader",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recipient Fixture": {
+      "main": [
+        [
+          {
+            "node": "Email List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template Seed": {
+      "main": [
+        [
+          {
+            "node": "Invoice Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Provider Loader": {
+      "main": [
+        [
+          {
+            "node": "Provider Selector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email List": {
+      "main": [
+        [
+          {
+            "node": "Provider Selector",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Provider Selector": {
+      "main": [
+        [
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Template": {
+      "main": [
+        [
+          {
+            "node": "Request Builder",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Request Builder": {
+      "main": [
+        [
+          {
+            "node": "Invoice Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice Sender": {
+      "main": [
+        [
+          {
+            "node": "Status Checker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Checker": {
+      "main": [
+        [
+          {
+            "node": "Status Manager",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": false
+  },
+  "versionId": "invoice-router-phase07-engine-smoke",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "invoiceRouterRelease": "2.1.1",
+    "invoiceRouterHardeningPhase": "phase-07-final-release-gate",
+    "invoiceRouterEngineTarget": "2.31.6",
+    "invoiceRouterEngineSmoke": true,
+    "sideEffects": "dry-run-only"
+  },
+  "tags": []
+}

@@ -24,9 +24,30 @@ A retry is automatic only when Status Checker classifies the failure as safe and
 
 ### `UNVERIFIED`
 
-The Odoo send wizard completed, but the account did not expose sufficient mail evidence. Do not interpret this as sent and do not automatically retry. Review the invoice chatter, outgoing mail records, notifications, PDF attachment, and recipient inbox manually.
+The Odoo send operation completed or may have executed, but the account did not expose sufficient current-attempt mail evidence. Do not interpret this as sent and do not automatically retry. Review the invoice chatter, outgoing mail records, notifications, PDF attachment, and recipient inbox manually.
 
 InvoiceRouter also returns `UNVERIFIED` when it cannot establish an attempt-specific pre-send baseline or when the wizard creates no new `mail.message`. Existing historical sent records on the invoice are intentionally ignored because they do not prove the current execution sent an email.
+
+## Wizard RPC timed out
+
+Do not classify the timeout alone. Inspect `email_evidence` in this order:
+
+1. current-attempt intended-recipient `sent` evidence -> `SENT`;
+2. current-attempt outgoing/pending evidence -> `QUEUED`;
+3. explicit exception/bounce/cancel evidence -> `FAILED`;
+4. no terminal evidence after an ambiguous send operation -> `UNVERIFIED`.
+
+`UNVERIFIED` is manual-review only. Do not force a resend because the original call may have reached Odoo.
+
+## Duplicate Odoo contacts
+
+When multiple contacts share the recipient email, InvoiceRouter blocks before invoice creation with `AMBIGUOUS_PROVIDER_RESULT`. Merge or correct the Odoo contacts, then rerun the original workflow. Do not bypass the block by supplying an arbitrary partner ID.
+
+Mixed-case addresses are matched case-insensitively. RFC display-name recipients in mail evidence are normalized automatically.
+
+## PDF evidence is invalid or missing
+
+Inspect `email_evidence.pdfEvidence`. A valid invoice PDF must be `application/pdf`, attached to `account.move`, bound to the same invoice ID and current send attempt, and match `invoice_pdf_report_id`. Email transport state and PDF identity are separate evidence dimensions; retain both during manual review.
 
 ## Invoice exists but no email message appears
 

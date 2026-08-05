@@ -21,7 +21,8 @@
     "Endpoint",
     "Username",
     "Password",
-    "Database"
+    "Database",
+    "Issuer_Key"
   ],
   "requiredRecipientFields": [
     "Email"
@@ -87,5 +88,25 @@
     "SENT is provider-side transport evidence and does not guarantee recipient inbox delivery.",
     "Current InvoiceRouter v2 Odoo adapter uses Odoo JSON-RPC /jsonrpc.",
     "A future Odoo API migration requires a separately approved change."
-  ]
+  ],
+  "compatibility": {
+    "supportedOdooMajorVersions": [
+      18,
+      19
+    ],
+    "unknownVersionPolicy": "fail_closed",
+    "capabilityManifest": "shared/odoo/OdooCapabilityManifest.ts",
+    "sideEffectPermission": "unproven_until_live_canary"
+  },
+  "issuerCompatibility": {
+    "requiredForFailoverGroups": true,
+    "requiredFields": [
+      "Issuer_Key"
+    ],
+    "preflightEvidence": [
+      "Company_ID",
+      "Company_Name"
+    ],
+    "mismatchPolicy": "block_entire_failover_group"
+  }
 }

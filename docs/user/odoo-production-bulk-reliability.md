@@ -17,7 +17,7 @@ InvoiceRouter v2.1.0 keeps one Odoo production workflow and one Google Sheet for
 - `invoice_results`: immutable provider/lifecycle evidence and idempotency results.
 - `retry_queue`: restart-safe retry/failover state.
 - `account_report`: one cumulative row per campaign/account profile with allocation, sent, queued, failed, retry, failover, and disable-reason totals.
-- `campaign_report`: one event row per recipient decision.
+- `campaign_report`: one aggregate row per `Campaign_ID`, including pause, run-lease, revision, and last-attempt evidence.
 
 ## Recipient status values
 
@@ -42,3 +42,11 @@ Before recipient processing, the canonical workflow performs read-only Odoo auth
 `READY`, `IN_USE`, `COOLDOWN`, `RATE_LIMITED`, `QUOTA_EXHAUSTED`, `AUTH_FAILED`, `AUTHORIZATION_FAILED`, `DATABASE_INVALID`, `CURRENCY_INCOMPATIBLE`, `CONFIGURATION_ERROR`, `MANUAL_REVIEW`, `DISABLED_AUTO`, and `DISABLED_USER`.
 
 Automatic `Enabled=FALSE` is limited to explicit hard account failures such as authentication, authorization, invalid database, or provider-reported quota exhaustion. Temporary rate limiting keeps the account enabled and applies cooldown.
+
+## Monotonic report verification
+
+For each campaign/account row, `Revision` must only increase. A normal candidate's `Base_Revision` must equal the Sheet's current revision. Investigate any revision gap before restarting; do not edit totals to force the write. Campaign counts are rebuilt from managed durable rows on startup, so reconcile `email_list`, `invoice_results`, and `retry_queue` rather than increasing an aggregate manually.
+
+## Phase 07 pilot evidence
+
+The final pilot uses five recipients and at least two compatible provider accounts. It must exercise failover and restart/other-worker resume, produce zero duplicate invoices, complete all operation envelopes, reject a stale writer, and show no revision regression before bulk approval.

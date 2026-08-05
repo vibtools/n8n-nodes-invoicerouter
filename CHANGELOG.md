@@ -1,5 +1,58 @@
 # Changelog
 
+## 2.1.1 final corrective forensic audit — 2026-08-04
+
+- Fixed the exact n8n 2.31.6 engine import harness to use a temporary `--separate` directory, allowing n8n to generate a transient workflow ID without changing the canonical public workflow JSON.
+- Fixed the Windows exact-engine harness by invoking npm through Node instead of directly spawning `.cmd` shims.
+- Expanded the n8n 2.31.6 gate to import/export the complete 126-node/141-edge canonical workflow.
+- Persisted the exact built stable reference in the pre-provider `PROVIDER_PENDING` envelope.
+- Reconstructed unresolved `PROVIDER_PENDING` operations on startup and forced stable-reference reconciliation before new provider side effects.
+- Added an immediate pre-side-effect campaign lease reread/Run_ID/expiry verification.
+- Bound live evidence to the engine evidence, package tarball, canonical workflow, sanitized artifacts, and reviewer metadata.
+- Made tag releases validate npm publication credentials before GitHub Release creation.
+- Clarified that the 66-second marker test is a separate-process rehydration regression; real n8n restart/worker resume remains a live-pilot acceptance item.
+
+## 2.1.1 - 2026-08-03 — Production corrective patch
+
+### Phase 04 — Odoo capability/version/issuer compatibility
+
+- Added one shared Odoo 18/19 capability manifest used by preflight, sender, and tests.
+- Added version-specific send-wizard field profiles and a fail-closed unknown-major policy.
+- Synchronized preflight model/field probes with the sender's actual Odoo surface.
+- Added authenticated Odoo company identity evidence and additive provider columns.
+- Required `Issuer_Key` for Odoo failover groups and blocked an entire group on issuer/company mismatch.
+- Kept create/post/send permission explicitly unproven until live-canary side effects succeed.
+
+
+- Added Phase 03 Odoo evidence precedence so attempt-bound `SENT`/`QUEUED` evidence remains authoritative even when the send-wizard RPC transport is ambiguous.
+- Preserved structured Odoo operation metadata through non-throwing verification helpers; ambiguous send transport without terminal evidence now returns `UNVERIFIED` for manual review.
+- Replaced arbitrary first-contact selection with case-insensitive exact partner lookup, a two-record ambiguity probe, and fail-closed duplicate-contact handling.
+- Added RFC display-name recipient extraction and strict `ir.attachment` PDF identity validation against MIME type, invoice model/id, current-attempt message attachment, and `invoice_pdf_report_id`.
+- Added Phase 02 durable campaign reconstruction from `email_list`, `retry_queue`, `invoice_results`, and `campaign_report`.
+- Added one-pending-`Campaign_ID` enforcement before provider work.
+- Added `campaign_report` run lease acquisition, reread verification, expiry, release, revision, and last-attempt fields.
+- Made Sheet-derived campaign state the correctness source while retaining memory/static data only as caches.
+
+### Runtime corrections
+
+- Added Phase 01 runtime rehydration: retry/failover waits now reread the provider Sheet, rerun Provider Loader, rebuild the process-local pool/vault, and re-enter required-profile or fresh-profile selection before transport.
+
+- Added safe optional-input handling so the canonical embedded Request Builder path works in real n8n while legacy three-input workflows remain compatible.
+- Replaced externally incompatible Odoo `check_access_rights` preflight calls with version discovery, `fields_get`, currency discovery, and read-only model probes.
+- Preserved no-account jobs as `QUEUED` instead of converting them to terminal failure.
+- Added campaign-wide maximum, failure threshold, inter-send delay, confirmation, pause, and restart-safe state outside the one-item sender batch.
+- Added stable campaign/job-derived dynamic invoice references and reconciliation of ambiguous customer/invoice/post side effects.
+- Added intended-recipient-bound Odoo mail evidence and structured Odoo JSON-RPC error metadata.
+- Blocked unsupported nonzero Odoo global tax/discount/shipping totals before transport instead of allowing provider-total mismatch.
+
+### Workflow, Sheets, and reporting
+
+- Persisted `Job_ID` before provider execution and serialized `PROCESSING`, provider execution, terminal status, retry queue, provider/account report, campaign report, and loop continuation.
+- Added durable `writeback_queue` staging and writeback-only repair before new provider work.
+- Corrected retry/account allocation counters and changed `campaign_report` to one aggregate row per campaign with pause reason.
+- Added the URL-importable canonical workflow `template/providers/odoo/n8n-import-workflow-production-v2.1.1.json`.
+- Preserved all eight custom nodes, existing public APIs, existing compatibility workflows, and zero runtime dependencies.
+
 ## 2.1.0 - 2026-08-03 — Bulk reliability, durable reporting, and safe account failover
 
 ### Runtime and workflow
@@ -153,6 +206,26 @@ Package, lockfile, VibProject metadata, documentation version metadata, provider
 
 # Changelog
 
+## 2.1.1 - 2026-08-03 — Production corrective patch
+
+### Runtime corrections
+
+- Added safe optional-input handling so the canonical embedded Request Builder path works in real n8n while legacy three-input workflows remain compatible.
+- Replaced externally incompatible Odoo `check_access_rights` preflight calls with version discovery, `fields_get`, currency discovery, and read-only model probes.
+- Preserved no-account jobs as `QUEUED` instead of converting them to terminal failure.
+- Added campaign-wide maximum, failure threshold, inter-send delay, confirmation, pause, and restart-safe state outside the one-item sender batch.
+- Added stable campaign/job-derived dynamic invoice references and reconciliation of ambiguous customer/invoice/post side effects.
+- Added intended-recipient-bound Odoo mail evidence and structured Odoo JSON-RPC error metadata.
+- Blocked unsupported nonzero Odoo global tax/discount/shipping totals before transport instead of allowing provider-total mismatch.
+
+### Workflow, Sheets, and reporting
+
+- Persisted `Job_ID` before provider execution and serialized `PROCESSING`, provider execution, terminal status, retry queue, provider/account report, campaign report, and loop continuation.
+- Added durable `writeback_queue` staging and writeback-only repair before new provider work.
+- Corrected retry/account allocation counters and changed `campaign_report` to one aggregate row per campaign with pause reason.
+- Added the URL-importable canonical workflow `template/providers/odoo/n8n-import-workflow-production-v2.1.1.json`.
+- Preserved all eight custom nodes, existing public APIs, existing compatibility workflows, and zero runtime dependencies.
+
 ## 2.0.0 - Master Universal Provider Lifecycle
 
 - Added universal provider lifecycle modes for draft/create/post/send-email execution.
@@ -276,3 +349,36 @@ The previous generic REST runtime remains in Git history and is superseded by th
 ## Step 14D / v2.0.0 Declarative Provider Recipe Runtime
 
 Added a declarative HTTP provider recipe runtime so compatible REST/JSON invoice providers can define customer, invoice, post/finalize, and email-send steps in provider recipe JSON instead of requiring core node code changes. This is intended for compatible providers; non-standard OAuth, webhook, UI-only, or SDK-only flows may still require a dedicated adapter.
+
+### v2.1.1 Phase 05
+- Added pre-provider durable operation envelopes, result/checkpoint updates, immutable `Row_ID`, and provider-row `Profile_ID` matching.
+
+### v2.1.1 Phase 06
+
+- Added monotonic campaign/account report revisions with `Base_Revision`, `Revision`, `Writer_Run_ID`, and `Aggregate_Source`.
+- Added fresh read/verify/write gates that reject stale campaign writers, wrong run owners, account stale writers, and revision gaps.
+- Rebuilt campaign counters from durable recipient/result/retry evidence instead of retaining stale maximum values from a prior aggregate row.
+- Made highest-revision `account_report` rows authoritative when rebuilding per-account runtime aggregates.
+- Made writeback repair skip already-applied/older report payloads and fail closed on revision gaps.
+- Added revisioned issuer-mismatch account reporting with Odoo issuer/company evidence.
+- Kept package version `2.1.1`, runtime dependencies, public APIs, and the frozen eight exported custom nodes unchanged.
+
+### v2.1.1 Phase 07 — Final release gate
+
+- Added an exact `n8n@2.31.6` dry-run workflow-engine smoke harness and CI evidence artifact.
+- Added cross-process restart/other-worker runtime rehydration regression coverage for a durable 66-second wait marker.
+- Added boundary-aware redaction for one-to-four-character secrets without corrupting ordinary error text.
+- Added Odoo 18 and Odoo 19 end-to-end fixtures covering preflight, invoice/post/send evidence, PDF validation, status checking, and management.
+- Added sanitized canary and pilot evidence templates plus a fail-closed final release gate.
+- Kept GitHub/npm/live production release blocked until exact engine and reviewed live evidence pass.
+
+### Final corrective forensic audit
+
+- Corrected initial `Row_ID` persistence to update the exact virtual Google Sheets `row_number` instead of attempting an upsert against a newly generated key that was not yet present in the source row.
+- Added regression and validation gates preventing blank-key identity writes from appending duplicate recipient rows.
+
+- Replaced non-reproducible full engine-evidence file binding with deterministic package-content and engine-fact binding so Windows-reviewed canary/pilot evidence remains verifiable after CI regenerates timestamped engine evidence.
+
+- Enforced LF source checkout and TypeScript output so deterministic Phase 07 package-content evidence remains reproducible across Windows and Linux CI.
+
+- Required canary/pilot supporting artifacts to exist beneath the controlled evidence directory and match their declared SHA-256; placeholder hashes no longer pass the release gate.

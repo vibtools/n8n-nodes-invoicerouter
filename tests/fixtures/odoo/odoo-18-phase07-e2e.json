@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "company": {
+    "id": 1,
+    "name": "Phase 07 Legal Issuer Ltd",
+    "currencyId": 2,
+    "currency": "USD"
+  },
+  "provider": {
+    "Enabled": true,
+    "Provider": "Odoo",
+    "Account": "Phase 07 Odoo 18",
+    "Environment": "live",
+    "Action": "Create Invoice",
+    "Method": "POST",
+    "Base URL": "https://odoo.example.test",
+    "Endpoint": "/jsonrpc",
+    "Auth Type": "Odoo JSON-RPC",
+    "Username": "phase07.odoo@example.com",
+    "Password": "phase07-odoo-secret",
+    "Database": "phase07-odoo-18",
+    "Content-Type": "application/json",
+    "Extra Config JSON": "{\"invoiceLifecycle\":\"createPostAndSendEmail\",\"odooSendInvoiceEmail\":true,\"odooEmailForceSend\":false}",
+    "Failover_Group": "phase07-issuer",
+    "Issuer_Key": "phase07-issuer",
+    "status": "READY",
+    "Timeout": 60
+  },
+  "recipient": {
+    "Email": "phase07.recipient@example.com",
+    "Name": "Phase 07 Recipient"
+  },
+  "odoo": {
+    "uid": 7,
+    "partnerId": 88,
+    "currencyId": 2,
+    "invoiceId": 501,
+    "invoiceName": "INV/2026/PHASE07",
+    "invoiceRef": "INV-PHASE07",
+    "wizardId": 700,
+    "messageId": 711,
+    "notificationId": 801,
+    "mailId": 901,
+    "attachmentId": 990,
+    "wizardFields": {
+      "mail_template_id": false,
+      "mail_subject": "Invoice INV/2026/PHASE07",
+      "mail_body": "<p>Invoice attached.</p>"
+    }
+  },
+  "expected": {
+    "providerStatus": "READY",
+    "capabilityStatus": "CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN",
+    "invoiceState": "posted",
+    "emailSendStatus": "SENT",
+    "pdfEvidenceStatus": "VALID",
+    "httpStatus": 201,
+    "sideEffectCalls": {
+      "partnerSearch": 1,
+      "invoiceCreate": 1,
+      "invoicePost": 1,
+      "wizardCreate": 1,
+      "wizardSend": 1
+    },
+    "capabilityProfileId": "odoo-18-invoice-send",
+    "wizardVersionFields": [
+      "mail_template_id",
+      "mail_subject",
+      "mail_body"
+    ]
+  },
+  "name": "Odoo 18 Phase 07 end-to-end fixture",
+  "serverVersion": "18.0+e",
+  "majorVersion": 18
+}

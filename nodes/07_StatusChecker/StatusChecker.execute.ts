@@ -104,10 +104,32 @@ function baseClassification(input: {
   retryableByPolicy: boolean;
   nonRetryableByPolicy: boolean;
   success: boolean;
+  providerError?: IDataObject;
 }): ErrorClassification {
   if (input.success) return successClassification();
 
   const combined = `${input.message} ${flattenText(input.body)}`.toLowerCase();
+  const providerError = isRecord(input.providerError) ? input.providerError : {};
+  const structuredErrorType = toStringValue(providerError.errorType).toUpperCase();
+  if (providerError.ambiguousSideEffect === true) {
+    return {
+      errorType: 'AMBIGUOUS_PROVIDER_RESULT', category: 'provider_ambiguity', severity: 'critical', alertSeverity: 'critical',
+      retryable: false, safeToRetry: false, source: 'provider_structured_error',
+      reason: 'The provider connection failed during a side-effecting Odoo operation and reconciliation could not prove whether the operation committed.',
+    };
+  }
+  if (structuredErrorType) {
+    const retryable = providerError.definitiveNoSideEffect === true && ['NETWORK_ERROR', 'SERVER_ERROR'].includes(structuredErrorType);
+    return {
+      errorType: structuredErrorType, category: toStringValue(providerError.category, 'provider'),
+      severity: ['AUTHENTICATION_ERROR', 'AUTHORIZATION_ERROR', 'CONFIGURATION_ERROR'].includes(structuredErrorType) ? 'critical' : 'medium',
+      alertSeverity: ['AUTHENTICATION_ERROR', 'AUTHORIZATION_ERROR', 'CONFIGURATION_ERROR'].includes(structuredErrorType) ? 'critical' : 'warning',
+      retryable, safeToRetry: retryable, source: 'provider_structured_error',
+      reason: toStringValue(providerError.reconciliation)
+        ? `Odoo error was classified after reconciliation: ${toStringValue(providerError.reconciliation)}.`
+        : `Odoo returned a structured ${structuredErrorType} error.`,
+    };
+  }
   if (/database .*does not exist|unknown database|database not found/.test(combined)) {
     return {
       errorType: 'CONFIGURATION_ERROR', category: 'configuration', severity: 'critical', alertSeverity: 'critical',
@@ -281,7 +303,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const transportSuccess = raw.success === true && (successStatusCodes.length > 0 ? successStatusCodes.includes(httpStatus) : httpStatus >= 200 && httpStatus < 300);
     let classification: ErrorClassification = neutralTransport
       ? { errorType: null, category: 'neutral', severity: 'none', alertSeverity: 'none', retryable: false, safeToRetry: false, source: 'transport', reason: `Neutral transport status ${transport}.` }
-      : baseClassification({ httpStatus, transport, body, message: transportErrorMessage, retryableByPolicy, nonRetryableByPolicy, success: transportSuccess });
+      : baseClassification({ httpStatus, transport, body, message: transportErrorMessage, retryableByPolicy, nonRetryableByPolicy, success: transportSuccess, providerError: isRecord(raw.error) ? raw.error : {} });
 
     const { lifecycle, checkpoint, evidence } = lifecycleRecords(body);
     const lifecycleOutcome = toStringValue(lifecycle.lifecycleOutcome ?? lifecycle.outcome ?? checkpoint.outcome).toUpperCase();
@@ -378,6 +400,8 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const includeParsedMetadata = Boolean(this.getNodeParameter('includeParsedMetadata', itemIndex, true));
     const standardStatus: IDataObject = {
       schemaVersion: '1.0', requestId: raw.requestId, providerId: raw.providerId, profileId: raw.profileId, accountId: raw.accountId, accountName: request.accountName, accountStats: request.accountStats,
+      issuerKey: request.issuerKey, companyId: request.companyId, companyName: request.companyName,
+      issuerCompatibility: request.issuerCompatibility ?? null,
       workerId: raw.workerId, actionId: raw.actionId, transportStatus: transport, result: semanticResult, invoiceStatus,
       providerStatus: toStringValue(providerStatus), providerInvoiceId: parsedMetadata.invoiceId, invoiceNumber: parsedMetadata.invoiceNumber,
       providerCustomerId: parsedMetadata.providerCustomerId, customerStatus: parsedMetadata.customerStatus,

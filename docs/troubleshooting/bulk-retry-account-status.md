@@ -26,3 +26,7 @@ The managed Google Sheets node retries the write up to three times. If it still 
 ## Account excluded before sending
 
 Review the Provider Loader `preflightResults` output and the `provider` tab. Confirm database name, API login/key, requested currency, and access rights. The Provider Loader `Preflight Currency` must match the Invoice Template currency.
+
+## Odoo failover group is blocked
+
+Inspect `Issuer_Key`, `Company_ID`, `Company_Name`, `Odoo_Server_Version`, `Capability_Status`, and `Issuer_Compatibility`. All enabled Odoo rows in the group must be Odoo 18/19 and resolve to one legal issuer/company. The group block is fail-closed and does not permanently disable the source rows.

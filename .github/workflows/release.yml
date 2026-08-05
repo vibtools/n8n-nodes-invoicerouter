@@ -32,6 +32,16 @@ jobs:
       - name: Verify
         run: npm run verify
 
+      - name: Verify Phase 07 static release prerequisites
+        run: npm run verify:phase07:static
+
+      - name: Verify n8n 2.31.6 workflow engine
+        run: npm run verify:phase07:engine
+        timeout-minutes: 20
+
+      - name: Verify reviewed canary and pilot evidence
+        run: npm run verify:phase07:evidence
+
       - name: Validate tag version
         if: github.ref_type == 'tag'
         shell: bash
@@ -54,6 +64,10 @@ jobs:
           mkdir -p release/bundle/docs
           mkdir -p release/bundle/examples/google_sheets
           mkdir -p release/bundle/assets/architecture
+          mkdir -p release/bundle/evidence/phase07
+          mkdir -p release/bundle/scripts
+          mkdir -p release/bundle/tests/fixtures/n8n
+          mkdir -p release/bundle/tests/fixtures/odoo
 
           cp README.md ARCHITECTURE.md CHANGELOG.md PROJECT_STRUCTURE.md VERSION_1_0_FREEZE.md LICENSE release/bundle/
           cp manifest/freeze-v1.0.json release/bundle/
@@ -73,6 +87,11 @@ jobs:
 
           cp examples/google_sheets/InvoiceRouter_20_Provider_Production_Presets_v1.0.xlsx release/bundle/examples/google_sheets/
           cp assets/architecture/invoice-router-architecture-v1.0.png release/bundle/assets/architecture/
+
+          cp evidence/phase07/*.json evidence/phase07/*.md release/bundle/evidence/phase07/
+          cp scripts/phase07-n8n-engine-smoke.mjs scripts/phase07-final-release-gate.mjs release/bundle/scripts/
+          cp tests/fixtures/n8n/InvoiceRouter-Phase-07-Engine-Smoke.json release/bundle/tests/fixtures/n8n/
+          cp tests/fixtures/odoo/odoo-18-phase07-e2e.json tests/fixtures/odoo/odoo-19-phase07-e2e.json release/bundle/tests/fixtures/odoo/
 
           node scripts/audit-release-source.mjs release/bundle
 
@@ -104,6 +123,18 @@ jobs:
           path: release/**
           if-no-files-found: error
 
+      - name: Validate npm publication credentials
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "NPM_TOKEN is required for a tag release." >&2
+            exit 1
+          fi
+          npm whoami --registry=https://registry.npmjs.org
+
       - name: Create GitHub Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -115,14 +146,14 @@ jobs:
             release/SHA256SUMS.txt
           fail_on_unmatched_files: true
 
-      - name: Publish to npm when token exists
+      - name: Publish package to npm
         if: github.ref_type == 'tag'
         shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [[ -n "${NODE_AUTH_TOKEN}" ]]; then
-            npm publish --access public --provenance
-          else
-            echo "NPM_TOKEN is not configured; npm publishing was skipped."
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "NPM_TOKEN is required for a tag release." >&2
+            exit 1
           fi
+          npm publish --access public --provenance

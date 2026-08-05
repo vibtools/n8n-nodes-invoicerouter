@@ -66,3 +66,11 @@ Capture:
 - correct recipient;
 - outgoing queue or sent state;
 - recipient inbox result.
+
+## Supported versions and company access
+
+Use Odoo 18 or Odoo 19. The API user must be able to read its `res.users.company_id` and the selected `res.company` record. Read-only capability success does not prove permission to create/post/send; complete the live canary. Unknown major versions are blocked.
+
+## Reporting identity and revision fields
+
+Keep `Report_Key`, `Base_Revision`, `Revision`, `Writer_Run_ID`, and `Aggregate_Source` under workflow control. Campaign totals are reconstructed from managed recipient/result/retry evidence at startup. Issuer mismatch diagnostics use `Campaign_ID=PREFLIGHT` in `account_report`; they are preflight evidence, not sent-campaign activity.

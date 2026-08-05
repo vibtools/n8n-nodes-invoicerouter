@@ -2,6 +2,7 @@ import type { IDataObject, IExecuteFunctions, INodeExecutionData, JsonValue } fr
 import { buildProviderRequest, normalizeProviderId } from '../../providers';
 import { buildDynamicTags, replaceTags } from '../../shared/utils/Template';
 import { isRecord, parseJsonObject, slug, toStringValue } from '../../shared/utils/Helpers';
+import { safeInputData } from '../../shared/utils/Input';
 
 function itemAt(items: INodeExecutionData[], index: number): INodeExecutionData | undefined {
   return items[index] ?? items[0];
@@ -13,7 +14,7 @@ function safeRecord(value: JsonValue | undefined, label: string): IDataObject {
 }
 
 function blockedBuild(item: IDataObject, status: string, message: string, allocation: IDataObject, itemIndex: number): INodeExecutionData {
-  return { json: { ...item, requestBuild: { success: false, status, message, allocation } }, pairedItem: { item: itemIndex, input: 2 } };
+  return { json: { ...item, requestBuild: { success: false, status, message, allocation } }, pairedItem: { item: itemIndex } };
 }
 
 function guardCheck(id: string, passed: boolean, message: string): IDataObject {
@@ -62,9 +63,9 @@ function buildSendGuard(input: {
 }
 
 export async function execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-  const allocationItems = this.getInputData(0);
-  const templateItems = this.getInputData(1);
-  const recipientItems = this.getInputData(2);
+  const allocationItems = safeInputData(this, 0);
+  const templateItems = safeInputData(this, 1);
+  const recipientItems = safeInputData(this, 2);
   if (allocationItems.length === 0) throw new Error('Provider Selector input is empty. Connect Provider Selector to input 1.');
   const embeddedMode = templateItems.length === 0 || recipientItems.length === 0;
 
@@ -101,9 +102,18 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const accountId = toStringValue(allocation.accountId);
     const workerId = toStringValue(allocation.workerId ?? (isRecord(allocation.runtime) && isRecord(allocation.runtime.lock) ? allocation.runtime.lock.workerId : ''), `worker-${itemIndex + 1}`);
     const executionId = toStringValue((allocationItem?.json.runtime && isRecord(allocationItem.json.runtime)) ? allocationItem.json.runtime.executionId : '');
-    const tags = buildDynamicTags(`${executionId}:${profileId}:${toStringValue(recipient.email)}:${itemIndex}`, recipient, allocation);
+    const job = isRecord(recipientItem.json.job) ? recipientItem.json.job : isRecord(allocationItem?.json.job) ? allocationItem.json.job : {};
+    const campaignId = toStringValue(job.campaignId, 'default-campaign');
+    const jobId = toStringValue(job.jobId);
+    const stableCampaignSeed = jobId ? `${campaignId}:${jobId}` : '';
+    const dynamicSeed = idempotencyKeyMode === 'campaignJob' && stableCampaignSeed
+      ? stableCampaignSeed
+      : `${executionId}:${profileId}:${toStringValue(recipient.email)}:${itemIndex}`;
+    const tags = buildDynamicTags(dynamicSeed, recipient, allocation);
     const resolvedTemplateValue = replaceTags(template, tags);
     const invoice = safeRecord(resolvedTemplateValue, 'Resolved invoice template');
+    const recoveryStableReference = toStringValue(job.stableReference).trim();
+    if (recoveryStableReference) invoice.invoiceNumber = recoveryStableReference;
     const build = buildProviderRequest({ providerId, actionId: toStringValue(allocation.actionId), invoice, recipient, profile: allocation });
     const resolvedCustomBody = replaceTags(customBody, tags);
     const body: JsonValue = Object.keys(customBody).length > 0 ? resolvedCustomBody : build.body;
@@ -132,20 +142,18 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     const query: IDataObject = { ...build.query, ...(replaceTags(extraQuery, tags) as IDataObject) };
     const routing = isRecord(allocation.routing) ? allocation.routing : { enabled: false };
     const environment = toStringValue(allocation.environment, 'live');
-    const job = isRecord(recipientItem.json.job) ? recipientItem.json.job : isRecord(allocationItem?.json.job) ? allocationItem.json.job : {};
-    const campaignId = toStringValue(job.campaignId, 'default-campaign');
-    const jobId = toStringValue(job.jobId, requestId);
+    const resolvedJobId = toStringValue(job.jobId, requestId);
     const failoverGroup = toStringValue(allocation.failoverGroup ?? job.failoverGroup, accountId);
     const idempotencyComponents: IDataObject = {
       providerId, profileId, accountId, actionId: toStringValue(allocation.actionId), environment,
       invoiceId: requestId, recipientEmail: toStringValue(recipient.email), transactionId: toStringValue(invoice.transactionId, tags.TRX),
-      campaignId, jobId, failoverGroup,
+      campaignId, jobId: resolvedJobId, failoverGroup,
     };
     const stableParts = [providerId, profileId, toStringValue(allocation.actionId), environment, requestId, toStringValue(recipient.email)]
       .map((value) => slug(value) || 'unassigned');
     const invoiceOnlyParts = [providerId, profileId, toStringValue(allocation.actionId), environment, requestId]
       .map((value) => slug(value) || 'unassigned');
-    const campaignParts = [providerId, failoverGroup, campaignId, jobId, toStringValue(allocation.actionId)]
+    const campaignParts = [providerId, failoverGroup, campaignId, resolvedJobId, toStringValue(allocation.actionId)]
       .map((value) => slug(value) || 'unassigned');
     const idempotencyValue = idempotencyKeyMode === 'providerInvoiceRecipient'
       ? stableParts.join(':')
@@ -169,6 +177,9 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       credentialRef: toStringValue(allocation.credentialRef), authType: toStringValue(allocation.authType),
       idempotency: { header: effectiveIdempotencyHeader, value: idempotencyValue, requestId, mode: idempotencyKeyMode, scope: idempotencyScope, components: idempotencyComponents },
       responsePaths: build.responsePaths, requestMapping, responsePolicy,
+      odooCompatibility: isRecord(allocation.preflightCapabilities) ? allocation.preflightCapabilities : null,
+      issuerCompatibility: isRecord(allocation.issuerCompatibility) ? allocation.issuerCompatibility : null,
+      issuerKey: allocation.issuerKey ?? '', companyId: allocation.companyId ?? '', companyName: allocation.companyName ?? '',
       invoice, recipient, job, lifecycleResume: recipientItem.json.lifecycleResume ?? allocationItem?.json.lifecycleResume ?? null,
       failoverState: recipientItem.json.failoverState ?? allocationItem?.json.failoverState ?? null,
       warnings: build.warnings, providerValidation: { errors: build.errors, warnings: build.warnings }, sendGuard,

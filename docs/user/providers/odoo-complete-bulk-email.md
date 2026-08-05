@@ -1,13 +1,13 @@
 # InvoiceRouter Template 001 — Odoo Complete Bulk Email Sending System
 
-This provider template is for InvoiceRouter v2.1.0 and the built-in Odoo JSON-RPC adapter.
+This provider template is for InvoiceRouter v2.1.1 and the built-in Odoo JSON-RPC adapter.
 
 ## What this template does
 
 - Reads Odoo provider/API details from the `provider` sheet.
 - Reads recipients from the `email_list` sheet.
 - Builds invoices from the InvoiceRouter n8n Invoice Template node.
-- Searches or creates Odoo customers by email.
+- Searches Odoo customers by case-insensitive exact email, blocks duplicate contacts, or creates the customer when no exact contact exists.
 - Creates Odoo customer invoices.
 - Posts invoices when `odooPostInvoice` is true.
 - Creates and executes the standard Odoo invoice send wizard when `odooSendInvoiceEmail` is true.
@@ -23,7 +23,8 @@ This provider template is for InvoiceRouter v2.1.0 and the built-in Odoo JSON-RP
 - `n8n-import-workflow-sandbox-canary.json`
 - `n8n-import-workflow-sandbox-bulk.json`
 - `n8n-import-workflow-live-canary.json`
-- `n8n-import-workflow-live-bulk.json`
+- `n8n-import-workflow-production-v2.1.1.json` (canonical production URL-import template)
+- `n8n-import-workflow-live-bulk.json` (compatibility copy)
 - `provider.csv`
 - `provider.sandbox.csv`
 - `provider.live.csv`
@@ -69,6 +70,15 @@ The older `account.move.action_send_and_print` opener is not treated as a comple
 | `FAILED` | Correct the recorded error; retry only through the approved resume branch. |
 | `UNVERIFIED` | Review Odoo manually; do not automatically retry or claim sent. |
 
+## Phase 03 evidence rules
+
+- Current-attempt intended-recipient `SENT` evidence overrides an ambiguous wizard transport timeout.
+- Current-attempt `QUEUED` evidence remains queued.
+- Explicit provider failure evidence remains failed.
+- Ambiguous send transport without terminal evidence becomes `UNVERIFIED` and is not automatically retried.
+- RFC display-name recipients are normalized.
+- PDF evidence validates the actual `ir.attachment` MIME, model, invoice ID, current-attempt binding, and expected report attachment.
+
 ## Duplicate-safe retry
 
 When an invoice already exists:
@@ -107,3 +117,11 @@ Capture all of the following:
 ## Important Odoo API note
 
 This template uses InvoiceRouter's current Odoo JSON-RPC `/jsonrpc` adapter. Odoo's long-term API direction may require a future approved adapter update. That future migration is outside this release and must not be performed silently.
+
+## v2.1.1 campaign execution control
+
+Keep one pending `Campaign_ID` in each execution. The production workflow reconstructs the campaign from managed Sheet rows and verifies an `ACTIVE` `campaign_report` lease before provider selection. Do not launch another execution for that campaign until the current run releases the lease or an expired/stopped run has been safely reconciled.
+
+## Capability and issuer acceptance
+
+The built-in Odoo adapter is version-profiled for Odoo 18 and 19. Unsupported majors stop before authentication. Every enabled account requires `Issuer_Key`; accounts in the same failover group must resolve to the same Odoo company. Review the additive capability/company fields before enabling bulk failover.

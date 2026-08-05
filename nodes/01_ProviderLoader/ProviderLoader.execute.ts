@@ -1,8 +1,9 @@
 import type { IDataObject, IExecuteFunctions, INodeExecutionData } from '../../shared/types/N8n';
 import { maskSecret } from '../../shared/security/Redaction';
 import { executionIdentity, registerProviderProfiles, type SecretMaterial } from '../../shared/runtime/RuntimeStore';
-import { isRecord, normalizedKey, nowIso, parseJsonObject, slug, toBoolean, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
+import { cloneJson, isRecord, normalizedKey, nowIso, parseJsonObject, slug, toBoolean, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
 import { lifecycleMetadata, normalizeProviderId } from '../../providers';
+import { requireOdooCapabilityProfile } from '../../shared/odoo/OdooCapabilityManifest';
 
 const COLUMN_ALIASES: Record<string, string[]> = {
   enabled: ['enabled', 'active'], provider: ['provider', 'providername'], account: ['account', 'accountname'],
@@ -17,6 +18,8 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   consecutiveFailures: ['consecutivefailures'], retryCount: ['retrycount'], cooldownUntil: ['cooldownuntil'],
   lastErrorType: ['lasterrortype'], lastError: ['lasterror'], failoverGroup: ['failovergroup'],
   totalAllocated: ['totalallocated'], totalSent: ['totalsent'], totalFailed: ['totalfailed'],
+  issuerKey: ['issuerkey', 'legalissuerkey'], companyId: ['companyid', 'odoocompanyid'],
+  companyName: ['companyname', 'odoocompanyname'],
 };
 
 function normalizedRow(row: IDataObject): Record<string, unknown> {
@@ -80,6 +83,9 @@ function classifyPreflightFailure(message: string): IDataObject {
   if (/forbidden|permission|not allowed|access rights|authorization/.test(text)) {
     return { status: 'AUTHORIZATION_FAILED', enabled: false, autoDisabled: true, errorType: 'AUTHORIZATION_ERROR' };
   }
+  if (/unsupported odoo server version/.test(text)) {
+    return { status: 'ODOO_VERSION_UNSUPPORTED', enabled: true, autoDisabled: false, errorType: 'CONFIGURATION_ERROR' };
+  }
   if (/currency/.test(text)) {
     return { status: 'CURRENCY_INCOMPATIBLE', enabled: true, autoDisabled: false, errorType: 'CONFIGURATION_ERROR' };
   }
@@ -87,56 +93,288 @@ function classifyPreflightFailure(message: string): IDataObject {
 }
 
 async function runOdooPreflight(context: IExecuteFunctions, input: {
-  url: string; timeoutMs: number; database: string; username: string; password: string; currency: string; checkPermissions: boolean; rowNumber: number;
+  url: string;
+  timeoutMs: number;
+  database: string;
+  username: string;
+  password: string;
+  currency: string;
+  checkPermissions: boolean;
+  rowNumber: number;
 }): Promise<IDataObject> {
   try {
+    const versionRaw = await odooRpc(context, {
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      service: 'common',
+      method: 'version',
+      args: [],
+      id: `preflight-version-${input.rowNumber}`,
+    });
+    const version = isRecord(versionRaw) ? versionRaw : {};
+    const serverVersion = toStringValue(version.server_version ?? version.serverVersion ?? version.server_serie);
+    const capabilityProfile = requireOdooCapabilityProfile(serverVersion);
+
     const uidRaw = await odooRpc(context, {
-      url: input.url, timeoutMs: input.timeoutMs, service: 'common', method: 'authenticate',
-      args: [input.database, input.username, input.password, {}], id: `preflight-auth-${input.rowNumber}`,
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      service: 'common',
+      method: 'authenticate',
+      args: [input.database, input.username, input.password, {}],
+      id: `preflight-auth-${input.rowNumber}`,
     });
     const uid = toFiniteNumber(uidRaw, 0);
     if (!(uid > 0)) throw new Error('Odoo authentication failed for the configured username/password or API key.');
 
-    const currency = input.currency.trim().toUpperCase();
-    if (currency) {
-      const count = toFiniteNumber(await odooRpc(context, {
-        url: input.url, timeoutMs: input.timeoutMs, service: 'object', method: 'execute_kw',
-        args: [input.database, uid, input.password, 'res.currency', 'search_count', [[['name', '=', currency], ['active', '=', true]]]],
-        id: `preflight-currency-${input.rowNumber}`,
-      }), 0);
-      if (count < 1) throw new Error(`Odoo currency ${currency} was not found or is not active.`);
+    const requestedCurrency = input.currency.trim().toUpperCase();
+    const currencyDomain = requestedCurrency ? [[['name', '=', requestedCurrency], ['active', '=', true]]] : [[['active', '=', true]]];
+    const currencyRows = await odooRpc(context, {
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      service: 'object',
+      method: 'execute_kw',
+      args: [
+        input.database,
+        uid,
+        input.password,
+        'res.currency',
+        'search_read',
+        currencyDomain,
+        { fields: capabilityProfile.senderFields.currencySearch, limit: 300 },
+      ],
+      id: `preflight-currencies-${input.rowNumber}`,
+    });
+    const activeCurrencies = Array.isArray(currencyRows)
+      ? currencyRows.filter(isRecord).map((row) => toStringValue(row.name).trim().toUpperCase()).filter(Boolean)
+      : [];
+    if (requestedCurrency && !activeCurrencies.includes(requestedCurrency)) {
+      throw new Error(`Odoo currency ${requestedCurrency} was not found or is not active.`);
     }
 
+    const modelCapabilities: IDataObject = {};
     if (input.checkPermissions) {
-      const checks: Array<[string, string]> = [
-        ['res.partner', 'read'], ['res.partner', 'create'], ['account.move', 'read'], ['account.move', 'create'],
-        ['account.move', 'write'], ['account.move.send.wizard', 'create'],
-      ];
-      for (const [model, operation] of checks) {
-        const allowed = await odooRpc(context, {
-          url: input.url, timeoutMs: input.timeoutMs, service: 'object', method: 'execute_kw',
-          args: [input.database, uid, input.password, model, 'check_access_rights', [operation], { raise_exception: false }],
-          id: `preflight-access-${model}-${operation}-${input.rowNumber}`,
+      for (const [model, fields] of Object.entries(capabilityProfile.requiredFields)) {
+        const fieldInfo = await odooRpc(context, {
+          url: input.url,
+          timeoutMs: input.timeoutMs,
+          service: 'object',
+          method: 'execute_kw',
+          args: [
+            input.database,
+            uid,
+            input.password,
+            model,
+            'fields_get',
+            [fields],
+            { attributes: ['type', 'required', 'readonly'] },
+          ],
+          id: `preflight-fields-${model}-${input.rowNumber}`,
         });
-        if (allowed !== true) throw new Error(`Odoo access rights do not allow ${operation} on ${model}.`);
+        if (!isRecord(fieldInfo)) throw new Error(`Odoo model ${model} did not return field metadata.`);
+        const missing = fields.filter((field) => !Object.prototype.hasOwnProperty.call(fieldInfo, field));
+        if (missing.length > 0) throw new Error(`Odoo model ${model} is missing required fields: ${missing.join(', ')}.`);
+        modelCapabilities[model] = { fields: Object.keys(fieldInfo), readable: true };
+      }
+      for (const model of capabilityProfile.readProbeModels) {
+        await odooRpc(context, {
+          url: input.url,
+          timeoutMs: input.timeoutMs,
+          service: 'object',
+          method: 'execute_kw',
+          args: [input.database, uid, input.password, model, 'search_count', [[]]],
+          id: `preflight-read-${model}-${input.rowNumber}`,
+        });
       }
     }
-    return { passed: true, status: 'READY', enabled: true, autoDisabled: false, reason: '', uid };
+
+    const userRows = await odooRpc(context, {
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      service: 'object',
+      method: 'execute_kw',
+      args: [
+        input.database,
+        uid,
+        input.password,
+        'res.users',
+        'read',
+        [[uid], capabilityProfile.senderFields.userCompanyRead],
+      ],
+      id: `preflight-user-company-${input.rowNumber}`,
+    });
+    const user = Array.isArray(userRows) ? userRows.filter(isRecord)[0] ?? {} : {};
+    const companyRelation = user.company_id;
+    const companyId = Array.isArray(companyRelation) ? toFiniteNumber(companyRelation[0], 0) : toFiniteNumber(companyRelation, 0);
+    if (companyId <= 0) throw new Error('Odoo authenticated user did not expose a current company identity.');
+    const companyRows = await odooRpc(context, {
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      service: 'object',
+      method: 'execute_kw',
+      args: [
+        input.database,
+        uid,
+        input.password,
+        'res.company',
+        'read',
+        [[companyId], capabilityProfile.senderFields.companyRead],
+      ],
+      id: `preflight-company-${input.rowNumber}`,
+    });
+    const company = Array.isArray(companyRows) ? companyRows.filter(isRecord)[0] ?? {} : {};
+    const companyName = toStringValue(company.name).trim();
+    if (!companyName) throw new Error(`Odoo company ${companyId} did not expose a company name.`);
+
+    return {
+      passed: true,
+      status: 'READY',
+      enabled: true,
+      autoDisabled: false,
+      reason: 'Capability validated; create/post/send side-effect permission remains unproven until a live canary succeeds.',
+      uid,
+      capabilities: {
+        serverVersion,
+        majorVersion: capabilityProfile.majorVersion,
+        profileId: capabilityProfile.id,
+        supported: true,
+        capabilityStatus: 'CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN',
+        sideEffectPermissionsProven: false,
+        activeCurrencies,
+        models: modelCapabilities,
+        requiredMethods: capabilityProfile.requiredMethods,
+        versionSpecificWizardFields: capabilityProfile.versionSpecificWizardFields,
+        company: {
+          id: companyId,
+          name: companyName,
+          currencyId: Array.isArray(company.currency_id) ? toFiniteNumber(company.currency_id[0], 0) : toFiniteNumber(company.currency_id, 0),
+        },
+        checkedAt: nowIso(),
+      },
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : toStringValue(error);
     return { passed: false, reason: message, ...classifyPreflightFailure(message) };
   }
 }
 
+function configuredIssuerKey(value: unknown): string {
+  const text = toStringValue(value).trim();
+  if (!text || /^(replace|your|todo|change[-_ ]?me)/i.test(text)) return '';
+  return text;
+}
+
+function normalizedIssuerValue(value: unknown): string {
+  return toStringValue(value).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function capabilityCompany(profile: IDataObject): IDataObject {
+  const capabilities = isRecord(profile.preflightCapabilities) ? profile.preflightCapabilities : {};
+  return isRecord(capabilities.company) ? capabilities.company : {};
+}
+
+function validateOdooIssuerGroups(
+  profilesById: Map<string, IDataObject>,
+  secrets: Map<string, SecretMaterial>,
+  preflightResults: IDataObject[],
+  warnings: string[],
+  failurePolicy: string,
+): void {
+  const groups = new Map<string, IDataObject[]>();
+  for (const profile of profilesById.values()) {
+    if (toStringValue(profile.providerId) !== 'odoo') continue;
+    const failoverGroup = toStringValue(profile.failoverGroup).trim();
+    if (!failoverGroup) {
+      profile.issuerCompatibility = { status: 'NOT_APPLICABLE', compatible: true, checkedAt: nowIso() };
+      continue;
+    }
+    const entries = groups.get(failoverGroup) ?? [];
+    entries.push(profile);
+    groups.set(failoverGroup, entries);
+  }
+
+  for (const [failoverGroup, profiles] of groups.entries()) {
+    const issues: string[] = [];
+    const issuerKeys = new Set<string>();
+    const companyNames = new Set<string>();
+    for (const profile of profiles) {
+      const issuerKey = configuredIssuerKey(profile.issuerKey);
+      const company = capabilityCompany(profile);
+      const companyId = toFiniteNumber(company.id, 0);
+      const companyName = toStringValue(company.name).trim();
+      const expectedCompanyId = toFiniteNumber(profile.expectedCompanyId, 0);
+      const expectedCompanyName = toStringValue(profile.expectedCompanyName).trim();
+      if (!issuerKey) issues.push(`${toStringValue(profile.accountName)} is missing a non-placeholder Issuer_Key`);
+      else issuerKeys.add(normalizedIssuerValue(issuerKey));
+      if (companyId <= 0 || !companyName) issues.push(`${toStringValue(profile.accountName)} has no verified Odoo company identity`);
+      if (companyName) companyNames.add(normalizedIssuerValue(companyName));
+      if (expectedCompanyId > 0 && companyId > 0 && expectedCompanyId !== companyId) {
+        issues.push(`${toStringValue(profile.accountName)} expected Company_ID ${expectedCompanyId} but preflight returned ${companyId}`);
+      }
+      if (expectedCompanyName && companyName && normalizedIssuerValue(expectedCompanyName) !== normalizedIssuerValue(companyName)) {
+        issues.push(`${toStringValue(profile.accountName)} expected Company_Name ${expectedCompanyName} but preflight returned ${companyName}`);
+      }
+    }
+    if (issuerKeys.size > 1) issues.push(`Failover_Group ${failoverGroup} contains different Issuer_Key values`);
+    if (companyNames.size > 1) issues.push(`Failover_Group ${failoverGroup} resolves to different Odoo company names`);
+
+    const uniqueIssues = [...new Set(issues)];
+    const compatible = uniqueIssues.length === 0;
+    const sharedIssuerKey = configuredIssuerKey(profiles[0]?.issuerKey);
+    for (const profile of profiles) {
+      const company = capabilityCompany(profile);
+      const profileId = toStringValue(profile.id);
+      const result = preflightResults.find((entry) => toStringValue(entry.Profile_ID) === profileId);
+      profile.issuerCompatibility = {
+        status: compatible ? 'VERIFIED' : 'ISSUER_MISMATCH',
+        compatible,
+        failoverGroup,
+        issuerKey: sharedIssuerKey,
+        companyId: toFiniteNumber(company.id, 0),
+        companyName: toStringValue(company.name),
+        issues: uniqueIssues,
+        checkedAt: nowIso(),
+      };
+      if (result) {
+        result.Issuer_Key = configuredIssuerKey(profile.issuerKey);
+        result.Company_ID = toFiniteNumber(company.id, 0) || '';
+        result.Company_Name = toStringValue(company.name);
+        result.Issuer_Compatibility = compatible ? 'VERIFIED' : 'ISSUER_MISMATCH';
+        if (!compatible) {
+          const reason = `Odoo failover issuer compatibility blocked: ${uniqueIssues.join('; ')}.`;
+          result.status = 'ISSUER_MISMATCH';
+          result.Status_Reason = reason;
+          result.Last_Error_Type = 'CONFIGURATION_ERROR';
+          result.Last_Error = reason;
+          result.Auto_Disabled = false;
+          result.Enabled = true;
+          result.passed = false;
+        }
+      }
+      if (!compatible) {
+        profilesById.delete(profileId);
+        secrets.delete(profileId);
+      }
+    }
+    if (!compatible) {
+      const message = `Odoo Failover_Group ${failoverGroup} was excluded: ${uniqueIssues.join('; ')}.`;
+      warnings.push(message);
+      if (failurePolicy === 'error') throw new Error(message);
+    }
+  }
+}
+
 export async function execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
   const items = this.getInputData();
+  const rehydration = items
+    .map((item) => item.json.__invoiceRouterRehydration)
+    .find((value): value is IDataObject => isRecord(value));
   const batchId = toStringValue(this.getNodeParameter('batchId', 0, 'default'), 'default');
   const sourceName = toStringValue(this.getNodeParameter('sourceName', 0, 'provider'), 'provider');
   const duplicatePolicy = toStringValue(this.getNodeParameter('duplicatePolicy', 0, 'error'), 'error');
   const includeDisabled = Boolean(this.getNodeParameter('includeDisabled', 0, false));
   const strictValidation = Boolean(this.getNodeParameter('strictValidation', 0, true));
   const enableOdooPreflight = Boolean(this.getNodeParameter('enableOdooPreflight', 0, false));
-  const preflightCurrency = toStringValue(this.getNodeParameter('preflightCurrency', 0, 'USD'), 'USD').trim().toUpperCase();
+  const preflightCurrency = toStringValue(this.getNodeParameter('preflightCurrency', 0, ''), '').trim().toUpperCase();
   const preflightCheckPermissions = Boolean(this.getNodeParameter('preflightCheckPermissions', 0, true));
   const preflightFailurePolicy = toStringValue(this.getNodeParameter('preflightFailurePolicy', 0, 'excludeAndReport'), 'excludeAndReport');
   const identity = executionIdentity(this, batchId);
@@ -215,6 +453,9 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       apiKeyPreview: maskSecret(apiKey || username), apiSecretPreview: maskSecret(apiSecret || password), extraValuePreview: maskSecret(extraValue || database),
       connection: { usernamePreview: maskSecret(username || apiKey), database: database ? maskSecret(database) : '', extraConfig },
       notes: toStringValue(row.notes), priority: itemIndex, weight: 1, failoverGroup: slug(row.failoverGroup),
+      issuerKey: configuredIssuerKey(row.issuerKey), expectedCompanyId: toFiniteNumber(row.companyId, 0),
+      expectedCompanyName: toStringValue(row.companyName).trim(),
+      issuerCompatibility: { status: 'UNVERIFIED', compatible: false },
       managedStatus: resetRequested ? 'READY' : managedStatus || (enabled ? 'READY' : 'DISABLED_USER'),
       managedStatusReason: toStringValue(row.statusReason), autoDisabled: hardDisabled && !resetRequested,
       consecutiveFailures: Math.max(0, toFiniteNumber(row.consecutiveFailures, 0)), retryCount: Math.max(0, toFiniteNumber(row.retryCount, 0)),
@@ -230,10 +471,17 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
         username: username || apiKey, password: password || apiSecret, currency: preflightCurrency,
         checkPermissions: preflightCheckPermissions, rowNumber: itemIndex + 2,
       });
+      const capabilities = isRecord(preflight.capabilities) ? preflight.capabilities : {};
+      const company = isRecord(capabilities.company) ? capabilities.company : {};
       const result: IDataObject = {
-        Account: accountName, Account_ID: accountId, Profile_ID: id, Enabled: preflight.enabled,
+        Provider: providerName, Account: accountName, Account_Name: accountName, Account_ID: accountId, Profile_ID: id,
+        Failover_Group: slug(row.failoverGroup), Enabled: preflight.enabled,
         status: preflight.status, Status_Reason: preflight.reason, Auto_Disabled: preflight.autoDisabled,
         Last_Error_Type: preflight.passed === true ? '' : preflight.errorType, Last_Error: preflight.reason,
+        Issuer_Key: configuredIssuerKey(row.issuerKey), Company_ID: toFiniteNumber(company.id, 0) || '',
+        Company_Name: toStringValue(company.name), Odoo_Server_Version: toStringValue(capabilities.serverVersion),
+        Odoo_Major_Version: toFiniteNumber(capabilities.majorVersion, 0) || '',
+        Capability_Status: toStringValue(capabilities.capabilityStatus), Issuer_Compatibility: 'PENDING',
         Updated_At: nowIso(), passed: preflight.passed,
       };
       preflightResults.push(result);
@@ -243,6 +491,13 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
         if (preflightFailurePolicy === 'error') throw new Error(message);
         continue;
       }
+      profile.preflightCapabilities = isRecord(preflight.capabilities) ? preflight.capabilities : {};
+      const verifiedCompany = isRecord(profile.preflightCapabilities.company) ? profile.preflightCapabilities.company : {};
+      profile.companyId = toFiniteNumber(verifiedCompany.id, 0);
+      profile.companyName = toStringValue(verifiedCompany.name);
+      profile.odooServerVersion = toStringValue(profile.preflightCapabilities.serverVersion);
+      profile.odooMajorVersion = toFiniteNumber(profile.preflightCapabilities.majorVersion, 0);
+      profile.odooCapabilityProfileId = toStringValue(profile.preflightCapabilities.profileId);
     }
     if (byId.has(id)) {
       const message = `Duplicate provider action profile: ${id}`;
@@ -254,6 +509,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
     secrets.set(id, secret);
   }
 
+  validateOdooIssuerGroups(byId, secrets, preflightResults, warnings, preflightFailurePolicy);
   const providers = [...byId.values()];
   registerProviderProfiles(identity.scopeKey, providers, secrets);
   return [[{
@@ -261,6 +517,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       success: true, total: providers.length, generated_at: nowIso(), batch_id: batchId,
       source: { type: 'google_sheet', sheet_name: sourceName }, providers, warnings, preflightResults,
       runtime: { scopeKey: identity.scopeKey, workflowId: identity.workflowId, executionId: identity.executionId },
+      rehydration: rehydration ? cloneJson(rehydration) : null,
     },
   }]];
 }

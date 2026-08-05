@@ -1,10 +1,11 @@
 import type { IDataObject, IExecuteFunctions, INodeExecutionData } from '../../shared/types/N8n';
 import { applyProviderFeedback, persistFeedback, updateCampaignAccountStats } from '../../shared/runtime/RuntimeStore';
+import { recordCampaignOutcome } from '../../shared/runtime/CampaignStore';
 import { isRecord, nowIso, toFiniteNumber, toStringValue } from '../../shared/utils/Helpers';
 
 const RETRYABLE_HTTP = new Set([408, 425, 429, 500, 502, 503, 504]);
 const RETRYABLE_ERRORS = new Set(['TIMEOUT_ERROR', 'NETWORK_ERROR', 'RATE_LIMIT_ERROR', 'SERVER_ERROR', 'RETRYABLE_PROVIDER_ERROR', 'EMAIL_SEND_ERROR', 'INVOICE_POST_ERROR']);
-const NON_RETRYABLE_ERRORS = new Set(['AUTHENTICATION_ERROR', 'AUTHORIZATION_ERROR', 'VALIDATION_ERROR', 'NOT_FOUND_ERROR', 'CONFLICT_ERROR', 'EMAIL_UNVERIFIED', 'CONFIGURATION_ERROR', 'QUOTA_EXHAUSTED_ERROR']);
+const NON_RETRYABLE_ERRORS = new Set(['AUTHENTICATION_ERROR', 'AUTHORIZATION_ERROR', 'VALIDATION_ERROR', 'NOT_FOUND_ERROR', 'CONFLICT_ERROR', 'EMAIL_UNVERIFIED', 'CONFIGURATION_ERROR', 'QUOTA_EXHAUSTED_ERROR', 'AMBIGUOUS_PROVIDER_RESULT']);
 
 
 function jobRecord(item: INodeExecutionData, status: IDataObject): IDataObject {
@@ -15,35 +16,41 @@ function jobRecord(item: INodeExecutionData, status: IDataObject): IDataObject {
   };
 }
 
-function providerOperationalStatus(input: { result: string; errorType: string; errorMessage: string; retrying: boolean; failover: boolean; emailQueued: boolean }): IDataObject {
+function providerOperationalStatus(input: { result: string; transportStatus: string; errorType: string; errorMessage: string; retrying: boolean; failover: boolean; emailQueued: boolean }): IDataObject {
   const message = input.errorMessage.toLowerCase();
-  if (input.result === 'SUCCESS' || ['DUPLICATE', 'BLOCKED', 'UNKNOWN'].includes(input.result)) return { status: 'READY', enabled: true, autoDisabled: false, reason: '' };
+  if (input.result === 'SUCCESS' || input.result === 'DUPLICATE') return { status: 'READY', enabled: true, autoDisabled: false, reason: '' };
+  if (input.transportStatus === 'QUEUED') return { status: 'COOLDOWN', enabled: true, autoDisabled: false, reason: input.errorMessage || 'No eligible provider account is currently available.' };
+  if (input.result === 'BLOCKED') return { status: 'CONFIGURATION_ERROR', enabled: true, autoDisabled: false, reason: input.errorMessage || 'Provider request was blocked before sending.' };
+  if (input.result === 'UNKNOWN') return { status: 'MANUAL_REVIEW', enabled: true, autoDisabled: false, reason: input.errorMessage || 'Provider result is unknown.' };
   if (input.emailQueued) return { status: 'READY', enabled: true, autoDisabled: false, reason: 'Provider accepted email into its outgoing queue.' };
   if (input.errorType === 'AUTHENTICATION_ERROR') return { status: 'AUTH_FAILED', enabled: false, autoDisabled: true, reason: input.errorMessage };
   if (input.errorType === 'AUTHORIZATION_ERROR') return { status: 'AUTHORIZATION_FAILED', enabled: false, autoDisabled: true, reason: input.errorMessage };
   if (input.errorType === 'QUOTA_EXHAUSTED_ERROR') return { status: 'QUOTA_EXHAUSTED', enabled: false, autoDisabled: true, reason: input.errorMessage };
+  if (input.errorType === 'AMBIGUOUS_PROVIDER_RESULT') return { status: 'MANUAL_REVIEW', enabled: true, autoDisabled: false, reason: input.errorMessage };
   if (input.errorType === 'CONFIGURATION_ERROR' && /database .*does not exist|unknown database|database not found/.test(message)) {
     return { status: 'DATABASE_INVALID', enabled: false, autoDisabled: true, reason: input.errorMessage };
   }
   if (input.errorType === 'CONFIGURATION_ERROR' && /currency/.test(message)) return { status: 'CURRENCY_INCOMPATIBLE', enabled: true, autoDisabled: false, reason: input.errorMessage };
   if (input.errorType === 'CONFIGURATION_ERROR') return { status: 'CONFIGURATION_ERROR', enabled: true, autoDisabled: false, reason: input.errorMessage };
   if (input.errorType === 'RATE_LIMIT_ERROR') return { status: 'RATE_LIMITED', enabled: true, autoDisabled: false, reason: input.errorMessage };
-  if (input.failover) return { status: 'COOLDOWN', enabled: true, autoDisabled: false, reason: input.errorMessage };
-  if (input.retrying) return { status: 'COOLDOWN', enabled: true, autoDisabled: false, reason: input.errorMessage };
+  if (input.failover || input.retrying) return { status: 'COOLDOWN', enabled: true, autoDisabled: false, reason: input.errorMessage };
   return { status: 'MANUAL_REVIEW', enabled: true, autoDisabled: false, reason: input.errorMessage };
 }
 
 function recipientOperationalStatus(input: {
-  duplicate: boolean; blocked: boolean; result: string; emailStatus: string; retrying: boolean; failover: boolean; errorType: string;
+  duplicate: boolean; blocked: boolean; transportStatus: string; result: string; emailRequested: boolean;
+  emailStatus: string; retrying: boolean; failover: boolean; errorType: string;
 }): string {
   if (input.duplicate) return 'DUPLICATE';
+  if (input.transportStatus === 'QUEUED') return 'QUEUED';
   if (input.blocked) return 'BLOCKED';
   if (input.failover) return 'FAILOVER';
   if (input.retrying) return 'RETRYING';
-  if (input.emailStatus === 'SENT' || input.result === 'SUCCESS') return 'SENT';
+  if (input.emailStatus === 'SENT') return 'SENT';
   if (input.emailStatus === 'QUEUED') return 'QUEUED';
-  if (input.emailStatus === 'UNVERIFIED' || input.errorType === 'EMAIL_UNVERIFIED') return 'MANUAL_REVIEW';
+  if (input.emailStatus === 'UNVERIFIED' || input.errorType === 'EMAIL_UNVERIFIED' || input.errorType === 'AMBIGUOUS_PROVIDER_RESULT') return 'MANUAL_REVIEW';
   if (input.result === 'PARTIAL_SUCCESS') return 'MANUAL_REVIEW';
+  if (input.result === 'SUCCESS' && !input.emailRequested) return 'COMPLETED';
   return 'FAILED';
 }
 
@@ -72,16 +79,17 @@ function workflowStateFor(input: {
   duplicateExecution: boolean;
   blockedExecution: boolean;
   neutralExecution: boolean;
+  transportStatus: string;
   result: string;
   shouldRetry: boolean;
 }): string {
   if (input.duplicateExecution) return 'DUPLICATE';
+  if (input.transportStatus === 'QUEUED') return 'QUEUED';
   if (input.blockedExecution) return 'BLOCKED';
-  if (input.neutralExecution) return 'PROCESSING';
   if (input.shouldRetry) return 'PENDING_RETRY';
   if (input.result === 'SUCCESS') return 'COMPLETED';
   if (input.result === 'PARTIAL_SUCCESS') return 'PARTIAL';
-  if (input.result === 'UNKNOWN') return 'PROCESSING';
+  if (input.neutralExecution || input.result === 'UNKNOWN') return 'PENDING';
   return 'FAILED';
 }
 
@@ -366,7 +374,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       : partialExecution ? emailQueued ? 'WAIT' : 'REVIEW'
         : (authFailure && disableOnAuthFailure) || ['QUOTA_EXHAUSTED_ERROR'].includes(errorType) || (errorType === 'CONFIGURATION_ERROR' && /database .*does not exist|unknown database|database not found/i.test(toStringValue(status.errorMessage))) ? 'DISABLE' : manualFixRequired ? 'REVIEW' : 'COOLDOWN';
     const cooldownSeconds = httpStatus === 429 ? Math.max(toFiniteNumber(status.retryAfterSeconds, 0), 60, defaultCooldown) : defaultCooldown;
-    const workflowState = failoverScheduled ? 'PENDING_FAILOVER' : workflowStateFor({ duplicateExecution, blockedExecution, neutralExecution, result, shouldRetry });
+    const workflowState = failoverScheduled ? 'PENDING_FAILOVER' : workflowStateFor({ duplicateExecution, blockedExecution, neutralExecution, transportStatus, result, shouldRetry });
     const runtime = isRecord(status.runtime) ? status.runtime : {};
     const scopeKey = toStringValue(runtime.scopeKey);
     const profileId = toStringValue(status.profileId);
@@ -425,9 +433,13 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       retryScheduled: shouldRetry, retryCount: nextRetryCount, retryDelaySeconds: retryDelay,
       retryDecision: incomingRetryDecision, retryResume, retryQueueEntry, managedAt,
     });
+    if (!toStringValue(statusWriteback.key) && toStringValue(job.jobId)) {
+      statusWriteback.key = toStringValue(job.jobId);
+      statusWriteback.keyMode = 'Job_ID';
+    }
     const emailStatus = toStringValue(status.emailSendStatus).toUpperCase();
-    const recipientStatus = recipientOperationalStatus({ duplicate: duplicateExecution, blocked: blockedExecution, result, emailStatus, retrying: shouldRetry, failover: failoverScheduled, errorType });
-    const providerState = providerOperationalStatus({ result, errorType, errorMessage: toStringValue(status.errorMessage), retrying: shouldRetry, failover: failoverScheduled, emailQueued });
+    const recipientStatus = recipientOperationalStatus({ duplicate: duplicateExecution, blocked: blockedExecution, transportStatus, result, emailRequested: status.emailSendRequested === true, emailStatus, retrying: shouldRetry, failover: failoverScheduled, errorType });
+    const providerState = providerOperationalStatus({ result, transportStatus, errorType, errorMessage: toStringValue(status.errorMessage), retrying: shouldRetry, failover: failoverScheduled, emailQueued });
     const attemptCount = Math.max(toFiniteNumber(job.attemptCount, 0), existingRetry) + (shouldRetry || failoverScheduled ? 1 : 0);
     const recipientStatusWriteback: IDataObject = {
       schemaVersion: '1.0', action: 'UPSERT', target: 'email_list', keyMode: 'Job_ID', key: toStringValue(job.jobId),
@@ -454,26 +466,31 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
         Lifecycle_Checkpoint: JSON.stringify(status.lifecycleCheckpoint ?? {}), Resume_Stage: status.retryResumeStage,
         Retry_Count: nextRetryCount, Failover_Count: failoverState.failoverCount,
         Next_Retry_At: isRecord(retryQueueEntry) ? retryQueueEntry.scheduledAt : '', Last_Error_Type: errorType,
-        Last_Error: status.errorMessage, Queue_Status: ['SENT','DUPLICATE','QUEUED'].includes(recipientStatus) ? 'COMPLETED' : recipientStatus === 'MANUAL_REVIEW' ? 'MANUAL_REVIEW' : failoverScheduled ? 'FAILOVER_READY' : shouldRetry ? 'RETRY_WAIT' : 'FAILED_FINAL', Updated_At: managedAt },
+        Last_Error: status.errorMessage, Queue_Status: recipientStatus === 'QUEUED' && sideEffectStage === 'none' ? 'PENDING' : ['SENT','DUPLICATE','COMPLETED','QUEUED'].includes(recipientStatus) ? 'COMPLETED' : recipientStatus === 'MANUAL_REVIEW' ? 'MANUAL_REVIEW' : failoverScheduled ? 'FAILOVER_READY' : shouldRetry ? 'RETRY_WAIT' : 'FAILED_FINAL', Updated_At: managedAt },
     };
     const failoverFrom = previousProfileId && previousProfileId !== currentProfileId ? previousProfileId : failoverScheduled ? currentProfileId : '';
     const failoverTo = previousProfileId && previousProfileId !== currentProfileId ? currentProfileId : '';
+    const campaignConfig = isRecord(job.campaignSafety) ? job.campaignSafety : {};
     const accountSeedMap = isRecord(job.accountReportSeed) ? job.accountReportSeed : {};
     const accountSeed = isRecord(accountSeedMap[profileId]) ? accountSeedMap[profileId] : {};
-    const accountAggregate = updateCampaignAccountStats({
+    const accountAggregate = profileId ? updateCampaignAccountStats({
       scopeKey: scopeKey || 'invoice-router', campaignId: toStringValue(job.campaignId, 'default-campaign'), profileId,
-      seed: accountSeed,
+      seed: accountSeed, runId: toStringValue(campaignConfig.runId),
+      eventId: `${toStringValue(job.jobId)}:${Math.max(0, toFiniteNumber(job.attemptCount, 0))}:${recipientStatus}:${shouldRetry ? 'R' : ''}${failoverScheduled ? 'F' : ''}`,
       event: {
-        Allocated: 1, Attempted: 1, Succeeded: result === 'SUCCESS' ? 1 : 0,
+        Allocated: item.json.retryAttempt === true ? 0 : 1, Attempted: 1, Succeeded: result === 'SUCCESS' ? 1 : 0,
         Email_Sent: recipientStatus === 'SENT' ? 1 : 0, Email_Queued: recipientStatus === 'QUEUED' ? 1 : 0,
-        Failed: recipientStatus === 'FAILED' ? 1 : 0, Retried: shouldRetry ? 1 : 0,
+        Failed: recipientStatus === 'FAILED' ? 1 : 0, Retried: item.json.retryAttempt === true ? 1 : 0,
         Failover_Count: failoverFrom || failoverScheduled ? 1 : 0, Failover_From: failoverFrom, Failover_To: failoverTo,
         Auto_Disabled: providerState.autoDisabled, Disabled_Reason: providerState.reason,
         Last_Error_Type: errorType, Last_Error: status.errorMessage, Current_Status: providerState.status,
         Enabled: providerState.enabled, Last_Used_At: managedAt, Updated_At: managedAt,
+        Issuer_Key: status.issuerKey, Company_ID: status.companyId, Company_Name: status.companyName,
+        Issuer_Compatibility: isRecord(status.issuerCompatibility) ? status.issuerCompatibility.status : '',
+        Issuer_Mismatch: isRecord(status.issuerCompatibility) && status.issuerCompatibility.compatible === false,
       },
-    });
-    const accountReportEvent: IDataObject = {
+    }) : {};
+    const accountReportEvent: IDataObject = profileId ? {
       Report_Key: `${toStringValue(job.campaignId)}:${profileId}`, Campaign_ID: job.campaignId,
       Provider: status.providerId, Account_ID: status.accountId, Account_Name: status.accountName, Profile_ID: status.profileId,
       Current_Status: providerState.status, Enabled: providerState.enabled,
@@ -483,14 +500,35 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       Failover_From: accountAggregate.Failover_From, Failover_To: accountAggregate.Failover_To,
       Auto_Disabled: providerState.autoDisabled, Disabled_Reason: providerState.reason,
       Last_Error_Type: errorType, Last_Error: status.errorMessage, Last_Used_At: managedAt, Updated_At: managedAt,
-    };
+      Issuer_Key: accountAggregate.Issuer_Key, Company_ID: accountAggregate.Company_ID, Company_Name: accountAggregate.Company_Name,
+      Issuer_Compatibility: accountAggregate.Issuer_Compatibility, Issuer_Mismatch: accountAggregate.Issuer_Mismatch,
+      Base_Revision: accountAggregate.Base_Revision, Revision: accountAggregate.Revision,
+      Writer_Run_ID: accountAggregate.Writer_Run_ID, Aggregate_Source: accountAggregate.Aggregate_Source,
+    } : {};
+    const queuedWithoutSideEffect = recipientStatus === 'QUEUED' && sideEffectStage === 'none';
+    const terminalCampaignOutcome = !shouldRetry && !failoverScheduled && !queuedWithoutSideEffect
+      && ['SENT','QUEUED','FAILED','MANUAL_REVIEW','DUPLICATE','BLOCKED','COMPLETED'].includes(recipientStatus);
+    const criticalCampaignError = ['AUTHENTICATION_ERROR','AUTHORIZATION_ERROR','AMBIGUOUS_PROVIDER_RESULT'].includes(errorType)
+      || (errorType === 'CONFIGURATION_ERROR' && !failoverScheduled);
+    const campaignAggregate = recordCampaignOutcome(this, {
+      scopeKey: scopeKey || 'invoice-router', campaignId: toStringValue(job.campaignId, 'default-campaign'),
+      jobId: toStringValue(job.jobId), config: campaignConfig, recipientStatus,
+      terminal: terminalCampaignOutcome, critical: criticalCampaignError, errorMessage: toStringValue(status.errorMessage),
+      retryingIncrement: shouldRetry ? 1 : 0, failoverIncrement: failoverScheduled ? 1 : 0,
+    });
     const campaignReportEvent: IDataObject = {
-      Report_Key: `${toStringValue(job.campaignId)}:${toStringValue(job.jobId)}`, Campaign_ID: job.campaignId, Job_ID: job.jobId,
-      Recipient_Email: status.recipientEmail, Status: recipientStatus, Pending: ['PENDING','PROCESSING'].includes(recipientStatus) ? 1 : 0,
-      Sent: recipientStatus === 'SENT' ? 1 : 0, Queued: recipientStatus === 'QUEUED' ? 1 : 0,
-      Failed: recipientStatus === 'FAILED' ? 1 : 0, Manual_Review: recipientStatus === 'MANUAL_REVIEW' ? 1 : 0,
-      Duplicate: recipientStatus === 'DUPLICATE' ? 1 : 0, Retrying: recipientStatus === 'RETRYING' ? 1 : 0,
-      Failover: recipientStatus === 'FAILOVER' ? 1 : 0, Account_ID: status.accountId, Updated_At: managedAt,
+      Report_Key: toStringValue(job.campaignId, 'default-campaign'), Campaign_ID: job.campaignId, Job_ID: '',
+      Recipient_Email: '', Status: campaignAggregate.paused === true ? 'PAUSED' : toFiniteNumber(campaignAggregate.pending, 0) === 0 ? 'COMPLETED' : 'RUNNING',
+      Pending: campaignAggregate.pending, Sent: campaignAggregate.sent, Queued: campaignAggregate.queued,
+      Failed: campaignAggregate.failed, Manual_Review: campaignAggregate.manualReview,
+      Duplicate: campaignAggregate.duplicate, Retrying: campaignAggregate.retrying,
+      Failover: campaignAggregate.failover, Account_ID: status.accountId, Updated_At: managedAt,
+      Pause_Reason: campaignAggregate.pauseReason, Run_State: campaignAggregate.runState,
+      Run_ID: campaignAggregate.runId, Lock_Acquired_At: campaignAggregate.lockAcquiredAt,
+      Lock_Expires_At: campaignAggregate.lockExpiresAt, Base_Revision: Math.max(0, toFiniteNumber(campaignAggregate.revision, 0) - 1),
+      Revision: campaignAggregate.revision, Writer_Run_ID: campaignAggregate.runId,
+      Aggregate_Source: campaignAggregate.aggregateSource || 'DURABLE_SHEET_REBUILD_PLUS_RUNTIME_EVENT',
+      Last_Attempt_At: campaignAggregate.lastAttemptAt,
     };
     const alertSeverity = toStringValue(status.alertSeverity) || (authFailure ? 'critical' : httpStatus >= 500 ? 'high' : 'warning');
     const alertNeeded = !neutralExecution && (result !== 'SUCCESS' && !emailQueued) && (result !== 'PARTIAL_SUCCESS' || errorType === 'EMAIL_UNVERIFIED');
@@ -499,7 +537,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       dashboard: { event: 'UPDATE_COUNTERS', result, workflowState, providerId: status.providerId, bulkSummary },
       metrics: { event: 'RECORD_EXECUTION', success: result === 'SUCCESS', partial: partialExecution, latencyMs: status.latencyMs, httpStatus, providerId: status.providerId, accountId: status.accountId },
       analytics: { event: 'INVOICE_ROUTER_RESULT', invoiceStatus: status.invoiceStatus, lifecycleOutcome: status.lifecycleOutcome, errorType, errorCategory: status.errorCategory, timestamp: managedAt },
-      retryQueue: retryQueueEntry, failover: failoverRequest, recipientStatusWriteback, providerStatusWriteback, retryQueueWriteback, accountReportEvent, campaignReportEvent,
+      retryQueue: retryQueueEntry, failover: failoverRequest, recipientStatusWriteback, providerStatusWriteback, retryQueueWriteback, accountReportEvent, campaignReportEvent, campaignAggregate,
       alert: alertNeeded && alertOnFailure ? { event: 'INVOICE_ROUTER_FAILURE', severity: alertSeverity.toUpperCase(), message: status.errorMessage || errorType || `HTTP ${httpStatus}`, retryScheduled: shouldRetry, retryDecision: incomingRetryDecision } : null,
       notification: alertNeeded ? { event: 'NOTIFICATION_REQUESTED', channels: ['email', 'webhook'], severity: alertSeverity, retryScheduled: shouldRetry } : null,
       audit: { event: 'WORKFLOW_DECISION', requestId: status.requestId, result, workflowState, retryScheduled: shouldRetry, retryDecision: incomingRetryDecision, retryResume, timestamp: managedAt },
@@ -508,7 +546,7 @@ export async function execute(this: IExecuteFunctions): Promise<INodeExecutionDa
       schemaVersion: '2.0', workflowState, completed: workflowState === 'COMPLETED', partial: partialExecution,
       retryScheduled: shouldRetry, failoverScheduled, retryCount: nextRetryCount, retryDelaySeconds: retryDelay,
       retryDecision: incomingRetryDecision, retryResume, retryRequest, failoverRequest, failoverState, retryQueueEntry, providerFeedback, bulkSummary,
-      recipientStatusWriteback, providerStatusWriteback, retryQueueWriteback, accountReportEvent, campaignReportEvent,
+      recipientStatusWriteback, providerStatusWriteback, retryQueueWriteback, accountReportEvent, campaignReportEvent, campaignAggregate,
       executionLog: includeExecutionLog ? executionLog : undefined,
       statusWriteback: includeStatusWriteback ? statusWriteback : undefined,
       events: includeEvents ? managementEvents : undefined,
