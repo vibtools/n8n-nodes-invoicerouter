@@ -10,10 +10,10 @@ New Odoo production setups use the versioned workflow stored inside this public 
 template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
 ```
 
-After the `v2.1.1` Git tag exists, n8n can import the same repository file by raw URL:
+For the corrected `v2.1.2` package release, n8n can import the same compatibility-named repository file by raw URL:
 
 ```text
-https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.1/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.2/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
 ```
 
 The compatibility file `template/providers/odoo/n8n-import-workflow-live-bulk.json` is byte-identical to the versioned v2.1.1 workflow. One workflow and one native Google Sheet support one-account production validation, pilot bulk, and production bulk.

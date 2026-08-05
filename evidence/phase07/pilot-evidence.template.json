@@ -3,7 +3,7 @@
   "gate": "five-recipient-two-account-failover-pilot",
   "status": "PENDING",
   "approvalStatus": "PENDING",
-  "packageVersion": "2.1.1",
+  "packageVersion": "2.1.2",
   "n8nVersion": "2.31.6",
   "canonicalWorkflowSha256": "",
   "campaignIdHash": "",

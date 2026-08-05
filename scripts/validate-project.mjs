@@ -162,12 +162,12 @@ const docsManifest = JSON.parse(await readFile('docs/docs.minifest.ygit', 'utf8'
 const readmeSource = await readFile('README.md', 'utf8');
 const changelogSource = await readFile('CHANGELOG.md', 'utf8');
 
-if (pkg.version !== '2.1.1') errors.push('package.json must use approved release version 2.1.1.');
+if (pkg.version !== '2.1.2') errors.push('package.json must use approved release version 2.1.2.');
 if (packageLock.version !== pkg.version || packageLock.packages?.['']?.version !== pkg.version) errors.push('package-lock.json version must match package.json.');
 if (vibProject.project?.version !== pkg.version || vibProject.release?.latestVersion !== pkg.version) errors.push('vibproject.ygit release metadata must match package.json.');
 if (docsManifest.versions?.current !== pkg.version || docsManifest.versions?.latest !== pkg.version || !docsManifest.versions?.available?.includes(pkg.version)) errors.push('docs/docs.minifest.ygit version metadata must include the package release.');
 if (!readmeSource.includes(`**Package version:** \`${pkg.version}\``)) errors.push('README.md current package version must match package.json.');
-if (!changelogSource.includes(`## ${pkg.version} - 2026-08-03`)) errors.push('CHANGELOG.md must contain the dated 2.1.1 release entry.');
+if (!changelogSource.includes(`## ${pkg.version} - 2026-08-05`)) errors.push('CHANGELOG.md must contain the dated 2.1.2 release entry.');
 if (!(pkg.files ?? []).includes('docs/troubleshooting')) errors.push('package.json must include docs/troubleshooting in npm files.');
 for (const providerId of ['odoo', 'stripe', 'zoho-books']) {
   const manifest = JSON.parse(await readFile(`template/providers/${providerId}/provider.template.ygit`, 'utf8'));

@@ -1,10 +1,10 @@
 # Phase 07 final release gate
 
-Phase 07 combines the automated pre-release publication gate with the reviewed post-publication live-acceptance gate for InvoiceRouter v2.1.1. It does not redesign the frozen eight-node architecture and does not grant production approval merely because unit tests pass.
+Phase 07 combines the automated pre-release publication gate with the reviewed post-publication live-acceptance gate for InvoiceRouter v2.1.2. It does not redesign the frozen eight-node architecture and does not grant production approval merely because unit tests pass.
 
 ## Frozen target
 
-- Package: `n8n-nodes-invoicerouter@2.1.1`
+- Package: `n8n-nodes-invoicerouter@2.1.2`
 - Workflow engine: `n8n@2.31.6`
 - Canonical Odoo workflow: 132 nodes, 148 edges, eight InvoiceRouter custom nodes
 - Supported Odoo capability profiles: 18 and 19

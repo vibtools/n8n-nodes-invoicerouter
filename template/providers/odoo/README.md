@@ -20,7 +20,7 @@ provider sheet credentials
 Use `n8n-import-workflow-production-v2.1.1.json` for new production setups. It is stored in this public `template/` folder so n8n can import it from the release raw URL:
 
 ```text
-https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.1/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.2/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
 ```
 
 The production workbook now includes `writeback_queue`; campaign reporting includes `Pause_Reason`, run lease, revision, and last-attempt fields. Job identity and provider allocation are persisted before transport, Sheet writes are ordered before the loop advances, and pending write bundles are repaired before new provider work. `n8n-import-workflow-live-bulk.json` remains an exact compatibility copy.

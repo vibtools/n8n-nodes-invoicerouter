@@ -4,10 +4,10 @@ Use `template/providers/odoo/n8n-import-workflow-production-v2.1.1.json` with th
 
 ## Raw URL import
 
-After the `v2.1.1` tag is published, import this URL in n8n:
+For the corrected `v2.1.2` package release, import this compatibility-named workflow URL in n8n:
 
 ```text
-https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.1/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.2/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
 ```
 
 ## Required workbook tabs

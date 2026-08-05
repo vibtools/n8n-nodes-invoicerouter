@@ -1,5 +1,15 @@
 # InvoiceRouter for n8n
 
+## v2.1.2 Corrective Release Synchronization
+
+InvoiceRouter `2.1.2` publishes only the already approved corrective scope: capability-driven Odoo version handling, provider preflight writeback on the original Google Sheets row, safe recovery of pre-provider failed campaign leases, and account-count-agnostic provider loading. The frozen eight-node architecture, public APIs, dependencies, invoice lifecycle, email sending behavior, and canonical workflow filename remain unchanged.
+
+The canonical workflow filename remains `n8n-import-workflow-production-v2.1.1.json` for backward compatibility. Import the corrected release-tagged bytes from:
+
+```text
+https://raw.githubusercontent.com/vibtools/n8n-nodes-invoicerouter/v2.1.2/template/providers/odoo/n8n-import-workflow-production-v2.1.1.json
+```
+
 ## v2.1.1 Production Corrective Patch
 
 InvoiceRouter `2.1.1` preserves the frozen eight-node architecture and corrects the v2.1.0 production blockers found in live n8n/Odoo execution: embedded Request Builder input handling, version-aware Odoo preflight, truthful no-account queueing, campaign-wide safety, stable Odoo references, ambiguous side-effect reconciliation, ordered Google Sheets writebacks, durable writeback-only repair, and reconciled account/campaign reports.
@@ -31,7 +41,7 @@ Partner resolution uses case-insensitive exact email matching with a two-record 
 
 ## Phase 04 — Shared Odoo capability, version, and legal-issuer compatibility
 
-InvoiceRouter now uses one canonical manifest, `shared/odoo/OdooCapabilityManifest.ts`, for the Odoo fields and methods used by Provider Loader preflight, Invoice Sender, and regression tests. Runtime support is capability-driven and does not enforce a fixed Odoo major-version allowlist. Odoo 18 and 19 retain documented metadata profiles; strings such as `saas~19.4+e` are parsed for diagnostics, while compatibility is decided by the API fields and methods actually required by InvoiceRouter.
+InvoiceRouter now uses one canonical manifest, `shared/odoo/OdooCapabilityManifest.ts`, for the Odoo fields and methods used by Provider Loader preflight, Invoice Sender, and regression tests. Odoo 18 and Odoo 19 retain documented capability profiles. Other server versions are not blocked by a fixed major-version allowlist; they proceed only when the runtime capability probes required by the configured lifecycle pass.
 
 Preflight records the server version, resolved capability profile, authenticated company identity, and the explicit status `CAPABILITY_VALIDATED_SIDE_EFFECT_PERMISSION_UNPROVEN`. Read-only field/model validation cannot prove create, post, or send permission; those side-effect permissions remain unproven until the controlled live canary.
 
@@ -70,7 +80,7 @@ InvoiceRouter is the Vib Tools eight-node n8n community package for guarded prov
 
 InvoiceRouter is an eight-node n8n community-node package for loading many provider accounts from Google Sheets, assigning accounts safely, personalizing invoice data, executing provider requests, standardizing results, and creating retry/metrics/alert/audit events.
 
-**Package version:** `2.1.1`
+**Package version:** `2.1.2`
 **Architecture:** Version 2.0 master lifecycle over the frozen 8-node topology
 **Implementation:** 8/8 custom nodes registered; final publication remains blocked until the complete-project forensic audit passes
 
@@ -116,7 +126,7 @@ See [`docs/freeze/v1.0/V1_5_0_BUILD_INSTALL_LIVE_TEST_RUNBOOK.md`](docs/freeze/v
 
 ## n8n registry/UI install compatibility
 
-Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.1.1`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
+Step 12B hardens the package for npm registry publication and n8n Community Nodes UI installation. The package keeps the npm identity `n8n-nodes-invoicerouter@2.1.2`, keeps `n8n-community-node-package` in keywords, removes the install-time `n8n-workflow` peer dependency risk, and ships a diagnostic script for manual fallback installs.
 
 The n8n editor display names are now prefixed for searchability:
 
@@ -619,7 +629,7 @@ GitHub/npm publication remains fail-closed on source validation, the Phase 07 st
 The final audit found and corrected four release-critical gaps after the initial Phase 07 implementation:
 
 - the Windows engine harness no longer launches `npm.cmd`/`npx.cmd` directly; it invokes the npm CLI through the active Node executable;
-- the engine gate now imports and exports the complete 132-node/148-edge canonical workflow in addition to executing the dry-run eight-node fixture;
+- the engine gate now imports and exports the complete 126-node/141-edge canonical workflow in addition to executing the dry-run eight-node fixture;
 - `PROVIDER_PENDING` is now a startup reconciliation input with the exact Request Builder stable reference, preventing blind create/send replay after a crash;
 - the campaign lease is reread and verified immediately before the operation envelope and Invoice Sender path.
 

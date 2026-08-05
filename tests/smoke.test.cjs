@@ -258,7 +258,7 @@ function odooPreflightResponses(majorVersion = 19, companyId = 1, companyName = 
 
 test('package registers exactly the frozen eight custom nodes', () => {
   assert.equal(pkg.name, 'n8n-nodes-invoicerouter');
-  assert.equal(pkg.version, '2.1.1');
+  assert.equal(pkg.version, '2.1.2');
   assert.equal(pkg.n8n.nodes.length, 8);
   assert.equal(pkg.invoiceRouterFreeze.targetNodeCount, 8);
   assert.equal(pkg.invoiceRouterFreeze.currentNodeCount, 8);
@@ -302,7 +302,7 @@ test('all frozen custom nodes use searchable InvoiceRouter display names', () =>
 test('installed package diagnostic validates the built package root', () => {
   const output = execFileSync(process.execPath, [path.join(root, 'scripts/diagnose-n8n-package.mjs'), root], { encoding: 'utf8' });
   assert.match(output, /Diagnostic result: PASS/);
-  assert.match(output, /n8n-nodes-invoicerouter@2\.1\.1/);
+  assert.match(output, /n8n-nodes-invoicerouter@2\.1\.2/);
 });
 
 test('all declared node artifacts and main declarations exist', () => {
@@ -1650,7 +1650,7 @@ test('release documentation enforces forensic audit before publish and community
   assert.match(checklist, /one controlled recipient only/i);
 });
 
-test('v2.1.1 final release metadata and npm package contents stay synchronized', () => {
+test('v2.1.2 release metadata and npm package contents stay synchronized', () => {
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
   const vibProject = JSON.parse(fs.readFileSync(path.join(root, 'vibproject.ygit'), 'utf8'));
   const docsManifest = JSON.parse(fs.readFileSync(path.join(root, 'docs/docs.minifest.ygit'), 'utf8'));
@@ -1658,7 +1658,7 @@ test('v2.1.1 final release metadata and npm package contents stay synchronized',
   const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
   const releaseWorkflow = fs.readFileSync(path.join(root, '.github/workflows/release.yml'), 'utf8');
 
-  assert.equal(pkg.version, '2.1.1');
+  assert.equal(pkg.version, '2.1.2');
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(vibProject.project.version, pkg.version);
@@ -1666,8 +1666,8 @@ test('v2.1.1 final release metadata and npm package contents stay synchronized',
   assert.equal(docsManifest.versions.current, pkg.version);
   assert.equal(docsManifest.versions.latest, pkg.version);
   assert.ok(docsManifest.versions.available.includes(pkg.version));
-  assert.match(readme, /Package version:\*\* `2\.1\.1`/);
-  assert.match(changelog, /## 2\.1\.1 - 2026-08-03/);
+  assert.match(readme, /Package version:\*\* `2\.1\.2`/);
+  assert.match(changelog, /## 2\.1\.2 - 2026-08-05/);
   assert.ok(pkg.files.includes('docs/troubleshooting'));
   assert.match(releaseWorkflow, /Validate tag version/);
   assert.match(releaseWorkflow, /npm publish --access public --provenance/);
@@ -2324,7 +2324,7 @@ test('v2.1.1 package includes the corrective freeze document and versioned raw-U
   const relative = 'template/providers/odoo/n8n-import-workflow-production-v2.1.1.json';
   assert.ok(fs.existsSync(path.join(root, relative)));
   const readme = fs.readFileSync(path.join(root, 'template/providers/odoo/README.md'), 'utf8');
-  assert.match(readme, /raw\.githubusercontent\.com\/vibtools\/n8n-nodes-invoicerouter\/v2\.1\.1\/template\/providers\/odoo\/n8n-import-workflow-production-v2\.1\.1\.json/);
+  assert.match(readme, /raw\.githubusercontent\.com\/vibtools\/n8n-nodes-invoicerouter\/v2\.1\.2\/template\/providers\/odoo\/n8n-import-workflow-production-v2\.1\.1\.json/);
 });
 
 test('v2.1.1 Odoo invoice-create transport ambiguity reconciles one stable-reference invoice without a duplicate create', async () => {
