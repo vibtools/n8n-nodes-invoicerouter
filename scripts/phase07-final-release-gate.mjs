@@ -137,7 +137,7 @@ requireValue(redaction.includes('replaceShortSecret') && redaction.includes('Sho
 const ci = await text('.github/workflows/ci.yml');
 const release = await text('.github/workflows/release.yml');
 requireValue(ci.includes('verify:phase07:engine'), 'CI must execute the exact n8n Phase 07 engine smoke.');
-requireValue(release.includes('verify:phase07:evidence'), 'Release workflow must enforce Phase 07 evidence.');
+requireValue(!release.includes('run: npm run verify:phase07:evidence'), 'Tag release must not require post-publication live evidence before GitHub/npm publication.');
 requireValue(release.includes('NPM_TOKEN is required for a tag release'), 'Tag release must fail closed when NPM_TOKEN is missing.');
 requireValue(release.includes('npm whoami --registry=https://registry.npmjs.org'), 'Tag release must validate npm credentials before creating a GitHub release.');
 requireValue(release.indexOf('Validate npm publication credentials') < release.indexOf('Create GitHub Release'), 'npm credential validation must run before GitHub release creation.');

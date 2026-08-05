@@ -611,7 +611,7 @@ Campaign totals are rebuilt from durable recipient/result/retry evidence at star
 
 The final hardening gate pins workflow-engine smoke testing to `n8n@2.31.6`, exercises restart/other-worker runtime rehydration, validates boundary-aware short-secret redaction, and runs Odoo 18/19 fixture-driven lifecycle tests. Use `npm run verify:phase07:static` for source prerequisites and `npm run verify:phase07:engine` for the exact dry-run engine execution.
 
-Release remains fail-closed until sanitized, reviewed one-recipient canary and five-recipient/two-account pilot evidence pass `npm run verify:phase07:evidence`. Automated fixtures never claim inbox delivery or live provider approval.
+GitHub/npm publication remains fail-closed on source validation, the Phase 07 static gate, exact `n8n@2.31.6` engine smoke, tag/version matching, and npm credential validation. After publication and the n8n Community Nodes update, sanitized, reviewed one-recipient canary and five-recipient/two-account pilot evidence must pass `npm run verify:phase07:evidence` before production bulk approval. Automated fixtures never claim inbox delivery or live provider approval.
 
 
 ## v2.1.1 final corrective forensic gate

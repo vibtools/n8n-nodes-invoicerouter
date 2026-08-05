@@ -59,12 +59,12 @@ Phase 06 adds compare-before-write revision gates for `campaign_report` and `acc
 
 ## Phase 07 final gate
 
-The corrective patch is not release-approved until exact n8n 2.31.6 engine evidence and sanitized live canary/pilot evidence satisfy `npm run verify:phase07:evidence`. The eight custom nodes and existing runtime workflow remain frozen.
+The corrective patch may be published after source validation, the Phase 07 static gate, exact n8n 2.31.6 engine evidence, tag/version matching, and npm credential validation pass. After publication and the n8n Community Nodes update, sanitized live canary/pilot evidence must satisfy `npm run verify:phase07:evidence` before production bulk approval. The eight custom nodes and existing runtime workflow remain frozen.
 
 
 ## Final corrective audit boundary
 
-The final source correction keeps eight custom nodes and adds two built-in workflow gates, producing 126 nodes and 141 edges. It fixes Windows engine launching, complete canonical import/export, exact stable-reference operation envelopes, unresolved `PROVIDER_PENDING` startup reconciliation, immediate pre-side-effect lease verification, evidence hash binding, and npm credential preflight. Release remains blocked until the external engine/canary/pilot evidence gate passes.
+The final source correction keeps eight custom nodes and adds two built-in workflow gates, producing 126 nodes and 141 edges. It fixes Windows engine launching, complete canonical import/export, exact stable-reference operation envelopes, unresolved `PROVIDER_PENDING` startup reconciliation, immediate pre-side-effect lease verification, evidence hash binding, and npm credential preflight. GitHub/npm publication remains blocked until the automated source/static/engine/version/credential gates pass; production bulk approval remains blocked until the post-publication canary/pilot evidence gate passes.
 
 ### Final recipient identity correction
 

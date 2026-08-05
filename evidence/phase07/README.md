@@ -1,6 +1,6 @@
 # Phase 07 release evidence
 
-This directory contains sanitized evidence templates for the final InvoiceRouter v2.1.1 release gate.
+This directory contains sanitized evidence templates for the post-publication InvoiceRouter v2.1.1 production-approval gate.
 
 ## Generated engine evidence
 
@@ -27,13 +27,13 @@ The canary must prove one posted invoice, provider-side `SENT`, a valid invoice 
 
 Copy `pilot-evidence.template.json` to `pilot-evidence.json` only after a five-recipient, two-account pilot. The pilot must exercise failover and restart/other-worker resume, prove zero duplicate invoices, complete five operation envelopes, reject at least one stale writer, and show no revision regression.
 
-## Final gate
+## Post-publication production-approval gate
 
 ```bash
 npm run verify:phase07:evidence
 ```
 
-The command fails closed until all three evidence files are present and satisfy the frozen acceptance criteria. It never converts `PENDING` evidence to `PASS` automatically.
+Run this command after GitHub/npm publication, the n8n Community Nodes update, the reviewed one-recipient canary, and the five-recipient/two-account pilot. The command fails closed until all three evidence files are present and satisfy the frozen acceptance criteria. It never converts `PENDING` evidence to `PASS` automatically.
 
 
 ## Evidence binding requirements

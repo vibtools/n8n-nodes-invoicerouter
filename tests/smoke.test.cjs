@@ -3241,6 +3241,7 @@ test('v2.1.1 final corrective audit hardens evidence binding and tag release pub
   assert.match(release, /NPM_TOKEN is required for a tag release/);
   assert.match(release, /npm whoami --registry=https:\/\/registry\.npmjs\.org/);
   assert.ok(release.indexOf('Validate npm publication credentials') < release.indexOf('Create GitHub Release'));
+  assert.doesNotMatch(release, /run:\s*npm run verify:phase07:evidence/);
   const canary = JSON.parse(fs.readFileSync(path.join(root, 'evidence/phase07/canary-evidence.template.json'), 'utf8'));
   const pilot = JSON.parse(fs.readFileSync(path.join(root, 'evidence/phase07/pilot-evidence.template.json'), 'utf8'));
   assert.equal(canary.schemaVersion, '1.2');

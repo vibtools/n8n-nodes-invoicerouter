@@ -1,6 +1,6 @@
 # Phase 07 final release gate
 
-Phase 07 is the final pre-release verification layer for InvoiceRouter v2.1.1. It does not redesign the frozen eight-node architecture and does not grant production approval merely because unit tests pass.
+Phase 07 combines the automated pre-release publication gate with the reviewed post-publication live-acceptance gate for InvoiceRouter v2.1.1. It does not redesign the frozen eight-node architecture and does not grant production approval merely because unit tests pass.
 
 ## Frozen target
 
@@ -35,9 +35,9 @@ The automated test suite launches separate Node.js processes using a 66-second r
 
 Fixture-driven tests cover read-only preflight, version-specific capability selection, customer/invoice creation, posting, send-wizard execution, mail evidence, PDF attachment identity, Status Checker, and Status Manager. They are deterministic mocks, not live Odoo proof.
 
-## Live evidence gate
+## Post-publication live evidence gate
 
-The final command is intentionally fail-closed:
+After GitHub/npm publication and the n8n Community Nodes update, the live-acceptance command is intentionally fail-closed:
 
 ```bash
 npm run verify:phase07:evidence
@@ -61,7 +61,7 @@ Evidence may contain hashes, aggregate counts, timestamps, and sanitized file re
 
 ## Release decision
 
-GitHub tag, npm publish, n8n Community Nodes update, and production bulk approval remain blocked until the exact engine evidence and reviewed live canary/pilot evidence satisfy the final gate.
+GitHub tag and npm publication are gated by source validation, the static gate, exact n8n engine smoke, tag/version matching, and npm credential validation. After publication, update the package through n8n Community Nodes, run the reviewed one-recipient canary and five-recipient/two-account pilot, and require `npm run verify:phase07:evidence` to pass before production bulk approval.
 
 
 ## Final corrective recovery contract
